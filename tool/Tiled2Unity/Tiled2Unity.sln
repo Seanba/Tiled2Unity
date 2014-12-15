@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tiled2Unity", "src\Tiled2Unity.csproj", "{5100C1BE-DF46-447A-8D7F-0376CABC85B1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ookii.Dialogs", "src\ThirdParty\Ookii.Dialogs.Modified\src\Ookii.Dialogs\Ookii.Dialogs.csproj", "{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|Mixed Platforms = Debug|Mixed Platforms
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|Mixed Platforms = Release|Mixed Platforms
+		Release|x86 = Release|x86
+		Shipping-WithInstaller|Any CPU = Shipping-WithInstaller|Any CPU
+		Shipping-WithInstaller|Mixed Platforms = Shipping-WithInstaller|Mixed Platforms
+		Shipping-WithInstaller|x86 = Shipping-WithInstaller|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Debug|Any CPU.ActiveCfg = Debug|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Debug|Mixed Platforms.ActiveCfg = Debug|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Debug|Mixed Platforms.Build.0 = Debug|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Debug|x86.ActiveCfg = Debug|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Debug|x86.Build.0 = Debug|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|Any CPU.ActiveCfg = Release|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|Mixed Platforms.ActiveCfg = Release|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|Mixed Platforms.Build.0 = Release|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|x86.ActiveCfg = Release|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|x86.Build.0 = Release|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|Any CPU.ActiveCfg = Shipping-WithInstaller|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|Mixed Platforms.ActiveCfg = Shipping-WithInstaller|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|Mixed Platforms.Build.0 = Shipping-WithInstaller|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|x86.ActiveCfg = Shipping-WithInstaller|x86
+		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|x86.Build.0 = Shipping-WithInstaller|x86
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Release|x86.ActiveCfg = Release|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|Any CPU.ActiveCfg = Shipping-WithInstaller|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|Any CPU.Build.0 = Shipping-WithInstaller|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|Mixed Platforms.ActiveCfg = Shipping-WithInstaller|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|Mixed Platforms.Build.0 = Shipping-WithInstaller|Any CPU
+		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|x86.ActiveCfg = Shipping-WithInstaller|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

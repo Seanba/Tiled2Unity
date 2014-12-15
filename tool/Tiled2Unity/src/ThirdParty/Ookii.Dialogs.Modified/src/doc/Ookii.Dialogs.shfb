@@ -1,0 +1,52 @@
+﻿<project schemaVersion="1.6.0.7">
+    <assemblies>
+        <assembly assemblyPath="..\Ookii.Dialogs\bin\Release\Ookii.Dialogs.dll" xmlCommentsPath="..\Ookii.Dialogs\bin\Release\Ookii.Dialogs.xml" commentsOnly="False" />
+        <assembly assemblyPath="..\Ookii.Dialogs.Wpf\bin\Release\Ookii.Dialogs.Wpf.dll" xmlCommentsPath="..\Ookii.Dialogs.Wpf\bin\Release\Ookii.Dialogs.Wpf.xml" commentsOnly="False" />
+    </assemblies>
+    <namespaceSummaries>
+        <namespaceSummaryItem name="" isDocumented="False" />
+        <namespaceSummaryItem name="Ookii.Dialogs" isDocumented="True">Contains types for using the task, credential, progress, input and common file dialogs with Windows Forms. In addition, utility classes for working with Aero glass, system fonts and task dialog visual styles are provided.</namespaceSummaryItem>
+        <namespaceSummaryItem name="Ookii.Dialogs.Wpf" isDocumented="True">Contains types for using the task, credential, progress,and common file dialogs with Windows Presentation Foundation.</namespaceSummaryItem>
+    </namespaceSummaries>
+    <ProjectSummary />
+    <MissingTags>Summary, Parameter, Returns, AutoDocumentCtors, Namespace, TypeParameter</MissingTags>
+    <VisibleItems>InheritedMembers, InheritedFrameworkMembers, Protected, SealedProtected</VisibleItems>
+    <HtmlHelp1xCompilerPath path="" />
+    <HtmlHelp2xCompilerPath path="" />
+    <OutputPath>.\Help\</OutputPath>
+    <SandcastlePath path="" />
+    <WorkingPath path="" />
+    <CleanIntermediates>True</CleanIntermediates>
+    <KeepLogFile>True</KeepLogFile>
+    <BuildLogFile path="" />
+    <HelpFileFormat>Help1xAndWebsite</HelpFileFormat>
+    <CppCommentsFixup>False</CppCommentsFixup>
+    <FrameworkVersion>3.5</FrameworkVersion>
+    <IndentHtml>True</IndentHtml>
+    <Preliminary>False</Preliminary>
+    <RootNamespaceContainer>False</RootNamespaceContainer>
+    <RootNamespaceTitle />
+    <HelpTitle>Ookii.Dialogs</HelpTitle>
+    <HtmlHelpName>Ookii.Dialogs</HtmlHelpName>
+    <Language>en-US</Language>
+    <CopyrightHref>http://www.ookii.org</CopyrightHref>
+    <CopyrightText>Copyright © Sven Groot (Ookii.org) 2009</CopyrightText>
+    <FeedbackEMailAddress />
+    <FeedbackEMailLinkText />
+    <HeaderText />
+    <FooterText />
+    <ProjectLinkType>Local</ProjectLinkType>
+    <SdkLinkType>Msdn</SdkLinkType>
+    <SdkLinkTarget>Blank</SdkLinkTarget>
+    <PresentationStyle>hana</PresentationStyle>
+    <NamingMethod>MemberName</NamingMethod>
+    <SyntaxFilters>Standard</SyntaxFilters>
+    <ShowFeedbackControl>False</ShowFeedbackControl>
+    <BinaryTOC>True</BinaryTOC>
+    <IncludeFavorites>False</IncludeFavorites>
+    <CollectionTocStyle>Hierarchical</CollectionTocStyle>
+    <IncludeStopWordList>True</IncludeStopWordList>
+    <PlugInNamespaces>ms.vsipcc+, ms.vsexpresscc+</PlugInNamespaces>
+    <HelpFileVersion>1.0.0.0</HelpFileVersion>
+    <ContentPlacement>AboveNamespaces</ContentPlacement>
+</project>

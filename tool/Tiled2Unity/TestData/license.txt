@@ -1,0 +1,7 @@
+Example tileset artwork is appropriated to Blarget2 (http://opengameart.org/content/minimalist-pixel-tileset) and is distributed with the Creative Commons 3.0 license.
+
+http://creativecommons.org/licenses/by/3.0/
+
+For Unity2Tiled, this artwork was expanded through building Tiled Map Editor files (TMX) containing the artwork.
+
+
