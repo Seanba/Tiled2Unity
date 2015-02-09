@@ -140,6 +140,7 @@ namespace Tiled2Unity
                 Vector3D pos = PointFToUnityVector(tmxObject.Position);
                 xmlObject.SetAttributeValue("x", pos.X);
                 xmlObject.SetAttributeValue("y", pos.Y);
+                xmlObject.SetAttributeValue("rot", tmxObject.Rotation);
 
                 AssignUnityProperties(tmxObject, xmlObject, PrefabContext.Object);
                 AssignTiledProperties(tmxObject, xmlObject);
