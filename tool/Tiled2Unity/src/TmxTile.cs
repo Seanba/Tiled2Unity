@@ -23,6 +23,7 @@ namespace Tiled2Unity
             this.GlobalId = globalId;
             this.LocalId = localId;
             this.TmxImage = tmxImage;
+            this.Properties = new TmxProperties();
             this.ObjectGroup = new TmxObjectGroup();
         }
 

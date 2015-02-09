@@ -168,17 +168,17 @@ namespace Tiled2Unity
             // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
             mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
 
-            Point pt0 = mapLocation;
-            Point pt1 = Point.Add(mapLocation, new Size(tileSize.Width, 0));
-            Point pt2 = Point.Add(mapLocation, tileSize);
-            Point pt3 = Point.Add(mapLocation, new Size(0, tileSize.Height));
+            PointF pt0 = mapLocation;
+            PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
+            PointF pt2 = PointF.Add(mapLocation, tileSize);
+            PointF pt3 = PointF.Add(mapLocation, new Size(0, tileSize.Height));
 
             // We need to use ccw winding for Wavefront objects
             Vector3D[] vertices  = new Vector3D[4];
-            vertices[3] = PointToObjVertex(pt0, pos_z);
-            vertices[2] = PointToObjVertex(pt1, pos_z);
-            vertices[1] = PointToObjVertex(pt2, pos_z);
-            vertices[0] = PointToObjVertex(pt3, pos_z);
+            vertices[3] = PointFToObjVertex(pt0, pos_z);
+            vertices[2] = PointFToObjVertex(pt1, pos_z);
+            vertices[1] = PointFToObjVertex(pt2, pos_z);
+            vertices[0] = PointFToObjVertex(pt3, pos_z);
             return vertices;
         }
 
@@ -210,7 +210,10 @@ namespace Tiled2Unity
             // This keeps us from seeing seams
             // (If seams continue along "outer" edges we can try applying the bias there as well)
             // Note: On Oct 25, a user was having issues with outer edges, so I brought those in as well afterall (for version 0.9.5.4)
-            const float bias = 1.0f / 8192.0f;
+            //const float bias = 1.0f / 8192.0f;
+            //const float bias = 1.0f / 4096.0f;
+            //const float bias = 1.0f / 2048.0f;
+            float bias = 1.0f / Program.TexelBias;
             coordinates[0].X += bias;
             coordinates[0].Y += bias;
 

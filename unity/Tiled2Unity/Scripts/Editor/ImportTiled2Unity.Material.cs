@@ -18,7 +18,7 @@ namespace Tiled2Unity
         // We need to call this while the renderers on the model is having its material assigned to it
         public Material FixMaterialForMeshRenderer(string objName, Renderer renderer)
         {
-            string xmlPath = ImportUtils.GetXmlPath(objName);
+            string xmlPath = ImportUtils.GetXmlPathFromName(objName);
 
             XDocument xml = XDocument.Load(xmlPath);
 
@@ -49,11 +49,16 @@ namespace Tiled2Unity
                 return null;
             }
 
-            string materialName = match.Attribute("material").Value;
+            string materialName = match.Attribute("material").Value + ".mat";
             string materialPath = ImportUtils.GetMaterialPath(materialName);
 
             // Assign the material
-            renderer.sharedMaterial = AssetDatabase.LoadAssetAtPath(materialPath, typeof(Material)) as Material;
+            Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(Material)) as Material;
+            if (material == null)
+            {
+                Debug.LogError(String.Format("Could not find material: {0}", materialName));
+            }
+            renderer.sharedMaterial = material;
 
             // Set the sorting layer for the mesh
             string sortingLayer = match.Attribute("sortingLayerName").Value;

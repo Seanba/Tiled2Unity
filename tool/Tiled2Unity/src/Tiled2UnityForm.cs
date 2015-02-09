@@ -76,6 +76,14 @@ namespace Tiled2Unity
                     Close();
                 }
             }
+            else
+            {
+                // Repeat any errors
+                foreach (string error in this.errors)
+                {
+                    WriteText(error, Color.Red);
+                }
+            }
         }
 
         private void OpenTmxFile(string tmxPath)
@@ -179,10 +187,10 @@ namespace Tiled2Unity
         }
 
         // Interop and Win32 API tricks to get text box selection to work like VisualStudio Output window
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, Int32 wParam, Int32 lParam);
-        const int WM_USER = 0x400;
-        const int EM_HIDESELECTION = WM_USER + 63;
+        //[System.Runtime.InteropServices.DllImport("user32.dll")]
+        //static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, Int32 wParam, Int32 lParam);
+        //const int WM_USER = 0x400;
+        //const int EM_HIDESELECTION = WM_USER + 63;
 
         private void WriteText(string line, Color color)
         {

@@ -63,6 +63,7 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("numTilesHigh", this.tmxMap.Height);
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
             prefab.SetAttributeValue("tileHeight", this.tmxMap.TileHeight);
+            prefab.SetAttributeValue("exportScale", Program.Scale);
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
             AssignTiledProperties(this.tmxMap, prefab);
 
@@ -324,8 +325,8 @@ namespace Tiled2Unity
         {
             XElement xmlCollider =
                 new XElement("BoxCollider2D",
-                    new XAttribute("width", tmxRectangle.Size.Width),
-                    new XAttribute("height", tmxRectangle.Size.Height));
+                    new XAttribute("width", tmxRectangle.Size.Width * Program.Scale),
+                    new XAttribute("height", tmxRectangle.Size.Height * Program.Scale));
 
             return xmlCollider;
         }
@@ -342,7 +343,7 @@ namespace Tiled2Unity
             {
                 XElement circleCollider =
                     new XElement("CircleCollider2D",
-                        new XAttribute("radius", tmxEllipse.Radius));
+                        new XAttribute("radius", tmxEllipse.Radius * Program.Scale));
 
                 return circleCollider;
             }

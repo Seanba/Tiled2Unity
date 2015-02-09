@@ -25,13 +25,13 @@ namespace Tiled2Unity
             //          <Path>list of points</Path>
             //          <Path>another list of points</Path>
             //        </PolygonCollider2D>
-            //      </GameOject name="Collision">
+            //      </GameOject>
 
             LayerClipper.TransformPointFunc xfFunc =
                 delegate(float x, float y)
                 {
                     // Transform point to Unity space
-                    Vector3D pointUnity3d = PointFToUnityVector(new PointF(x, y));
+                    Vector3D pointUnity3d = PointFToUnityVector_NoScale(new PointF(x, y));
                     IntPoint point = new IntPoint(pointUnity3d.X, pointUnity3d.Y);
                     return point;
                 };
@@ -72,7 +72,7 @@ namespace Tiled2Unity
             List<XElement> pathElements = new List<XElement>();
             foreach (var path in polygons)
             {
-                string data = String.Join(" ", path.Select(pt => String.Format("{0},{1}", pt.X, pt.Y)));
+                string data = String.Join(" ", path.Select(pt => String.Format("{0},{1}", pt.X * Program.Scale, pt.Y * Program.Scale)));
                 XElement pathElement = new XElement("Path", data);
                 pathElements.Add(pathElement);
             }
@@ -91,7 +91,7 @@ namespace Tiled2Unity
             var combined = CombineLineSegments(lines);
             foreach (var points in combined)
             {
-                string data = String.Join(" ", points.Select(pt => String.Format("{0},{1}", pt.X, pt.Y)));
+                string data = String.Join(" ", points.Select(pt => String.Format("{0},{1}", pt.X * Program.Scale, pt.Y * Program.Scale)));
                 XElement edgeCollider =
                     new XElement("EdgeCollider2D",
                         new XElement("Points", data));

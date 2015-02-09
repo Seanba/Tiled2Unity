@@ -115,18 +115,36 @@ namespace Tiled2Unity
             Program.WriteSuccess("Succesfully exported: {0}", pathToSave);
         }
 
-        public static Vector3D PointFToUnityVector(PointF pt)
+        public static Vector3D PointFToUnityVector_NoScale(PointF pt)
         {
             // Unity's coordinate sytem has y-up positive, y-down negative
             // Have to watch for negative zero, ffs
             return new Vector3D(pt.X, pt.Y == 0 ? 0 : -pt.Y, 0.0f);
         }
 
-        public static Vector3D PointToObjVertex(Point pt, float pos_z)
+        public static Vector3D PointFToUnityVector(PointF pt)
+        {
+            // Unity's coordinate sytem has y-up positive, y-down negative
+            // Apply scaling
+            PointF scaled = pt;
+            scaled.X *= Program.Scale;
+            scaled.Y *= Program.Scale;
+
+            // Have to watch for negative zero, ffs
+            return new Vector3D(scaled.X, scaled.Y == 0 ? 0 : -scaled.Y, 0.0f);
+        }
+
+        public static Vector3D PointFToObjVertex(PointF pt, float pos_z)
         {
             // Note, we negate the x and y due to Wavefront's coordinate system
+            // Applying scaling
+            PointF scaled = pt;
+            scaled.X *= Program.Scale;
+            scaled.Y *= Program.Scale;
+            float scaled_z = pos_z *= Program.Scale;
+
             // Watch for negative zero, ffs
-            return new Vector3D(pt.X == 0 ? 0 : -pt.X, pt.Y == 0 ? 0 : -pt.Y, pos_z);
+            return new Vector3D(scaled.X == 0 ? 0 : -scaled.X, scaled.Y == 0 ? 0 : -scaled.Y, scaled_z);
         }
 
         public static PointF PointToTextureCoordinate(PointF pt, Size imageSize)
