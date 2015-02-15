@@ -70,5 +70,17 @@ namespace Tiled2Unity.Properties {
                 this["LastPreviewScale"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1")]
+        public float LastVertexScale {
+            get {
+                return ((float)(this["LastVertexScale"]));
+            }
+            set {
+                this["LastVertexScale"] = value;
+            }
+        }
     }
 }

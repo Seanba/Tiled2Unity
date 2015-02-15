@@ -112,7 +112,7 @@ namespace Tiled2Unity
             string pathToSave = Path.Combine(exportDir, fileToSave);
             Program.WriteLine("Exporting to: {0}", pathToSave);
             doc.Save(pathToSave);
-            Program.WriteSuccess("Succesfully exported: {0}", pathToSave);
+            Program.WriteSuccess("Succesfully exported: {0}\n  vertex scale = {1}", pathToSave, Program.Scale);
         }
 
         public static Vector3D PointFToUnityVector_NoScale(PointF pt)

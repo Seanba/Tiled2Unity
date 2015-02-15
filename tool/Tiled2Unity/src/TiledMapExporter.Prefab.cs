@@ -75,17 +75,20 @@ namespace Tiled2Unity
                     if (layer.Visible == false)
                         continue;
 
-                    // Submeshes for the layer (layer+material)
-                    var meshElements = CreateMeshElementsForLayer(layer);
+                    XElement layerElement =
+                        new XElement("GameObject",
+                            new XAttribute("name", layer.Name));
+
+                    if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false)
+                    {
+                        // Submeshes for the layer (layer+material)
+                        var meshElements = CreateMeshElementsForLayer(layer);
+                        layerElement.Add(meshElements);
+                    }
 
                     // Collision data for the layer
                     var collisionElements = CreateCollisionElementForLayer(layer);
-
-                    XElement layerElement =
-                        new XElement("GameObject",
-                            new XAttribute("name", layer.Name),
-                            meshElements,
-                            collisionElements);
+                    layerElement.Add(collisionElements);
 
                     AssignUnityProperties(layer, layerElement, PrefabContext.TiledLayer);
                     AssignTiledProperties(layer, layerElement);
@@ -140,6 +143,7 @@ namespace Tiled2Unity
                 Vector3D pos = PointFToUnityVector(tmxObject.Position);
                 xmlObject.SetAttributeValue("x", pos.X);
                 xmlObject.SetAttributeValue("y", pos.Y);
+                xmlObject.SetAttributeValue("rotation", tmxObject.Rotation);
 
                 AssignUnityProperties(tmxObject, xmlObject, PrefabContext.Object);
                 AssignTiledProperties(tmxObject, xmlObject);
@@ -281,6 +285,7 @@ namespace Tiled2Unity
             knownProperties.Add("unity:scale");
             knownProperties.Add("unity:isTrigger");
             knownProperties.Add("unity:ignore");
+            knownProperties.Add("unity:collisionOnly");
 
             var unknown = from p in tmx.Properties.PropertyMap
                           where p.Key.StartsWith("unity:")

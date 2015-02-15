@@ -49,8 +49,10 @@ namespace Tiled2Unity
             float y = TmxHelper.GetAttributeAsFloat(xml, "y");
             float w = TmxHelper.GetAttributeAsFloat(xml, "width", 0);
             float h = TmxHelper.GetAttributeAsFloat(xml, "height", 0);
+            float r = TmxHelper.GetAttributeAsFloat(xml, "rotation", 0);
             tmxObject.Position = new System.Drawing.PointF(x, y);
             tmxObject.Size = new System.Drawing.SizeF(w, h);
+            tmxObject.Rotation = r;
 
             tmxObject.Properties = TmxProperties.FromXml(xml);
 

@@ -67,6 +67,10 @@ namespace Tiled2Unity
                     Properties.Settings.Default.Save();
                 }
 
+                // Set the vertex scale
+                this.textBoxScale.Text = Program.Scale.ToString();
+
+                // Open the TMX file
                 OpenTmxFile(Program.TmxPath);
 
                 if (Program.AutoExport)
@@ -341,6 +345,33 @@ namespace Tiled2Unity
             string folder = Path.GetDirectoryName(path);
             string package = Path.Combine(folder, "Tiled2Unity.unitypackage");
             System.Diagnostics.Process.Start(package);
+        }
+
+        private void textBoxScale_Validating(object sender, CancelEventArgs e)
+        {
+            bool good = false;
+
+            float scale = Program.Scale;
+            if (Single.TryParse(this.textBoxScale.Text, out scale))
+            {
+                // Is the scale greater than 0?
+                if (scale > 0)
+                {
+                    good = true;
+                }
+            }
+
+            if (good)
+            {
+                Program.Scale = scale;
+                Properties.Settings.Default.LastVertexScale = Program.Scale;
+                Properties.Settings.Default.Save();
+            }
+            else
+            {
+                // Set to 1.0
+                this.textBoxScale.Text = "1.0";
+            }
         }
 
     }

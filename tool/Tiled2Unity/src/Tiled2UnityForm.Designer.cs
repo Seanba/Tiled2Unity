@@ -34,7 +34,6 @@
             this.buttonFolderBrowser = new System.Windows.Forms.Button();
             this.buttonExport = new System.Windows.Forms.Button();
             this.buttonViewer = new System.Windows.Forms.Button();
-            this.textBoxExportFolder = new System.Windows.Forms.TextBox();
             this.menuStrip = new System.Windows.Forms.MenuStrip();
             this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openTiledFileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -45,6 +44,9 @@
             this.addUnityPackageToProjectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showHelpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.aboutTiled2UnityToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.labelScale = new System.Windows.Forms.Label();
+            this.textBoxScale = new System.Windows.Forms.TextBox();
+            this.textBoxExportFolder = new System.Windows.Forms.TextBox();
             this.menuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -59,7 +61,7 @@
             this.richTextBoxOutput.Location = new System.Drawing.Point(12, 27);
             this.richTextBoxOutput.Name = "richTextBoxOutput";
             this.richTextBoxOutput.ReadOnly = true;
-            this.richTextBoxOutput.Size = new System.Drawing.Size(828, 435);
+            this.richTextBoxOutput.Size = new System.Drawing.Size(899, 375);
             this.richTextBoxOutput.TabIndex = 0;
             this.richTextBoxOutput.Text = "";
             this.richTextBoxOutput.WordWrap = false;
@@ -69,7 +71,7 @@
             this.labelExport.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.labelExport.AutoSize = true;
-            this.labelExport.Location = new System.Drawing.Point(12, 485);
+            this.labelExport.Location = new System.Drawing.Point(27, 418);
             this.labelExport.Name = "labelExport";
             this.labelExport.Size = new System.Drawing.Size(56, 13);
             this.labelExport.TabIndex = 1;
@@ -80,9 +82,9 @@
             // 
             this.buttonFolderBrowser.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.buttonFolderBrowser.Enabled = false;
-            this.buttonFolderBrowser.Location = new System.Drawing.Point(74, 507);
+            this.buttonFolderBrowser.Location = new System.Drawing.Point(89, 444);
             this.buttonFolderBrowser.Name = "buttonFolderBrowser";
-            this.buttonFolderBrowser.Size = new System.Drawing.Size(153, 23);
+            this.buttonFolderBrowser.Size = new System.Drawing.Size(162, 23);
             this.buttonFolderBrowser.TabIndex = 3;
             this.buttonFolderBrowser.Text = "Choose Export Folder ...";
             this.buttonFolderBrowser.UseVisualStyleBackColor = true;
@@ -92,10 +94,10 @@
             // 
             this.buttonExport.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonExport.Enabled = false;
-            this.buttonExport.Location = new System.Drawing.Point(659, 481);
+            this.buttonExport.Location = new System.Drawing.Point(730, 418);
             this.buttonExport.Name = "buttonExport";
-            this.buttonExport.Size = new System.Drawing.Size(180, 66);
-            this.buttonExport.TabIndex = 4;
+            this.buttonExport.Size = new System.Drawing.Size(180, 79);
+            this.buttonExport.TabIndex = 7;
             this.buttonExport.Text = "Big Ass Export Button";
             this.buttonExport.UseVisualStyleBackColor = true;
             this.buttonExport.Click += new System.EventHandler(this.buttonExport_Click_1);
@@ -104,26 +106,13 @@
             // 
             this.buttonViewer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonViewer.Enabled = false;
-            this.buttonViewer.Location = new System.Drawing.Point(473, 507);
+            this.buttonViewer.Location = new System.Drawing.Point(544, 444);
             this.buttonViewer.Name = "buttonViewer";
             this.buttonViewer.Size = new System.Drawing.Size(151, 23);
-            this.buttonViewer.TabIndex = 5;
+            this.buttonViewer.TabIndex = 4;
             this.buttonViewer.Text = "Preview Exported Map";
             this.buttonViewer.UseVisualStyleBackColor = true;
             this.buttonViewer.Click += new System.EventHandler(this.buttonViewer_Click);
-            // 
-            // textBoxExportFolder
-            // 
-            this.textBoxExportFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.textBoxExportFolder.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastExportDirectory", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.textBoxExportFolder.Location = new System.Drawing.Point(74, 481);
-            this.textBoxExportFolder.Name = "textBoxExportFolder";
-            this.textBoxExportFolder.ReadOnly = true;
-            this.textBoxExportFolder.Size = new System.Drawing.Size(551, 20);
-            this.textBoxExportFolder.TabIndex = 2;
-            this.textBoxExportFolder.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
-            this.textBoxExportFolder.TextChanged += new System.EventHandler(this.textBoxExportFolder_TextChanged);
             // 
             // menuStrip
             // 
@@ -133,7 +122,7 @@
             this.helpToolStripMenuItem});
             this.menuStrip.Location = new System.Drawing.Point(0, 0);
             this.menuStrip.Name = "menuStrip";
-            this.menuStrip.Size = new System.Drawing.Size(852, 24);
+            this.menuStrip.Size = new System.Drawing.Size(923, 24);
             this.menuStrip.TabIndex = 6;
             this.menuStrip.Text = "menuStrip1";
             // 
@@ -206,12 +195,50 @@
             this.aboutTiled2UnityToolStripMenuItem.Text = "&About Tiled2Unity";
             this.aboutTiled2UnityToolStripMenuItem.Click += new System.EventHandler(this.aboutTiled2UnityToolStripMenuItem_Click);
             // 
+            // labelScale
+            // 
+            this.labelScale.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.labelScale.AutoSize = true;
+            this.labelScale.Location = new System.Drawing.Point(13, 483);
+            this.labelScale.Name = "labelScale";
+            this.labelScale.RightToLeft = System.Windows.Forms.RightToLeft.No;
+            this.labelScale.Size = new System.Drawing.Size(70, 13);
+            this.labelScale.TabIndex = 5;
+            this.labelScale.Text = "Vertex Scale:";
+            this.labelScale.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // textBoxScale
+            // 
+            this.textBoxScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.textBoxScale.Location = new System.Drawing.Point(90, 483);
+            this.textBoxScale.Name = "textBoxScale";
+            this.textBoxScale.Size = new System.Drawing.Size(161, 20);
+            this.textBoxScale.TabIndex = 6;
+            this.textBoxScale.Text = "1";
+            this.textBoxScale.Validating += new System.ComponentModel.CancelEventHandler(this.textBoxScale_Validating);
+            // 
+            // textBoxExportFolder
+            // 
+            this.textBoxExportFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.textBoxExportFolder.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastExportDirectory", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.textBoxExportFolder.Location = new System.Drawing.Point(89, 418);
+            this.textBoxExportFolder.Name = "textBoxExportFolder";
+            this.textBoxExportFolder.ReadOnly = true;
+            this.textBoxExportFolder.Size = new System.Drawing.Size(607, 20);
+            this.textBoxExportFolder.TabIndex = 2;
+            this.textBoxExportFolder.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
+            this.textBoxExportFolder.TextChanged += new System.EventHandler(this.textBoxExportFolder_TextChanged);
+            // 
             // Tiled2UnityForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.ClientSize = new System.Drawing.Size(852, 559);
+            this.ClientSize = new System.Drawing.Size(923, 509);
+            this.Controls.Add(this.textBoxScale);
+            this.Controls.Add(this.labelScale);
             this.Controls.Add(this.buttonViewer);
             this.Controls.Add(this.buttonExport);
             this.Controls.Add(this.buttonFolderBrowser);
@@ -249,6 +276,8 @@
         private System.Windows.Forms.ToolStripMenuItem showHelpToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem aboutTiled2UnityToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem addUnityPackageToProjectToolStripMenuItem;
+        private System.Windows.Forms.Label labelScale;
+        private System.Windows.Forms.TextBox textBoxScale;
     }
 }
 

@@ -40,7 +40,17 @@ namespace Tiled2Unity
 
         public bool GetPropertyValueAsBoolean(string name)
         {
-            return Convert.ToBoolean(this.PropertyMap[name]);
+            bool asBoolean = false;
+            try
+            {
+                asBoolean = Convert.ToBoolean(this.PropertyMap[name]);
+            }
+            catch (FormatException)
+            {
+                Program.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name]);
+            }
+
+            return asBoolean;
         }
 
         public bool GetPropertyValueAsBoolean(string name, bool defaultValue)

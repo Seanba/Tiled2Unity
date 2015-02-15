@@ -64,29 +64,29 @@ namespace Tiled2Unity
             }
 
             // Pretty-print the tileIds
-            Program.WriteLine("TileIds for {0} layer:", this.Name);
+            //Program.WriteLine("TileIds for {0} layer:", this.Name);
 
-            uint largest = this.TileIds.Max();
-            largest = TmxMath.GetTileIdWithoutFlags(largest);
+            //uint largest = this.TileIds.Max();
+            //largest = TmxMath.GetTileIdWithoutFlags(largest);
 
-            int padding = largest.ToString().Length + 2;
+            //int padding = largest.ToString().Length + 2;
 
-            StringBuilder builder = new StringBuilder();
-            for (int t = 0; t < this.TileIds.Count(); ++t)
-            {
-                if (t % this.Width == 0)
-                {
-                    Program.WriteLine(builder.ToString());
-                    builder.Clear();
-                }
+            //StringBuilder builder = new StringBuilder();
+            //for (int t = 0; t < this.TileIds.Count(); ++t)
+            //{
+            //    if (t % this.Width == 0)
+            //    {
+            //        Program.WriteLine(builder.ToString());
+            //        builder.Clear();
+            //    }
 
-                uint tileId = this.TileIds[t];
-                tileId = TmxMath.GetTileIdWithoutFlags(tileId);
-                builder.AppendFormat("{0}", tileId.ToString().PadLeft(padding));
-            }
+            //    uint tileId = this.TileIds[t];
+            //    tileId = TmxMath.GetTileIdWithoutFlags(tileId);
+            //    builder.AppendFormat("{0}", tileId.ToString().PadLeft(padding));
+            //}
 
-            // Write the last row
-            Program.WriteLine(builder.ToString());
+            //// Write the last row
+            //Program.WriteLine(builder.ToString());
         }
 
         private void ParseTileDataAsXml(XElement elemData)

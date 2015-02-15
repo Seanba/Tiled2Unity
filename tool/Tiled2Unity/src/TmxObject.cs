@@ -14,6 +14,7 @@ namespace Tiled2Unity
         public bool Visible { get; private set; }
         public PointF Position { get; private set; }
         public SizeF Size { get; protected set; }
+        public float Rotation { get; private set; }
         public TmxProperties Properties { get; private set; }
 
         public string GetNonEmptyName()
@@ -25,7 +26,7 @@ namespace Tiled2Unity
 
         public override string ToString()
         {
-            return String.Format("{0} {1} pos={2}, size={3}", GetType().Name, GetNonEmptyName(), this.Position, this.Size);
+            return String.Format("{0} {1} pos={2}, size={3} rot = {4}", GetType().Name, GetNonEmptyName(), this.Position, this.Size, this.Rotation);
         }
 
         public abstract RectangleF GetWorldBounds();

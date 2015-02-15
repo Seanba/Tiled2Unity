@@ -51,6 +51,7 @@ namespace Tiled2Unity
             // Gather the information for every face
             var faces = from layer in this.tmxMap.Layers
                         where layer.Visible == true
+                        where layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false
 
                         // Draw order forces us to visit tiles in a particular order
                         from y in (this.tmxMap.DrawOrderVertical == 1) ? Enumerable.Range(0, layer.Height) : Enumerable.Range(0, layer.Height).Reverse()

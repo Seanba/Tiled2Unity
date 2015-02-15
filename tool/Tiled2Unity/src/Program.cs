@@ -29,7 +29,7 @@ namespace Tiled2Unity
         static private readonly float DefaultTexelBias = 8192.0f;
 
         static public bool AutoExport { get; private set; }
-        static public float Scale { get; private set; }
+        static public float Scale { get; set; }
         static public float TexelBias { get; private set; }
         static public bool Verbose { get; private set; }
         static public bool Help { get; private set; }
@@ -63,7 +63,7 @@ namespace Tiled2Unity
 
             // Default options
             Program.AutoExport = false;
-            Program.Scale = 1.0f;
+            Program.Scale = -1.0f;
             Program.TexelBias = DefaultTexelBias;
             Program.Verbose = false;
             Program.Help = false;
@@ -85,12 +85,23 @@ namespace Tiled2Unity
             // Parse the options
             List<string> extra = Program.Options.Parse(args);
 
-            // Did we put in a negative scale? That isn't supported.
+            // If we didn''t overide scale then use the old value
             if (Program.Scale <= 0.0f)
             {
-                Program.WriteError("Scale value of '{0}' not supported. Scale needs to be positive and non-zero.", Program.Scale);
-                PrintHelp();
-                return false;
+                if (Properties.Settings.Default.LastVertexScale > 0)
+                {
+                    Program.Scale = Properties.Settings.Default.LastVertexScale;
+                }
+                else
+                {
+                    Program.Scale = 1.0f;
+                }
+            }
+            else
+            {
+                // Save our new value
+                Properties.Settings.Default.LastVertexScale = Program.Scale;
+                Properties.Settings.Default.Save();
             }
 
             // First left over option must exist and it is the TMX file we are exporting
@@ -181,6 +192,7 @@ namespace Tiled2Unity
             Program.WriteLine("  unity:scale");
             Program.WriteLine("  unity:isTrigger");
             Program.WriteLine("  unity:ignore");
+            Program.WriteLine("  unity:collisionOnly");
             Program.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
         }
 
