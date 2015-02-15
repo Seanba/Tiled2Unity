@@ -93,9 +93,18 @@ namespace Tiled2Unity
                     child.name = name;
                 }
 
+                // Set the position
                 float x = ImportUtils.GetAttributeAsFloat(goXml, "x", 0);
                 float y = ImportUtils.GetAttributeAsFloat(goXml, "y", 0);
                 child.transform.position = new Vector3(x, y, 0);
+
+                // Set the rotation
+                float r = ImportUtils.GetAttributeAsFloat(goXml, "rotation", 0);
+                if (r != 0)
+                {
+                    // Use negative 'r' because of change in coordinate systems between Tiled and Unity
+                    child.transform.eulerAngles = new Vector3(0, 0, -r);
+                }
 
                 // Assign the child to the parent
                 child.transform.parent = parent.transform;
