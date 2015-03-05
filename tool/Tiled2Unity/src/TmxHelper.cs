@@ -72,7 +72,7 @@ namespace Tiled2Unity
         {
             string colorString = elem.Attribute(attrName).Value;
             System.Windows.Media.Color mediaColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colorString);
-            return System.Drawing.Color.FromArgb(mediaColor.A, mediaColor.R, mediaColor.B, mediaColor.G);
+            return System.Drawing.Color.FromArgb(mediaColor.A, mediaColor.R, mediaColor.G, mediaColor.B);
         }
 
         public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName, System.Drawing.Color defaultValue)

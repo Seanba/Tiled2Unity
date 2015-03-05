@@ -82,5 +82,16 @@ namespace Tiled2Unity.Properties {
                 this["LastVertexScale"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        public global::System.Collections.Specialized.StringCollection PerLayerColors {
+            get {
+                return ((global::System.Collections.Specialized.StringCollection)(this["PerLayerColors"]));
+            }
+            set {
+                this["PerLayerColors"] = value;
+            }
+        }
     }
 }

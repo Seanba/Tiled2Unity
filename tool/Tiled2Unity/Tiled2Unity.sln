@@ -5,6 +5,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tiled2Unity", "src\Tiled2Un
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ookii.Dialogs", "src\ThirdParty\Ookii.Dialogs.Modified\src\Ookii.Dialogs\Ookii.Dialogs.csproj", "{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThemeColorPicker", "src\ThirdParty\ThemeColorPicker\ThemeColorPicker.csproj", "{A4D1EDB0-61E7-4943-AA8D-E545456BC392}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -48,6 +50,21 @@ Global
 		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|Mixed Platforms.ActiveCfg = Shipping-WithInstaller|Any CPU
 		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|Mixed Platforms.Build.0 = Shipping-WithInstaller|Any CPU
 		{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}.Shipping-WithInstaller|x86.ActiveCfg = Shipping-WithInstaller|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Release|x86.ActiveCfg = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Shipping-WithInstaller|Any CPU.ActiveCfg = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Shipping-WithInstaller|Any CPU.Build.0 = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Shipping-WithInstaller|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Shipping-WithInstaller|Mixed Platforms.Build.0 = Release|Any CPU
+		{A4D1EDB0-61E7-4943-AA8D-E545456BC392}.Shipping-WithInstaller|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

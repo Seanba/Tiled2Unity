@@ -18,12 +18,15 @@ namespace Tiled2Unity
         private static readonly float GridSize = 3.0f;
 
         private TmxMap tmxMap = null;
-        private int colorIndex = 0;
         private float scale = 1.0f;
+        private PreviewPreferencesForm preferencesForm;
 
         public Tiled2UnityViewer(TmxMap tmxMap)
         {
             this.tmxMap = tmxMap;
+            this.preferencesForm = new PreviewPreferencesForm();
+            this.preferencesForm.ApplyChanges += new PreviewPreferencesForm.OnApplyChanges(preferencesForm_ApplyChanges);
+            this.preferencesForm.InitializePrefernces(tmxMap);
             InitializeComponent();
         }
 
@@ -36,8 +39,10 @@ namespace Tiled2Unity
             {
                 this.scale = 1.0f;
             }
+
             CreateAndShowBitmap();
         }
+
 
         private void CreateAndShowBitmap()
         {
@@ -67,11 +72,13 @@ namespace Tiled2Unity
             var objBounds = from g in this.tmxMap.ObjectGroups
                             from o in g.Objects
                             where o.Visible == true
+                            where IsLayerEnabled(g.Name)
                             select o.GetWorldBounds();
 
             // Take boundaries from objects embedded in tiles
             var tileBounds = from layer in tmxMap.Layers
                              where layer.Visible == true
+                             where IsLayerEnabled(layer.DefaultName)
                              from y in Enumerable.Range(0, layer.Height)
                              from x in Enumerable.Range(0, layer.Width)
                              let tileId = layer.GetTileIdAt(x, y)
@@ -107,15 +114,18 @@ namespace Tiled2Unity
                 bitmap = new Bitmap(1024, 1024);
             }
 
+            using (Pen pen = new Pen(Color.Black, 1.0f))
             using (Graphics g = Graphics.FromImage(bitmap))
             {
+                pen.Alignment = PenAlignment.Inset;
+
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
                 g.ScaleTransform(this.scale, this.scale);
 
                 g.FillRectangle(Brushes.WhiteSmoke, 0, 0, bounds.Width, bounds.Height);
-                g.DrawRectangle(Pens.Black, 0, 0, bounds.Width-1, bounds.Height-1);
+                g.DrawRectangle(pen, 1, 1, bounds.Width-1, bounds.Height-1);
 
                 g.TranslateTransform(-bounds.X, -bounds.Y);
                 DrawGrid(g, bounds);
@@ -130,10 +140,8 @@ namespace Tiled2Unity
         private void DrawGrid(Graphics g, RectangleF bounds)
         {
             // Draw the background for the map
-            using (Brush brush = new SolidBrush(this.tmxMap.BackgroundColor))
-            {
-                g.FillRectangle(brush, 0, 0, this.tmxMap.Width * this.tmxMap.TileWidth, this.tmxMap.Height * this.tmxMap.TileHeight);
-            }
+            // A full white background is preferred because of the colliders we draw on the top of the layers
+            g.FillRectangle(Brushes.White, 0, 0, this.tmxMap.Width * this.tmxMap.TileWidth, this.tmxMap.Height * this.tmxMap.TileHeight);
 
             // Inflate for edge cases. Worst case we try to draw some extra grid points.
             float twidth = this.tmxMap.TileWidth;
@@ -162,6 +170,7 @@ namespace Tiled2Unity
             var images = from layer in this.tmxMap.Layers
                          where layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false
                          where layer.Visible == true
+                         where IsLayerEnabled(layer.DefaultName)
                          from y in Enumerable.Range(0, layer.Height)
                          from x in Enumerable.Range(0, layer.Width)
                          let tileId = layer.GetTileIdAt(x, y)
@@ -191,6 +200,9 @@ namespace Tiled2Unity
             foreach (TmxLayer layer in this.tmxMap.Layers)
             {
                 if (layer.Visible == false)
+                    continue;
+
+                if (IsLayerEnabled(layer.DefaultName) == false)
                     continue;
 
                 if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == true)
@@ -267,24 +279,13 @@ namespace Tiled2Unity
 
         private void DrawColliders(Graphics g)
         {
-            Color[] colors = new Color[]
-            {
-                Color.AliceBlue,
-                Color.LightPink,
-                Color.LightSkyBlue,
-                Color.LightYellow,
-                Color.LavenderBlush,
-                Color.Cyan,
-                Color.WhiteSmoke,
-            };
-
             for (int l = 0; l < this.tmxMap.Layers.Count; ++l)
             {
                 TmxLayer layer = this.tmxMap.Layers[l];
-                if (layer.Visible == true)
+                if (layer.Visible == true && IsLayerEnabled(layer.DefaultName))
                 {
-                    Color polyColor = colors[this.colorIndex % colors.Length];
-                    Color lineColor = colors[(this.colorIndex + 1) % colors.Length];
+                    Color lineColor = this.preferencesForm.GetLayerColor(layer.DefaultName);
+                    Color polyColor = Color.FromArgb(128, lineColor);
                     DrawLayerColliders(g, layer, polyColor, lineColor);
                 }
             }
@@ -298,11 +299,11 @@ namespace Tiled2Unity
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
 
             using (GraphicsPath path = new GraphicsPath())
-            using (Pen penOuter = new Pen(Brushes.DarkGray, 3.0f))
-            using (Pen penInner = new Pen(polyColor, 1.0f))
-            using (Pen penLine = new Pen(lineColor, 4.0f))
-            using (Brush brush = new HatchBrush(HatchStyle.Percent20, polyColor, Color.Transparent))
+            using (Pen pen = new Pen(lineColor, 1.0f))
+            using (Brush brush = new HatchBrush(HatchStyle.ForwardDiagonal, lineColor, polyColor))
             {
+                pen.Alignment = PenAlignment.Inset;
+
                 // Draw all closed polygons
                 foreach (var points in ClipperLib.Clipper.ClosedPathsFromPolyTree(solution))
                 {
@@ -311,9 +312,8 @@ namespace Tiled2Unity
                 }
                 if (path.PointCount > 0)
                 {
-                    g.DrawPath(penOuter, path);
                     g.FillPath(brush, path);
-                    g.DrawPath(penInner, path);
+                    g.DrawPath(pen, path);
                 }
 
                 // Draw all lines (open polygons)
@@ -321,15 +321,12 @@ namespace Tiled2Unity
                 foreach (var points in ClipperLib.Clipper.OpenPathsFromPolyTree(solution))
                 {
                     var pointfs = points.Select(pt => new PointF(pt.X, pt.Y));
-                    //g.DrawLines(penLine, pointfs.ToArray());
-                    //g.DrawLines(penInner, pointfs.ToArray());
                     path.StartFigure();
                     path.AddLines(pointfs.ToArray());
                 }
                 if (path.PointCount > 0)
                 {
-                    g.DrawPath(penLine, path);
-                    g.DrawPath(penInner, path);
+                    g.DrawPath(pen, path);
                 }
             }
         }
@@ -338,6 +335,7 @@ namespace Tiled2Unity
         {
             var collidersObjectGroup = from item in this.tmxMap.ObjectGroups
                                        where item.Visible == true
+                                       where IsLayerEnabled(item.Name)
                                        select item;
 
             foreach (var objGroup in collidersObjectGroup)
@@ -351,34 +349,32 @@ namespace Tiled2Unity
 
         private void DrawObjectCollider(Graphics g, TmxObject tmxObject, Color color)
         {
-            using (Pen penOuter = new Pen(Brushes.DarkGray, 3.0f))
-            using (Pen penInner = new Pen(color, 1.0f))
-            using (Brush brush = new HatchBrush(HatchStyle.Percent20, color, Color.Transparent))
-            using (Pen tilePen = new Pen(Color.White))
-            using (Brush tileBrush = new SolidBrush(Color.FromArgb(128, Color.Gray)))
+            Color brushColor = Color.FromArgb(128, color);
+            using (Brush brush = new HatchBrush(HatchStyle.BackwardDiagonal, color, brushColor))
+            using (Pen pen = new Pen(color))
             {
+                pen.Alignment = PenAlignment.Inset;
+
                 GraphicsState state = g.Save();
                 g.TranslateTransform(tmxObject.Position.X, tmxObject.Position.Y);
                 g.RotateTransform(tmxObject.Rotation);
 
-                tilePen.DashStyle = DashStyle.Dot;
-
                 if (tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
-                    DrawPolygon(g, penOuter, penInner, brush, tmxObject as TmxObjectPolygon);
+                    DrawPolygon(g, pen, brush, tmxObject as TmxObjectPolygon);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
                     // Rectangles are polygons
-                    DrawPolygon(g, penOuter, penInner, brush, tmxObject as TmxObjectPolygon);
+                    DrawPolygon(g, pen, brush, tmxObject as TmxObjectPolygon);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
-                    DrawEllipse(g, penOuter, penInner, brush, tmxObject as TmxObjectEllipse);
+                    DrawEllipse(g, pen, brush, tmxObject as TmxObjectEllipse);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
                 {
-                    DrawPolyline(g, penOuter, penInner, tmxObject as TmxObjectPolyline);
+                    DrawPolyline(g, pen, tmxObject as TmxObjectPolyline);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
@@ -389,8 +385,8 @@ namespace Tiled2Unity
                     rcTile.Y = -tmxObjectTile.Tile.TileSize.Height;
                     rcTile.Size = tmxObjectTile.Tile.TileSize;
 
-                    g.FillRectangle(tileBrush, rcTile);
-                    g.DrawRectangle(tilePen, rcTile.X, rcTile.Y, rcTile.Width - 1, rcTile.Height - 1);
+                    g.FillRectangle(brush, rcTile);
+                    g.DrawRectangle(pen, rcTile.X, rcTile.Y, rcTile.Width - 1, rcTile.Height - 1);
                 }
                 else
                 {
@@ -407,29 +403,26 @@ namespace Tiled2Unity
             }
         }
 
-        private void DrawPolygon(Graphics g, Pen penOut, Pen penIn, Brush brush, TmxObjectPolygon tmxPolygon)
+        private void DrawPolygon(Graphics g, Pen pen, Brush brush, TmxObjectPolygon tmxPolygon)
         {
             var points = tmxPolygon.Points.ToArray();
-            g.DrawPolygon(penOut, points);
             g.FillPolygon(brush, points);
-            g.DrawPolygon(penIn, points);
+            g.DrawPolygon(pen, points);
         }
 
-        private void DrawPolyline(Graphics g, Pen penOut, Pen penIn, TmxObjectPolyline tmxPolyine)
+        private void DrawPolyline(Graphics g, Pen pen, TmxObjectPolyline tmxPolyine)
         {
             var points = tmxPolyine.Points.ToArray();
-            g.DrawLines(penOut, points);
-            g.DrawLines(penIn, points);
+            g.DrawLines(pen, points);
         }
 
-        private void DrawEllipse(Graphics g, Pen penOut, Pen penIn, Brush brush, TmxObjectEllipse tmxEllipse)
+        private void DrawEllipse(Graphics g, Pen pen, Brush brush, TmxObjectEllipse tmxEllipse)
         {
             RectangleF rc = new RectangleF(new PointF(0, 0), tmxEllipse.Size);
             if (tmxEllipse.IsCircle())
             {
-                g.DrawEllipse(penOut, rc);
                 g.FillEllipse(brush, rc);
-                g.DrawEllipse(penIn, rc);
+                g.DrawEllipse(pen, rc);
             }
             else
             {
@@ -454,15 +447,6 @@ namespace Tiled2Unity
             g.DrawString(text, SystemFonts.DefaultFont, Brushes.Black, x - 1, y);
          
             g.DrawString(text, SystemFonts.DefaultFont, Brushes.White, x, y);
-        }
-
-        private void pictureBoxViewer_MouseDoubleClick(object sender, MouseEventArgs e)
-        {
-            // Change the colors used to display and recreate our image
-            this.colorIndex++;
-            RectangleF boundary = CalculateBoundary();
-            this.pictureBoxViewer.Image = CreateBitmap(boundary);
-            Refresh();
         }
 
         private void saveImageAsToolStripMenuItem_Click(object sender, EventArgs e)
@@ -538,6 +522,31 @@ namespace Tiled2Unity
             CreateAndShowBitmap();
         }
 
+        private bool IsLayerEnabled(string name)
+        {
+            return this.preferencesForm.GetLayerPreviewing(name);
+        }
+
+        private void previewOptionsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            OpenPreferencesForm();
+        }
+
+        private void OpenPreferencesForm()
+        {
+            this.preferencesForm.Show(this);
+        }
+
+        void preferencesForm_ApplyChanges()
+        {
+            CreateAndShowBitmap();
+        }
+
+        private void Tiled2UnityViewer_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            this.preferencesForm.ApplyChanges -= preferencesForm_ApplyChanges;
+            this.preferencesForm.Close();
+        }
 
     } // end class
 } // end namespace

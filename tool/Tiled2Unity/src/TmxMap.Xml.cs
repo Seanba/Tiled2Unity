@@ -228,7 +228,7 @@ namespace Tiled2Unity
                 if (tmxLayer.Properties.GetPropertyValueAsBoolean("unity:ignore", false) == true)
                 {
                     // We don't care about this layer
-                    Program.WriteLine("Ignoring layer due to unity:ignore property: {0}", tmxLayer.Name);
+                    Program.WriteLine("Ignoring layer due to unity:ignore property: {0}", tmxLayer.UniqueName);
                     continue;
                 }
 
@@ -239,7 +239,7 @@ namespace Tiled2Unity
                 if (numVertices > maxVertices)
                 {
                     Program.WriteWarning("Layer '{0}' will have more than {1} vertices (vertex count = {2}) and will be split into {3} parts by Unity.",
-                        tmxLayer.Name,
+                        tmxLayer.UniqueName,
                         maxVertices,
                         numVertices,
                         numVertices / maxVertices + 1);

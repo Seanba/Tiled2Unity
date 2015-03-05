@@ -19,7 +19,8 @@ namespace Tiled2Unity
 
             // Have to decorate layer names in order to force them into being unique
             // Also, can't have whitespace in the name because Unity will add underscores
-            tmxLayer.Name = String.Format("{0}_{1}", TmxHelper.GetAttributeAsString(elem, "name"), layerIndex.ToString("D2")).Replace(" ", "_");
+            tmxLayer.DefaultName = TmxHelper.GetAttributeAsString(elem, "name");
+            tmxLayer.UniqueName = String.Format("{0}_{1}", tmxLayer.DefaultName, layerIndex.ToString("D2")).Replace(" ", "_");
 
             tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
             tmxLayer.Width = TmxHelper.GetAttributeAsInt(elem, "width");
@@ -33,7 +34,7 @@ namespace Tiled2Unity
 
         private void ParseData(XElement elem)
         {
-            Program.WriteLine("Parse {0} layer data ...", this.Name);
+            Program.WriteLine("Parse {0} layer data ...", this.UniqueName);
             Program.WriteVerbose(elem.ToString());
 
             string encoding = TmxHelper.GetAttributeAsString(elem, "encoding", "");
@@ -60,10 +61,12 @@ namespace Tiled2Unity
             }
             else
             {
-                TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.Name);
+                TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.UniqueName);
             }
 
+            // Note: This is too noisy and slow and doesn't really add anything.
             // Pretty-print the tileIds
+            /*
             //Program.WriteLine("TileIds for {0} layer:", this.Name);
 
             //uint largest = this.TileIds.Max();
@@ -87,6 +90,7 @@ namespace Tiled2Unity
 
             //// Write the last row
             //Program.WriteLine(builder.ToString());
+             * */
         }
 
         private void ParseTileDataAsXml(XElement elemData)

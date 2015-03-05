@@ -9,7 +9,8 @@ namespace Tiled2Unity
 {
     public partial class TmxLayer : TmxHasProperties
     {
-        public string Name { get; private set; }
+        public string DefaultName { get; private set; }
+        public string UniqueName { get; private set; }
         public bool Visible { get; private set; }
         public int Width { get; private set; }
         public int Height { get; private set; }

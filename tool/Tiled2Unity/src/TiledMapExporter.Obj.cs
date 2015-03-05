@@ -69,7 +69,7 @@ namespace Tiled2Unity
                         from frame in TileFrame.EnumerateFramesFromTile(animTile, this.tmxMap)
                         select new
                         {
-                            LayerName = layer.Name,
+                            LayerName = layer.UniqueName,
                             Vertices = CalculateFaceVertices(this.tmxMap.GetMapPositionAt(x, y), frame.Tile.TileSize, this.tmxMap.TileHeight, frame.Position_z),
                             TextureCoordinates = CalculateFaceTextureCoordinates(frame.Tile, fd, fh, fv),
                             ImagePath = frame.Tile.TmxImage.Path,

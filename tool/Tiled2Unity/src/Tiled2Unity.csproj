@@ -83,8 +83,17 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ChDir.cs" />
+    <Compile Include="DataGridViewButtonCell_ColorPicker.cs" />
+    <Compile Include="DataGridViewColumn_ColorPicker.cs" />
     <Compile Include="LayerClipper.cs" />
+    <Compile Include="PerLayerColorData.cs" />
     <Compile Include="PolylineReduction.cs" />
+    <Compile Include="PreviewPreferencesForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PreviewPreferencesForm.Designer.cs">
+      <DependentUpon>PreviewPreferencesForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="ThirdParty\Algorithmia\MultiValueDictionary.cs" />
     <Compile Include="ThirdParty\Clipper\clipper.cs" />
     <Compile Include="ThirdParty\NDesk\Options.cs" />
@@ -141,6 +150,9 @@
     <Compile Include="TmxProperties.Xml.cs" />
     <Compile Include="TmxTile.cs" />
     <Compile Include="TmxTile.Xml.cs" />
+    <EmbeddedResource Include="PreviewPreferencesForm.resx">
+      <DependentUpon>PreviewPreferencesForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -207,6 +219,10 @@
     <ProjectReference Include="ThirdParty\Ookii.Dialogs.Modified\src\Ookii.Dialogs\Ookii.Dialogs.csproj">
       <Project>{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}</Project>
       <Name>Ookii.Dialogs</Name>
+    </ProjectReference>
+    <ProjectReference Include="ThirdParty\ThemeColorPicker\ThemeColorPicker.csproj">
+      <Project>{A4D1EDB0-61E7-4943-AA8D-E545456BC392}</Project>
+      <Name>ThemeColorPicker</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

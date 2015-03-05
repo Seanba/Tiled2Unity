@@ -49,6 +49,17 @@ namespace Tiled2Unity
             return new Point(x * this.TileWidth, y * this.TileHeight);
         }
 
+        public Point GetMapPositionAt(int x, int y, TmxTile tile)
+        {
+            Point point = GetMapPositionAt(x, y);
+
+            // The tile may have different dimensions than the cells of the map so correct for that
+            // In this case, the y-position needs to be adjusted
+            point.Y = (point.Y + this.TileHeight) - tile.TileSize.Height;
+
+            return point;
+        }
+
         public void RegisterImagePath(string imagePath)
         {
             string fileName = Path.GetFileNameWithoutExtension(imagePath);
@@ -65,7 +76,7 @@ namespace Tiled2Unity
             for (int i = 0; i < this.Layers.Count(); ++i)
             {
                 var layer = this.Layers[i];
-                if (String.Compare(layer.Name, layerName, true) == 0)
+                if (String.Compare(layer.UniqueName, layerName, true) == 0)
                 {
                     layerIndex = i;
                     break;

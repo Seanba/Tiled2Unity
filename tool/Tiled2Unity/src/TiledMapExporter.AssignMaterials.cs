@@ -23,7 +23,7 @@ namespace Tiled2Unity
                         let tile = this.tmxMap.Tiles[tileId]
                         select new
                         {
-                            LayerName = layer.Name,
+                            LayerName = layer.UniqueName,
                             ImageName = Path.GetFileNameWithoutExtension(tile.TmxImage.Path),
                             TransparentColor = tile.TmxImage.TransparentColor,
                             SortingLayer = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", ""),

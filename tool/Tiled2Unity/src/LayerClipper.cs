@@ -41,7 +41,7 @@ namespace Tiled2Unity
                                 let groupY = y / LayerClipper.GroupBySize
                                 group new
                                 {
-                                    PositionOnMap = tmxMap.GetMapPositionAt(x, y),
+                                    PositionOnMap = tmxMap.GetMapPositionAt(x, y, tile),
                                     HasPointsInterface = polygon as TmxHasPoints,
                                     TmxObjectInterface = polygon,
                                     IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
@@ -58,7 +58,7 @@ namespace Tiled2Unity
             {
                 if (groupIndex % 5 == 0)
                 {
-                    progFunc(String.Format("Clipping '{0}' polygons: {1}%", tmxLayer.Name, (groupIndex / (float)groupCount) * 100));
+                    progFunc(String.Format("Clipping '{0}' polygons: {1}%", tmxLayer.UniqueName, (groupIndex / (float)groupCount) * 100));
                 }
                 groupIndex++;
 
@@ -103,7 +103,7 @@ namespace Tiled2Unity
                 fullClipper.AddPaths(Clipper.ClosedPathsFromPolyTree(solution), PolyType.ptSubject, true);
                 fullClipper.AddPaths(Clipper.OpenPathsFromPolyTree(solution), PolyType.ptSubject, false);
             }
-            progFunc(String.Format("Clipping '{0}' polygons: 100%", tmxLayer.Name));
+            progFunc(String.Format("Clipping '{0}' polygons: 100%", tmxLayer.UniqueName));
 
             ClipperLib.PolyTree fullSolution = new ClipperLib.PolyTree();
             fullClipper.Execute(ClipperLib.ClipType.ctUnion, fullSolution);

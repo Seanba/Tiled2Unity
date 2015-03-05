@@ -2,8 +2,6 @@
 ; --------------- Headers --------------
 !include "MUI2.nsh"
 
-; fixit - don't forget to set Tiled2Unity_Exe
-
 ; --------------- General --------------
 CRCCheck force
 XPStyle on
@@ -93,6 +91,7 @@ File ${BUILD_DIR}\${P_NORM}.exe.config
 File ${BUILD_DIR}\Ookii.Dialogs.Modified.xml
 File ${BUILD_DIR}\Ookii.Dialogs.Modified.dll
 File ${BUILD_DIR}\Interop.Shell32.dll
+File ${BUILD_DIR}\ThemeColorPicker.dll
 File /oname=Tiled2Unity.unitypackage ${ROOT_DIR}\build\Tiled2Unity.${V}.unitypackage
 
 SetOutPath $INSTDIR\nl
@@ -135,6 +134,7 @@ Delete $INSTDIR\${P_NORM}.exe.config
 Delete $INSTDIR\Ookii.Dialogs.Modified.xml
 Delete $INSTDIR\Ookii.Dialogs.Modified.dll
 Delete $INSTDIR\Interop.Shell32.dll
+Delete $INSTDIR\ThemeColorPicker.dll
 Delete $INSTDIR\Tiled2Unity.unitypackage
 
 RMDir /r $INSTDIR\nl

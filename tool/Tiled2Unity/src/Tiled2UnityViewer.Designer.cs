@@ -43,6 +43,7 @@
             this.view200ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.view400ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.view800ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.previewOptionsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.panelViewer.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBoxViewer)).BeginInit();
             this.previewContextMenuStrip.SuspendLayout();
@@ -57,7 +58,7 @@
             this.panelViewer.Controls.Add(this.pictureBoxViewer);
             this.panelViewer.Location = new System.Drawing.Point(12, 12);
             this.panelViewer.Name = "panelViewer";
-            this.panelViewer.Size = new System.Drawing.Size(656, 463);
+            this.panelViewer.Size = new System.Drawing.Size(733, 463);
             this.panelViewer.TabIndex = 0;
             // 
             // pictureBoxViewer
@@ -69,16 +70,16 @@
             this.pictureBoxViewer.SizeMode = System.Windows.Forms.PictureBoxSizeMode.AutoSize;
             this.pictureBoxViewer.TabIndex = 0;
             this.pictureBoxViewer.TabStop = false;
-            this.pictureBoxViewer.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.pictureBoxViewer_MouseDoubleClick);
             // 
             // previewContextMenuStrip
             // 
             this.previewContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.saveImageAsToolStripMenuItem,
             this.copyToClipboardToolStripMenuItem,
-            this.previewScaleToolStripMenuItem});
+            this.previewScaleToolStripMenuItem,
+            this.previewOptionsToolStripMenuItem});
             this.previewContextMenuStrip.Name = "contextMenuStrip1";
-            this.previewContextMenuStrip.Size = new System.Drawing.Size(172, 70);
+            this.previewContextMenuStrip.Size = new System.Drawing.Size(172, 92);
             // 
             // saveImageAsToolStripMenuItem
             // 
@@ -164,15 +165,23 @@
             this.view800ToolStripMenuItem.Text = "View 800%";
             this.view800ToolStripMenuItem.Click += new System.EventHandler(this.view800ToolStripMenuItem_Click);
             // 
+            // previewOptionsToolStripMenuItem
+            // 
+            this.previewOptionsToolStripMenuItem.Name = "previewOptionsToolStripMenuItem";
+            this.previewOptionsToolStripMenuItem.Size = new System.Drawing.Size(171, 22);
+            this.previewOptionsToolStripMenuItem.Text = "Preview Options";
+            this.previewOptionsToolStripMenuItem.Click += new System.EventHandler(this.previewOptionsToolStripMenuItem_Click);
+            // 
             // Tiled2UnityViewer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(680, 487);
+            this.ClientSize = new System.Drawing.Size(757, 487);
             this.Controls.Add(this.panelViewer);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "Tiled2UnityViewer";
             this.Text = "Tiled2Unity Previewer";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Tiled2UnityViewer_FormClosing);
             this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.Tiled2UnityViewer_KeyDown);
             this.panelViewer.ResumeLayout(false);
             this.panelViewer.PerformLayout();
@@ -197,5 +206,6 @@
         private System.Windows.Forms.ToolStripMenuItem view200ToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem view400ToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem view800ToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem previewOptionsToolStripMenuItem;
     }
 }
