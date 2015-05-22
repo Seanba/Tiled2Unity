@@ -13,8 +13,31 @@ namespace Tiled2Unity
         public delegate void ReadTmxFileCompleted(TmxMap tmxMap);
         public static event ReadTmxFileCompleted OnReadTmxFileCompleted;
 
+        public enum MapOrientation
+        {
+            Orthogonal,
+            Isometric,
+            Staggered,
+            Hexagonal,
+        }
+
+        public enum MapStaggerAxis
+        {
+            X,
+            Y,
+        }
+
+        public enum MapStaggerIndex
+        {
+            Odd,
+            Even,
+        }
+
         public string Name { get; private set; }
-        public string Orientation { get; private set; }
+        public MapOrientation Orientation { get; private set; }
+        public MapStaggerAxis StaggerAxis { get; private set; }
+        public MapStaggerIndex StaggerIndex { get; private set; }
+        public int HexSideLength { get; set; }
         public int DrawOrderHorizontal { get; private set; }
         public int DrawOrderVertical { get; private set; }
         public int Width { get; private set; }
@@ -46,7 +69,7 @@ namespace Tiled2Unity
 
         public Point GetMapPositionAt(int x, int y)
         {
-            return new Point(x * this.TileWidth, y * this.TileHeight);
+            return TmxMath.TileCornerInScreenCoordinates(this, x, y);
         }
 
         public Point GetMapPositionAt(int x, int y, TmxTile tile)
@@ -102,5 +125,43 @@ namespace Tiled2Unity
             }
         }
 
+        public Size MapSizeInPixels()
+        {
+            // Takes the orientation of the map into account when calculating the size
+            if (this.Orientation == MapOrientation.Isometric)
+            {
+                Size size = Size.Empty;
+                size.Width = (this.Width + this.Height) * this.TileWidth / 2;
+                size.Height = (this.Width + this.Height) * this.TileHeight / 2;
+                return size;
+            }
+            else if (this.Orientation == MapOrientation.Staggered || this.Orientation == MapOrientation.Hexagonal)
+            {
+                int tileHeight = this.TileHeight & ~1;
+                int tileWidth = this.TileWidth & ~1;
+
+                if (this.StaggerAxis == MapStaggerAxis.Y)
+                {
+                    int halfHexLeftover = (tileHeight - this.HexSideLength) / 2;
+
+                    Size size = Size.Empty;
+                    size.Width = (tileWidth * this.Width) + tileWidth / 2;
+                    size.Height = (halfHexLeftover + this.HexSideLength) * this.Height + halfHexLeftover;
+                    return size;
+                }
+                else
+                {
+                    int halfHexLeftover = (tileWidth - this.HexSideLength) / 2;
+
+                    Size size = Size.Empty;
+                    size.Width = (halfHexLeftover + this.HexSideLength) * this.Width + halfHexLeftover;
+                    size.Height = (tileHeight * this.Height) + tileHeight / 2;
+                    return size;
+                }
+            }
+
+            // Default orientation (orthongonal)
+            return new Size(this.Width * this.TileWidth, this.Height * this.TileHeight);
+        }
     }
 }

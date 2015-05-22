@@ -68,7 +68,10 @@ namespace Tiled2Unity
             XElement map = doc.Element("map");
             try
             {
-                this.Orientation = TmxHelper.GetAttributeAsString(map, "orientation");
+                this.Orientation = TmxHelper.GetAttributeAsEnum<MapOrientation>(map, "orientation");
+                this.StaggerAxis = TmxHelper.GetAttributeAsEnum(map, "staggeraxis", MapStaggerAxis.Y);
+                this.StaggerIndex = TmxHelper.GetAttributeAsEnum(map, "staggerindex", MapStaggerIndex.Odd);
+                this.HexSideLength = TmxHelper.GetAttributeAsInt(map, "hexsidelength", 0);
                 this.DrawOrderHorizontal = TmxHelper.GetAttributeAsString(map, "renderorder", "right-down").Contains("right") ? 1 : -1;
                 this.DrawOrderVertical = TmxHelper.GetAttributeAsString(map, "renderorder", "right-down").Contains("down") ? 1 : -1;
                 this.Width = TmxHelper.GetAttributeAsInt(map, "width");
@@ -80,12 +83,6 @@ namespace Tiled2Unity
             catch (Exception e)
             {
                 TmxException.FromAttributeException(e, map);
-            }
-
-            // We only support orthogonal maps
-            if (this.Orientation != "orthogonal")
-            {
-                TmxException.ThrowFormat("Only orthogonal maps are supported. This map is set to \"{0}\"", this.Orientation);
             }
 
             // Collect our map properties

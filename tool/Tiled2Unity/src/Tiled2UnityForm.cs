@@ -374,6 +374,17 @@ namespace Tiled2Unity
             }
         }
 
+        private void supportTiledMapEditorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            SupportTiledForm form = new SupportTiledForm();
+            form.ShowDialog();
+        }
+
+        private void richTextBoxOutput_LinkClicked(object sender, LinkClickedEventArgs e)
+        {
+            System.Diagnostics.Process.Start(e.LinkText);
+        }
+
     }
 }
 

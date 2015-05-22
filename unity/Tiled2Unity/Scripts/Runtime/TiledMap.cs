@@ -15,24 +15,19 @@ namespace Tiled2Unity
         public int TileHeight = 0;
         public float ExportScale = 1.0f;
 
-        public float GetMapWidthInPixels()
-        {
-            return this.NumTilesWide * this.TileWidth;
-        }
-
-        public float GetMapHeightInPixels()
-        {
-            return this.NumTilesHigh * this.TileHeight;
-        }
+        // Note: Because maps can be isometric and staggered we simply can't multply tile width (or height) by number of tiles wide (or high) to get width (or height)
+        // We rely on the exporter to calculate the width and height of the map
+        public int MapWidthInPixels = 0;
+        public int MapHeightInPixels = 0;
 
         public float GetMapWidthInPixelsScaled()
         {
-            return GetMapWidthInPixels() * this.transform.lossyScale.x * this.ExportScale;
+            return this.MapWidthInPixels * this.transform.lossyScale.x * this.ExportScale;
         }
 
         public float GetMapHeightInPixelsScaled()
         {
-            return GetMapHeightInPixels() * this.transform.lossyScale.y * this.ExportScale;
+            return this.MapHeightInPixels * this.transform.lossyScale.y * this.ExportScale;
         }
 
 

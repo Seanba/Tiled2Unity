@@ -121,7 +121,11 @@ namespace Tiled2Unity
 
                 // Also, no shadows
                 mr.receiveShadows = false;
+#if UNITY_5_0
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+#else
+                mr.castShadows = false;
+#endif
             }
         }
 

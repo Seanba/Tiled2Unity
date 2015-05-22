@@ -17,6 +17,10 @@ namespace Tiled2Unity
         // Break the map into smaller pieces to feed to Clipper
         private static readonly int GroupBySize = 10;
 
+        // Note: Will need to work with this. We need Even Odd fill rules right now because winding order on polygons is not deterministic
+        private static PolyFillType SubjectFillRule = PolyFillType.pftNonZero;
+        private static PolyFillType ClipFillRule = PolyFillType.pftEvenOdd;
+
         // Need a method to transform points into our coordinate system (different between Windows and Unity)
         public delegate ClipperLib.IntPoint TransformPointFunc(float x, float y);
         public delegate void ProgressFunc(string progress);
@@ -97,7 +101,7 @@ namespace Tiled2Unity
 
                 // Get a solution for this group
                 ClipperLib.PolyTree solution = new ClipperLib.PolyTree();
-                groupClipper.Execute(ClipperLib.ClipType.ctUnion, solution);
+                groupClipper.Execute(ClipperLib.ClipType.ctUnion, solution, LayerClipper.SubjectFillRule, LayerClipper.ClipFillRule);
 
                 // Combine the solutions into the full clipper
                 fullClipper.AddPaths(Clipper.ClosedPathsFromPolyTree(solution), PolyType.ptSubject, true);
@@ -106,7 +110,7 @@ namespace Tiled2Unity
             progFunc(String.Format("Clipping '{0}' polygons: 100%", tmxLayer.UniqueName));
 
             ClipperLib.PolyTree fullSolution = new ClipperLib.PolyTree();
-            fullClipper.Execute(ClipperLib.ClipType.ctUnion, fullSolution);
+            fullClipper.Execute(ClipperLib.ClipType.ctUnion, fullSolution, LayerClipper.SubjectFillRule, LayerClipper.ClipFillRule);
 
             return fullSolution;
         }

@@ -85,5 +85,42 @@ namespace Tiled2Unity
             return GetAttributeAsColor(elem, attrName);
         }
 
+        public static T GetAttributeAsEnum<T>(XElement elem, string attrName)
+        {
+            string enumString = elem.Attribute(attrName).Value.Replace("-", "_");
+
+            T value = default(T);
+            try
+            {
+                value = (T)Enum.Parse(typeof(T), enumString, true);
+            }
+            catch
+            {
+                StringBuilder msg = new StringBuilder();
+                msg.AppendFormat("Could not convert '{0}' to enum of type '{1}'\n", enumString, typeof(T).ToString());
+                msg.AppendFormat("Choices are:\n");
+
+                foreach (T t in Enum.GetValues(typeof(T)))
+                {
+                    msg.AppendFormat("  {0}\n", t.ToString());
+                }
+                TmxException.ThrowFormat(msg.ToString());
+            }
+
+            return value;
+        }
+
+        public static T GetAttributeAsEnum<T>(XElement elem, string attrName, T defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsEnum<T>(elem, attrName);
+        }
+
+
+
     }
 }

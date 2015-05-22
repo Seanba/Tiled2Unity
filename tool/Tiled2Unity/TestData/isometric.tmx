@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.0" orientation="staggered" renderorder="right-down" width="8" height="22" tilewidth="64" tileheight="32" staggeraxis="y" staggerindex="odd" nextobjectid="26">
+ <tileset firstgid="1" name="iso-64x64-outside" tilewidth="64" tileheight="64">
+  <image source="iso-64x64-outside.png" width="640" height="1024"/>
+  <tile id="0">
+   <objectgroup draworder="index"/>
+  </tile>
+  <tile id="50">
+   <objectgroup draworder="index">
+    <object id="0" x="0" y="48">
+     <polygon points="0,0 16,-32 32,-32 48,-16 64,0 32,16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="51">
+   <objectgroup draworder="index">
+    <object id="0" x="0" y="48">
+     <polygon points="0,0 32,16 64,0 48,-32 32,-48"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="52">
+   <objectgroup draworder="index">
+    <object id="0" x="0" y="48">
+     <polygon points="0,0 0,-32 32,-48 48,-16 64,0 32,16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="53">
+   <objectgroup draworder="index">
+    <object id="0" x="64" y="48">
+     <polygon points="0,0 -32,16 -48,0 -48,-16 -16,-32 0,-32"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="54">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="55">
+   <properties>
+    <property name="unity:collisionOnly" value="true"/>
+   </properties>
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="56">
+   <objectgroup draworder="index">
+    <object id="0" x="48" y="48">
+     <polygon points="0,0 -16,16 -48,0 -48,-32 0,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="57">
+   <objectgroup draworder="index">
+    <object id="0" x="64" y="48">
+     <polygon points="0,0 -32,16 -64,0 -48,-16 -16,-32 0,-32"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="58">
+   <objectgroup draworder="index">
+    <object id="0" x="64" y="48">
+     <polygon points="0,0 -32,16 -64,0 -64,-32 -48,-32 -32,-32"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="59">
+   <objectgroup draworder="index">
+    <object id="0" x="64" y="48">
+     <polygon points="0,0 -32,16 -64,0 -32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="60">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="61">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="62">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="63">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="64">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="65">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -32,-48 0,-64 32,-48 32,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="70">
+   <objectgroup draworder="index">
+    <object id="0" x="32" y="64">
+     <polygon points="0,0 -32,-16 -16,-32 0,-32 16,-16"/>
+    </object>
+   </objectgroup>
+  </tile>
+  <tile id="84">
+   <objectgroup draworder="index"/>
+  </tile>
+  <tile id="102">
+   <objectgroup draworder="index"/>
+  </tile>
+  <tile id="111">
+   <objectgroup draworder="index"/>
+  </tile>
+  <tile id="114">
+   <objectgroup draworder="index"/>
+  </tile>
+  <tile id="115">
+   <objectgroup draworder="index"/>
+  </tile>
+ </tileset>
+ <layer name="background" width="8" height="22">
+  <data encoding="csv">
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1
+</data>
+ </layer>
+ <layer name="decal" width="8" height="22">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,5,0,0,0,
+0,0,92,5,23,0,0,0,
+0,0,0,92,90,23,0,0,
+0,0,24,97,89,11,0,0,
+0,0,0,84,85,87,11,0,
+0,0,22,82,98,3,18,0,
+0,0,0,22,82,92,21,0,
+0,0,0,22,4,92,0,0,
+0,0,0,0,22,21,95,0,
+0,0,0,0,2,93,0,0
+</data>
+ </layer>
+ <layer name="height1" width="8" height="22">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,55,0,0,0,0,0,
+0,0,55,56,0,0,0,0,
+0,55,56,56,0,0,0,0,
+0,55,56,56,55,0,0,0,
+55,55,56,56,55,0,0,0,
+0,55,56,55,55,56,0,0,
+0,55,61,52,53,51,0,0,
+0,0,56,0,0,0,71,0,
+0,0,67,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,115,0,0,0,0,0,0,
+0,112,115,0,0,0,0,0,
+0,112,116,0,0,0,0,0,
+0,0,112,0,0,0,0,0,
+0,0,0,0,0,0,0,0
+</data>
+ </layer>
+ <layer name="height2" width="8" height="22">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,55,0,0,0,0,0,
+0,0,55,55,0,0,0,0,
+0,55,63,55,0,0,0,0,
+0,0,65,64,0,0,0,0,
+0,0,66,55,56,0,0,0,
+0,0,65,0,55,0,0,0,
+0,55,66,0,0,0,0,0,
+0,0,52,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0
+</data>
+ </layer>
+ <layer name="height3" width="8" height="22">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,55,0,0,0,0,0,
+0,0,62,55,0,0,0,0,
+0,63,0,55,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0
+</data>
+ </layer>
+</map>

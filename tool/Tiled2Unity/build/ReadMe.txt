@@ -24,20 +24,18 @@ Note that polygons that are concave or contain holes *are* supported.
 Limitations
 -------------------------------------------------------------------------------
 
-Tiled2Unity does not support isometric maps. This is a purposeful limitation 
-based on the way collider objects are skewed in Tiled. It is recommended that 
-you use orthographic maps anyway and leave it to your artwork to convey a side-
-scroller, or top-down, or isometric view. 
+Tiled Objects that are made of an ellipse must be circular (width and height
+equivalent) as Unity does not support elliptical colliders.
 
+As of build 0.9.10.0 Tiled2Unity supports isometric and hexagonal maps,
+however, Circle Tiled Objects are not supported in isometric map mode. They are
+supported in staggered isometric and hexagonal maps.
 
 Using Tiled2Unity
 -------------------------------------------------------------------------------
 
 1. Get Tiled Map Editor
-	You will need a version of Tiled that has the Tiled Collision Editor 
-	feature. Currently, this is in beta and is is available here:
-	http://files.mapeditor.org/daily/
-	(Tiled2Unity was tested with the 2014-05-23 build of Tiled)
+	http://www.mapeditor.org/
 	
 2. Import Tiled2Unity.unitypackage to your Unity project
 	In Tiled2Unity, select "Help -> Import Unity Package to Project".

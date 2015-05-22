@@ -66,7 +66,7 @@ namespace Tiled2Unity
 
         private RectangleF CalculateBoundary()
         {
-            RectangleF rcMap = new RectangleF(0, 0, tmxMap.Width * tmxMap.TileWidth, tmxMap.Height * tmxMap.TileHeight);
+            RectangleF rcMap = new RectangleF(Point.Empty, this.tmxMap.MapSizeInPixels());
 
             // Take boundaries from object groups
             var objBounds = from g in this.tmxMap.ObjectGroups
@@ -86,9 +86,8 @@ namespace Tiled2Unity
                              let tile = this.tmxMap.Tiles[tileId]
                              from o in tile.ObjectGroup.Objects
                              let bound = o.GetWorldBounds()
-                             let xpos = x * tmxMap.TileWidth
-                             let ypos = y * tmxMap.TileHeight
-                             select new RectangleF(bound.X + xpos, bound.Y + ypos, bound.Width, bound.Height);
+                             let point = TmxMath.TileCornerInScreenCoordinates(this.tmxMap, x, y)
+                             select new RectangleF(bound.X + point.X, bound.Y + point.Y, bound.Width, bound.Height);
 
             var allBounds = objBounds.Concat(tileBounds);
             var union = allBounds.Aggregate(rcMap, RectangleF.Union);
@@ -128,7 +127,8 @@ namespace Tiled2Unity
                 g.DrawRectangle(pen, 1, 1, bounds.Width-1, bounds.Height-1);
 
                 g.TranslateTransform(-bounds.X, -bounds.Y);
-                DrawGrid(g, bounds);
+                DrawBackground(g);
+                DrawGrid(g);
                 DrawTiles(g);
                 DrawColliders(g);
                 DrawObjectColliders(g);
@@ -137,30 +137,244 @@ namespace Tiled2Unity
             return bitmap;
         }
 
-        private void DrawGrid(Graphics g, RectangleF bounds)
+        private void DrawBackground(Graphics g)
         {
             // Draw the background for the map
             // A full white background is preferred because of the colliders we draw on the top of the layers
-            g.FillRectangle(Brushes.White, 0, 0, this.tmxMap.Width * this.tmxMap.TileWidth, this.tmxMap.Height * this.tmxMap.TileHeight);
+            Size size = this.tmxMap.MapSizeInPixels();
+            Rectangle rect = new Rectangle(Point.Empty, size);
+            g.FillRectangle(Brushes.White, rect);
+        }
 
-            // Inflate for edge cases. Worst case we try to draw some extra grid points.
-            float twidth = this.tmxMap.TileWidth;
-            float theight = this.tmxMap.TileHeight;
-            bounds.Inflate(twidth, theight);
-
-            float xmin = (float)(Math.Round(bounds.Left / twidth) * twidth);
-            float ymin = (float)(Math.Round(bounds.Top / theight) * theight);
-
-            for (float x =xmin; x <= bounds.Right; x += twidth)
+        private void DrawGrid(Graphics g)
+        {
+            if (this.tmxMap.Orientation == TmxMap.MapOrientation.Hexagonal)
             {
-                for (float y = ymin; y <= bounds.Bottom; y += theight)
-                {
-                    RectangleF rc = new RectangleF(x, y, Tiled2UnityViewer.GridSize, Tiled2UnityViewer.GridSize);
-                    rc.Offset(-Tiled2UnityViewer.GridSize * 0.5f, -Tiled2UnityViewer.GridSize * 0.5f);
+                DrawGridHex(g);
+            }
+            else
+            {
+                DrawGridQuad(g);
+            }
+        }
 
-                    g.FillRectangle(Brushes.White, rc);
-                    g.DrawRectangle(Pens.Black, rc.X, rc.Y, rc.Width, rc.Height);
+        private void DrawGridQuad(Graphics g)
+        {
+            HashSet<Point> points = new HashSet<Point>();
+            for (int x = 0; x < this.tmxMap.Width; ++x)
+            {
+                for (int y = 0; y < this.tmxMap.Height; ++y)
+                {
+                    // Add the "top-left" corner of a tile
+                    points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y));
+
+                    // Add all other corners of the tile to our list of grid points
+                    // This is complicated by different map types (espcially staggered isometric)
+                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Orthogonal || this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                    {
+                        points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x + 1, y));
+                        points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x + 1, y + 1));
+                        points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 1));
+                    }
+                    else if (this.tmxMap.Orientation == TmxMap.MapOrientation.Staggered)
+                    {
+                        bool sx = TmxMath.DoStaggerX(this.tmxMap, x);
+                        bool sy = TmxMath.DoStaggerY(this.tmxMap, y);
+
+                        if (sx)
+                        {
+                            // top-right, bottom-right, and bottom-left
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x + 1, y + 1));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x - 1, y + 1));
+                        }
+                        else if (sy)
+                        {
+                            // top-right, bottom-right, and bottom-left
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x + 1, y + 1));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 2));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 1));
+                        }
+                        else if (this.tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X)
+                        {
+                            // top-right, bottom-right, and bottom-left
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x + 1, y));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x - 1, y));
+                        }
+                        else if (this.tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.Y)
+                        {
+                            // top-right, bottom-right, and bottom-left
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y + 2));
+                            points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x - 1, y + 1));
+                        }
+                    }
                 }
+            }
+
+            foreach (var p in points)
+            {
+                RectangleF rc = new RectangleF(p.X, p.Y, Tiled2UnityViewer.GridSize, Tiled2UnityViewer.GridSize);
+                rc.Offset(-Tiled2UnityViewer.GridSize * 0.5f, -Tiled2UnityViewer.GridSize * 0.5f);
+
+                g.FillRectangle(Brushes.White, rc);
+                g.DrawRectangle(Pens.Black, rc.X, rc.Y, rc.Width, rc.Height);
+            }
+        }
+
+        private void DrawGridHex(Graphics g)
+        {
+            // Our collection of points to render
+            HashSet<Point> points = new HashSet<Point>();
+
+            // Note: borrowed heavily from Tiled source (HexagonalRenderer::drawGrid)
+            int tileWidth = this.tmxMap.TileWidth & ~1;
+            int tileHeight = this.tmxMap.TileHeight & ~1;
+
+            int sideLengthX = tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X ? tmxMap.HexSideLength : 0;
+            int sideLengthY = tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.Y ? tmxMap.HexSideLength : 0;
+
+            int sideOffsetX = (tmxMap.TileWidth - sideLengthX) / 2;
+            int sideOffsetY = (tmxMap.TileHeight - sideLengthY) / 2;
+
+            int columnWidth = sideOffsetX + sideLengthX;
+            int rowHeight = sideOffsetY + sideLengthY;
+
+            bool staggerX = this.tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X;
+
+            // Determine the tile and pixel coordinates to start at
+            Point startTile = new Point(0, 0);
+            Point startPos = TmxMath.TileCornerInScreenCoordinates(this.tmxMap, startTile.X, startTile.Y);
+
+            Point[] oct = new Point[8]
+            {
+                new Point(0,                            tileHeight - sideOffsetY),
+                new Point(0,                            sideOffsetY),
+                new Point(sideOffsetX,                  0),
+                new Point(tileWidth - sideOffsetX,      0),
+                new Point(tileWidth,                    sideOffsetY),
+                new Point(tileWidth,                    tileHeight - sideOffsetY),
+                new Point(tileWidth - sideOffsetX,      tileHeight),
+                new Point(sideOffsetX,                  tileHeight)
+            };
+
+            if (staggerX)
+            {
+                // Odd row shifting is applied in the rendering loop, so un-apply it here
+                if (TmxMath.DoStaggerX(this.tmxMap, startTile.X))
+                {
+                    startPos.Y -= rowHeight;
+                }
+
+                for (; startTile.X < this.tmxMap.Width; startTile.X++)
+                {
+                    Point rowTile = startTile;
+                    Point rowPos = startPos;
+
+                    if (TmxMath.DoStaggerX(this.tmxMap, startTile.X))
+                    {
+                        rowPos.Y += rowHeight;
+                    }
+
+                    for (; rowTile.Y < this.tmxMap.Height; rowTile.Y++)
+                    {
+                        points.Add(TmxMath.AddPoints(rowPos, oct[1]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[2]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[3]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[4]));
+
+                        bool isStaggered = TmxMath.DoStaggerX(tmxMap, startTile.X);
+                        bool lastRow = rowTile.Y == tmxMap.Height - 1;
+                        bool lastColumn = rowTile.X == tmxMap.Width - 1;
+                        bool bottomLeft = rowTile.X == 0 || (lastRow && isStaggered);
+                        bool bottomRight = lastColumn || (lastRow && isStaggered);
+
+                        if (bottomRight)
+                        {
+                            points.Add(TmxMath.AddPoints(rowPos, oct[5]));
+                            points.Add(TmxMath.AddPoints(rowPos, oct[6]));
+                        }
+                        if (lastRow)
+                        {
+                            points.Add(TmxMath.AddPoints(rowPos, oct[6]));
+                            points.Add(TmxMath.AddPoints(rowPos, oct[7]));
+                        }
+                        if (bottomLeft)
+                        {
+                            points.Add(TmxMath.AddPoints(rowPos, oct[7]));
+                            points.Add(TmxMath.AddPoints(rowPos, oct[0]));
+                        }
+
+                        rowPos.Y += tileHeight + sideLengthY;
+                    }
+
+                    startPos.X += columnWidth;
+                }
+            } 
+            else
+            {
+                // Odd row shifting is applied in the rendering loop, so un-apply it here
+                if (TmxMath.DoStaggerY(this.tmxMap, startTile.Y))
+                {
+                    startPos.X -= columnWidth;
+                }
+
+                for (; startTile.Y < tmxMap.Height; startTile.Y++)
+                {
+                    Point rowTile = startTile;
+                    Point rowPos = startPos;
+
+                    if (TmxMath.DoStaggerY(this.tmxMap, startTile.Y))
+                    {
+                        rowPos.X += columnWidth;
+                    }
+
+                    for (; rowTile.X < this.tmxMap.Width; rowTile.X++)
+                    {
+                        points.Add(TmxMath.AddPoints(rowPos, oct[0]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[1]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[2]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[3]));
+                        points.Add(TmxMath.AddPoints(rowPos, oct[4]));
+
+
+                        bool isStaggered = TmxMath.DoStaggerY(this.tmxMap, startTile.Y);
+                        bool lastRow = rowTile.Y == this.tmxMap.Height - 1;
+                        bool lastColumn = rowTile.Y == this.tmxMap.Width - 1;
+                        bool bottomLeft = lastRow || (rowTile.X == 0 && !isStaggered);
+                        bool bottomRight = lastRow || (lastColumn && isStaggered);
+
+                        if (lastColumn)
+                        {
+                            points.Add(TmxMath.AddPoints(rowPos, oct[4]));
+                            points.Add(TmxMath.AddPoints(rowPos, oct[5]));
+                        }
+                        if (bottomRight)
+                        {
+                            points.Add(TmxMath.AddPoints(rowPos, oct[5]));
+                            points.Add(TmxMath.AddPoints(rowPos, oct[6]));
+                        }
+                        if (bottomLeft)
+                        {
+                            points.Add(TmxMath.AddPoints(rowPos, oct[7]));
+                            points.Add(TmxMath.AddPoints(rowPos, oct[0]));
+                        }
+
+                        rowPos.X += tileWidth + sideLengthX;
+                    }
+
+                    startPos.Y += rowHeight;
+                }
+            }
+
+            foreach (var p in points)
+            {
+                RectangleF rc = new RectangleF(p.X, p.Y, Tiled2UnityViewer.GridSize, Tiled2UnityViewer.GridSize);
+                rc.Offset(-Tiled2UnityViewer.GridSize * 0.5f, -Tiled2UnityViewer.GridSize * 0.5f);
+
+                g.FillRectangle(Brushes.White, rc);
+                g.DrawRectangle(Pens.Black, rc.X, rc.Y, rc.Width, rc.Height);
             }
         }
 
@@ -234,7 +448,7 @@ namespace Tiled2Unity
                             select new
                             {
                                 Tile = frame,
-                                Position = new Point(x * this.tmxMap.TileWidth, y * this.tmxMap.TileHeight),
+                                Position = TmxMath.TileCornerInScreenCoordinates(this.tmxMap, x, y),
                                 Bitmap = tileSetBitmaps[frame.TmxImage.Path],
                                 IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
                                 IsFlippedHorizontally = TmxMath.IsTileFlippedHorizontally(rawTileId),
@@ -356,7 +570,9 @@ namespace Tiled2Unity
                 pen.Alignment = PenAlignment.Inset;
 
                 GraphicsState state = g.Save();
-                g.TranslateTransform(tmxObject.Position.X, tmxObject.Position.Y);
+
+                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
+                g.TranslateTransform(xfPosition.X, xfPosition.Y);
                 g.RotateTransform(tmxObject.Rotation);
 
                 if (tmxObject.GetType() == typeof(TmxObjectPolygon))
@@ -365,8 +581,16 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
-                    // Rectangles are polygons
-                    DrawPolygon(g, pen, brush, tmxObject as TmxObjectPolygon);
+                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                    {
+                        TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromIsometricRectangle(this.tmxMap, tmxObject as TmxObjectRectangle);
+                        DrawPolygon(g, pen, brush, tmxIsometricRectangle);
+                    }
+                    else
+                    {
+                        // Rectangles are polygons
+                        DrawPolygon(g, pen, brush, tmxObject as TmxObjectPolygon);
+                    }
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
@@ -405,33 +629,42 @@ namespace Tiled2Unity
 
         private void DrawPolygon(Graphics g, Pen pen, Brush brush, TmxObjectPolygon tmxPolygon)
         {
-            var points = tmxPolygon.Points.ToArray();
+            var points = TmxMath.GetPointsInMapSpace(this.tmxMap, tmxPolygon).ToArray();
             g.FillPolygon(brush, points);
             g.DrawPolygon(pen, points);
         }
 
-        private void DrawPolyline(Graphics g, Pen pen, TmxObjectPolyline tmxPolyine)
+        private void DrawPolyline(Graphics g, Pen pen, TmxObjectPolyline tmxPolyline)
         {
-            var points = tmxPolyine.Points.ToArray();
+            var points = TmxMath.GetPointsInMapSpace(this.tmxMap, tmxPolyline).ToArray();
             g.DrawLines(pen, points);
         }
 
         private void DrawEllipse(Graphics g, Pen pen, Brush brush, TmxObjectEllipse tmxEllipse)
         {
             RectangleF rc = new RectangleF(new PointF(0, 0), tmxEllipse.Size);
-            if (tmxEllipse.IsCircle())
+            if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
             {
-                g.FillEllipse(brush, rc);
-                g.DrawEllipse(pen, rc);
+                // Circles and ellipses not supported in Insometric mode
+                g.FillEllipse(Brushes.Red, rc);
+                g.DrawEllipse(Pens.White, rc);
+
+                string message = String.Format(" Not supported (isometric): {0}", tmxEllipse.GetNonEmptyName());
+                DrawString(g, message, rc.X + rc.Width * 0.5f, rc.Y + rc.Height * 0.5f);
             }
-            else
+            else if (!tmxEllipse.IsCircle())
             {
                 // We don't really support ellipses, especially as colliders
                 g.FillEllipse(Brushes.Red, rc);
                 g.DrawEllipse(Pens.White, rc);
 
-                string message = String.Format(" Not a circle: {0}", tmxEllipse.GetNonEmptyName());
+                string message = String.Format(" Not supported (ellipse): {0}", tmxEllipse.GetNonEmptyName());
                 DrawString(g, message, rc.X + rc.Width * 0.5f, rc.Y + rc.Height * 0.5f);
+            }
+            else
+            {
+                g.FillEllipse(brush, rc);
+                g.DrawEllipse(pen, rc);
             }
         }
 

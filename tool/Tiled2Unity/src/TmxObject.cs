@@ -29,6 +29,17 @@ namespace Tiled2Unity
             return String.Format("{0} {1} pos={2}, size={3} rot = {4}", GetType().Name, GetNonEmptyName(), this.Position, this.Size, this.Rotation);
         }
 
+        static protected void CopyBaseProperties(TmxObject from, TmxObject to)
+        {
+            to.Name = from.Name;
+            to.Type = from.Type;
+            to.Visible = from.Visible;
+            to.Position = from.Position;
+            to.Size = from.Size;
+            to.Rotation = from.Rotation;
+            to.Properties = from.Properties;
+        }
+
         public abstract RectangleF GetWorldBounds();
         protected abstract void InternalFromXml(XElement xml, TmxMap tmxMap);
         protected abstract string InternalGetDefaultName();

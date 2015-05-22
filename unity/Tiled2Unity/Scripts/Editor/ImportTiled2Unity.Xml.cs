@@ -15,7 +15,7 @@ namespace Tiled2Unity
     // Concentrates on the Xml file being imported
     partial class ImportTiled2Unity
     {
-        public static readonly string ThisVersion = "0.9.9.1";
+        public static readonly string ThisVersion = "0.9.10.0";
 
         public void XmlImported(string xmlPath)
         {

@@ -122,6 +122,11 @@ namespace Tiled2Unity
             return new Vector3D(pt.X, pt.Y == 0 ? 0 : -pt.Y, 0.0f);
         }
 
+        public static Vector3D PointFToUnityVector(float x, float y)
+        {
+            return PointFToUnityVector(new PointF(x, y));
+        }
+
         public static Vector3D PointFToUnityVector(PointF pt)
         {
             // Unity's coordinate sytem has y-up positive, y-down negative
@@ -141,7 +146,7 @@ namespace Tiled2Unity
             PointF scaled = pt;
             scaled.X *= Program.Scale;
             scaled.Y *= Program.Scale;
-            float scaled_z = pos_z *= Program.Scale;
+            float scaled_z = pos_z * Program.Vertex_ZScale;
 
             // Watch for negative zero, ffs
             return new Vector3D(scaled.X == 0 ? 0 : -scaled.X, scaled.Y == 0 ? 0 : -scaled.Y, scaled_z);

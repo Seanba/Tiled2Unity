@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.0" orientation="hexagonal" renderorder="right-down" width="8" height="12" tilewidth="60" tileheight="52" hexsidelength="26" staggeraxis="y" staggerindex="odd" nextobjectid="1">
+ <tileset firstgid="1" name="hex-pointy-60x52" tilewidth="60" tileheight="80">
+  <image source="hex-pointy-60x52.png" width="240" height="240"/>
+  <tile id="6">
+   <objectgroup draworder="index">
+    <object id="0" x="0" y="70">
+     <polygon points="0,0 0,-30 30,-40 60,-30 60,0 30,10"/>
+    </object>
+   </objectgroup>
+  </tile>
+ </tileset>
+ <layer name="layer" width="8" height="12">
+  <data encoding="csv">
+7,7,7,7,7,7,7,7,
+7,7,7,5,5,7,7,7,
+7,7,5,5,5,5,5,5,
+7,5,5,10,10,5,5,5,
+7,5,5,10,10,10,5,5,
+7,5,10,10,10,10,5,5,
+7,7,12,10,10,10,12,5,
+7,12,12,10,10,12,5,5,
+7,10,10,10,10,12,5,7,
+10,10,10,10,5,5,7,7,
+5,5,5,5,7,5,5,7,
+5,5,5,7,7,7,7,7
+</data>
+ </layer>
+</map>

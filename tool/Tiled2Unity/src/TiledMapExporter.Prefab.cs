@@ -57,6 +57,8 @@ namespace Tiled2Unity
             //
             //  </Prefab>
 
+            Size sizeInPixels = this.tmxMap.MapSizeInPixels();
+
             XElement prefab = new XElement("Prefab");
             prefab.SetAttributeValue("name", this.tmxMap.Name);
             prefab.SetAttributeValue("numTilesWide", this.tmxMap.Width);
@@ -64,6 +66,8 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
             prefab.SetAttributeValue("tileHeight", this.tmxMap.TileHeight);
             prefab.SetAttributeValue("exportScale", Program.Scale);
+            prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
+            prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
             AssignTiledProperties(this.tmxMap, prefab);
 
@@ -140,7 +144,9 @@ namespace Tiled2Unity
                 // All the objects/colliders in our object group need to be separate game objects because they can have unique tags/layers
                 XElement xmlObject = new XElement("GameObject", new XAttribute("name", tmxObject.GetNonEmptyName()));
 
-                Vector3D pos = PointFToUnityVector(tmxObject.Position);
+                // Transform object locaction into map space (needed for isometric and hex modes) 
+                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
+                Vector3D pos = PointFToUnityVector(xfPosition);
                 xmlObject.SetAttributeValue("x", pos.X);
                 xmlObject.SetAttributeValue("y", pos.Y);
                 xmlObject.SetAttributeValue("rotation", tmxObject.Rotation);
@@ -152,7 +158,15 @@ namespace Tiled2Unity
 
                 if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
-                    objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
+                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                    {
+                        TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromIsometricRectangle(this.tmxMap, tmxObject as TmxObjectRectangle);
+                        objElement = CreatePolygonColliderElement(tmxIsometricRectangle);
+                    }
+                    else
+                    {
+                        objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
+                    }
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
@@ -215,7 +229,7 @@ namespace Tiled2Unity
                         XElement xmlAnim = new XElement("TileAnimator");
                         foreach (var frame in anim.Frames)
                         {
-                            xmlAnim.Add(new XElement("Frame", new XAttribute("vertex_z", frame.UniqueFrameId), new XAttribute("duration", frame.DurationMs)));
+                            xmlAnim.Add(new XElement("Frame", new XAttribute("vertex_z", frame.UniqueFrameId * Program.Vertex_ZScale), new XAttribute("duration", frame.DurationMs)));
                         }
                         xmlMesh.Add(xmlAnim);
                     }
@@ -338,8 +352,12 @@ namespace Tiled2Unity
 
         private XElement CreateCircleColliderElement(TmxObjectEllipse tmxEllipse, string objGroupName)
         {
-
-            if (!tmxEllipse.IsCircle())
+            if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+            {
+                Program.WriteError("Collision ellipse in Object Layer '{0}' is not supported in Isometric maps: {1}", objGroupName, tmxEllipse);
+                return null;
+            }
+            else if (!tmxEllipse.IsCircle())
             {
                 Program.WriteError("Collision ellipse in Object Layer '{0}' is not a circle: {1}", objGroupName, tmxEllipse);
                 return null;
@@ -356,9 +374,8 @@ namespace Tiled2Unity
 
         private XElement CreatePolygonColliderElement(TmxObjectPolygon tmxPolygon)
         {
-            // The points need to be transformed into unity space
-            var points = from pt in tmxPolygon.Points
-                         select PointFToUnityVector(pt);
+            var points = from pt in TmxMath.GetPointsInMapSpace(this.tmxMap, tmxPolygon)
+                       select PointFToUnityVector(pt);
 
             XElement polygonCollider =
                 new XElement("PolygonCollider2D",
@@ -370,7 +387,7 @@ namespace Tiled2Unity
         private XElement CreateEdgeColliderElement(TmxObjectPolyline tmxPolyine)
         {
             // The points need to be transformed into unity space
-            var points = from pt in tmxPolyine.Points
+            var points = from pt in TmxMath.GetPointsInMapSpace(this.tmxMap, tmxPolyine)
                          select PointFToUnityVector(pt);
 
             XElement edgeCollider =
@@ -391,7 +408,9 @@ namespace Tiled2Unity
                 // All the objects/colliders in our object group need to be separate game objects because they can have unique tags/layers
                 XElement xmlObject = new XElement("GameObject", new XAttribute("name", tmxObject.GetNonEmptyName()));
 
-                Vector3D pos = PointFToUnityVector(tmxObject.Position);
+                // Transform object locaction into map space (needed for isometric and hex modes) 
+                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
+                Vector3D pos = PointFToUnityVector(xfPosition);
                 xmlObject.SetAttributeValue("x", pos.X);
                 xmlObject.SetAttributeValue("y", pos.Y);
                 xmlObject.SetAttributeValue("rotation", tmxObject.Rotation);
@@ -400,6 +419,7 @@ namespace Tiled2Unity
 
                 if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
+                    // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
                     objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectEllipse))

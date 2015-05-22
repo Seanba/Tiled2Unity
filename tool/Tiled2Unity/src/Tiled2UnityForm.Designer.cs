@@ -43,6 +43,9 @@
             this.helpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.addUnityPackageToProjectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showHelpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
+            this.supportTiledMapEditorToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.aboutTiled2UnityToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.labelScale = new System.Windows.Forms.Label();
             this.textBoxScale = new System.Windows.Forms.TextBox();
@@ -65,6 +68,7 @@
             this.richTextBoxOutput.TabIndex = 0;
             this.richTextBoxOutput.Text = "";
             this.richTextBoxOutput.WordWrap = false;
+            this.richTextBoxOutput.LinkClicked += new System.Windows.Forms.LinkClickedEventHandler(this.richTextBoxOutput_LinkClicked);
             // 
             // labelExport
             // 
@@ -169,6 +173,9 @@
             this.helpToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.addUnityPackageToProjectToolStripMenuItem,
             this.showHelpToolStripMenuItem,
+            this.toolStripSeparator1,
+            this.supportTiledMapEditorToolStripMenuItem,
+            this.toolStripSeparator2,
             this.aboutTiled2UnityToolStripMenuItem});
             this.helpToolStripMenuItem.Name = "helpToolStripMenuItem";
             this.helpToolStripMenuItem.Size = new System.Drawing.Size(44, 20);
@@ -187,6 +194,23 @@
             this.showHelpToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
             this.showHelpToolStripMenuItem.Text = "Show Command &Help";
             this.showHelpToolStripMenuItem.Click += new System.EventHandler(this.showHelpToolStripMenuItem_Click);
+            // 
+            // toolStripSeparator1
+            // 
+            this.toolStripSeparator1.Name = "toolStripSeparator1";
+            this.toolStripSeparator1.Size = new System.Drawing.Size(239, 6);
+            // 
+            // supportTiledMapEditorToolStripMenuItem
+            // 
+            this.supportTiledMapEditorToolStripMenuItem.Name = "supportTiledMapEditorToolStripMenuItem";
+            this.supportTiledMapEditorToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
+            this.supportTiledMapEditorToolStripMenuItem.Text = "&Support Tiled On Patreon ...";
+            this.supportTiledMapEditorToolStripMenuItem.Click += new System.EventHandler(this.supportTiledMapEditorToolStripMenuItem_Click);
+            // 
+            // toolStripSeparator2
+            // 
+            this.toolStripSeparator2.Name = "toolStripSeparator2";
+            this.toolStripSeparator2.Size = new System.Drawing.Size(239, 6);
             // 
             // aboutTiled2UnityToolStripMenuItem
             // 
@@ -278,6 +302,9 @@
         private System.Windows.Forms.ToolStripMenuItem addUnityPackageToProjectToolStripMenuItem;
         private System.Windows.Forms.Label labelScale;
         private System.Windows.Forms.TextBox textBoxScale;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
+        private System.Windows.Forms.ToolStripMenuItem supportTiledMapEditorToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
     }
 }
 

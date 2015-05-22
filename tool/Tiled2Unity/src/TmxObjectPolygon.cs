@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Text;
@@ -43,6 +44,24 @@ namespace Tiled2Unity
                          select new PointF(x, y);
 
             this.Points = points.ToList();
+
+            // Test if polygons are counter clocksise
+            // From: http://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order
+            float sum = 0.0f;
+            for (int i = 1; i < this.Points.Count(); i++)
+            {
+                var p1 = this.Points[i - 1];
+                var p2 = this.Points[i];
+
+                float v = (p2.X - p1.X) * -(p2.Y + p1.Y);
+                sum += v;
+            }
+
+            if (sum < 0)
+            {
+                // Winding of polygons is counter-clockwise. Reverse the list.
+                this.Points.Reverse();
+            }
         }
 
         protected override string InternalGetDefaultName()
@@ -76,6 +95,18 @@ namespace Tiled2Unity
         public bool ArePointsClosed()
         {
             return true;
+        }
+
+        static public TmxObjectPolygon FromIsometricRectangle(TmxMap tmxMap, TmxObjectRectangle tmxRectangle)
+        {
+            Debug.Assert(tmxMap.Orientation == TmxMap.MapOrientation.Isometric);
+
+            TmxObjectPolygon tmxPolygon = new TmxObjectPolygon();
+            TmxObject.CopyBaseProperties(tmxRectangle, tmxPolygon);
+
+            tmxPolygon.Points = tmxRectangle.Points;
+
+            return tmxPolygon;
         }
 
     }

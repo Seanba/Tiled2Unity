@@ -68,7 +68,12 @@ namespace Tiled2Unity
 
         public bool GetLayerPreviewing(string layerName)
         {
-            return this.Preferences.FirstOrDefault(p => p.Name == layerName).Previewing;
+            LayerPreference layerPrefernces = this.Preferences.Find(p => p.Name == layerName);
+            if (layerPrefernces != null)
+            {
+                return layerPrefernces.Previewing;
+            }
+            return false;
         }
 
         private class LayerPreference

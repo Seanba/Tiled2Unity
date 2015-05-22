@@ -1,7 +1,9 @@
-Example tileset artwork is appropriated to Blarget2 (http://opengameart.org/content/minimalist-pixel-tileset) and is distributed with the Creative Commons 3.0 license.
+Orthographic example tileset artwork is appropriated to Blarget2 (http://opengameart.org/content/minimalist-pixel-tileset) and is distributed with the Creative Commons 3.0 license.
+Isometric example tileset artwork is appropriated to Yar (http://opengameart.org/content/isometric-64x64-outside-tileset) and is distributed with the Creative Commons 3.0 license.
+Hexagonal example tileset artwork is appropriated to Steffan (http://tilemapkit.com/2015/05/create-hexagonal-tilemaps-in-tiled/)
 
 http://creativecommons.org/licenses/by/3.0/
 
-For Unity2Tiled, this artwork was expanded through building Tiled Map Editor files (TMX) containing the artwork.
+For Unity2Tiled examples, this artwork was expanded through building Tiled Map Editor files (TMX) containing the artwork.
 
 

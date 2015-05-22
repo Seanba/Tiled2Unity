@@ -94,6 +94,12 @@
     <Compile Include="PreviewPreferencesForm.Designer.cs">
       <DependentUpon>PreviewPreferencesForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="SupportTiledForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SupportTiledForm.Designer.cs">
+      <DependentUpon>SupportTiledForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="ThirdParty\Algorithmia\MultiValueDictionary.cs" />
     <Compile Include="ThirdParty\Clipper\clipper.cs" />
     <Compile Include="ThirdParty\NDesk\Options.cs" />
@@ -163,6 +169,9 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
+    <EmbeddedResource Include="SupportTiledForm.resx">
+      <DependentUpon>SupportTiledForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Tiled2UnityAbout.resx">
       <DependentUpon>Tiled2UnityAbout.cs</DependentUpon>
     </EmbeddedResource>
@@ -183,6 +192,7 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
+    <EmbeddedResource Include="Resources\TiledOnPatreon.rtf" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.0,Profile=Client">
