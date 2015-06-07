@@ -32,7 +32,7 @@
             this.buttonOkay = new System.Windows.Forms.Button();
             this.pictureBoxMegaDad = new System.Windows.Forms.PictureBox();
             this.labelVersion = new System.Windows.Forms.Label();
-            this.richTextBoxAbout = new Tiled2Unity.RichText50W();
+            this.richTextBoxAbout = new System.Windows.Forms.RichTextBox();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBoxMegaDad)).BeginInit();
             this.SuspendLayout();
             // 
@@ -111,7 +111,7 @@
 
         private System.Windows.Forms.Button buttonOkay;
         private System.Windows.Forms.PictureBox pictureBoxMegaDad;
-        private RichText50W richTextBoxAbout;
+        private System.Windows.Forms.RichTextBox richTextBoxAbout;
         private System.Windows.Forms.Label labelVersion;
     }
 }

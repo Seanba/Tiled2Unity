@@ -18,8 +18,7 @@ namespace Tiled2Unity
         // We need to call this while the renderers on the model is having its material assigned to it
         public Material FixMaterialForMeshRenderer(string objName, Renderer renderer)
         {
-            string xmlPath = ImportUtils.GetXmlPathFromName(objName);
-
+            string xmlPath = GetXmlImportAssetPath(objName);
             XDocument xml = XDocument.Load(xmlPath);
 
             // The mesh to match
@@ -50,7 +49,7 @@ namespace Tiled2Unity
             }
 
             string materialName = match.Attribute("material").Value + ".mat";
-            string materialPath = ImportUtils.GetMaterialPath(materialName);
+            string materialPath = GetMaterialAssetPath(materialName);
 
             // Assign the material
             Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(Material)) as Material;

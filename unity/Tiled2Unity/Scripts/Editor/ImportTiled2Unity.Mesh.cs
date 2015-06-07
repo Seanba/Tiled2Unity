@@ -17,7 +17,7 @@ namespace Tiled2Unity
         // By the time this is called, our assets should be ready to create the map prefab
         public void MeshImported(string objPath)
         {
-            string xmlPath = ImportUtils.GetXmlPathFromFile(objPath);
+            string xmlPath = GetXmlImportAssetPath(objPath);
             XDocument doc = XDocument.Load(xmlPath);
             foreach (var xmlPrefab in doc.Root.Elements("Prefab"))
             {
@@ -49,7 +49,8 @@ namespace Tiled2Unity
             tempPrefab.transform.localScale = new Vector3(prefabScale, prefabScale, prefabScale);
 
             // Part 4: Save the prefab, keeping references intact.
-            string prefabPath = ImportUtils.GetPrefabPathFromName(prefabName);
+            bool isResource = ImportUtils.GetAttributeAsBoolean(xmlPrefab, "resource", false);
+            string prefabPath = GetPrefabAssetPath(prefabName, isResource);
             UnityEngine.Object finalPrefab = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(GameObject));
 
             if (finalPrefab == null)

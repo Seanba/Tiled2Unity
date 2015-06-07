@@ -88,9 +88,9 @@
             this.buttonFolderBrowser.Enabled = false;
             this.buttonFolderBrowser.Location = new System.Drawing.Point(89, 444);
             this.buttonFolderBrowser.Name = "buttonFolderBrowser";
-            this.buttonFolderBrowser.Size = new System.Drawing.Size(162, 23);
+            this.buttonFolderBrowser.Size = new System.Drawing.Size(109, 23);
             this.buttonFolderBrowser.TabIndex = 3;
-            this.buttonFolderBrowser.Text = "Choose Export Folder ...";
+            this.buttonFolderBrowser.Text = "Export To ...";
             this.buttonFolderBrowser.UseVisualStyleBackColor = true;
             this.buttonFolderBrowser.Click += new System.EventHandler(this.buttonFolderBrowser_Click);
             // 
@@ -110,11 +110,11 @@
             // 
             this.buttonViewer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonViewer.Enabled = false;
-            this.buttonViewer.Location = new System.Drawing.Point(544, 444);
+            this.buttonViewer.Location = new System.Drawing.Point(575, 444);
             this.buttonViewer.Name = "buttonViewer";
-            this.buttonViewer.Size = new System.Drawing.Size(151, 23);
+            this.buttonViewer.Size = new System.Drawing.Size(120, 23);
             this.buttonViewer.TabIndex = 4;
-            this.buttonViewer.Text = "Preview Exported Map";
+            this.buttonViewer.Text = "Preview Map";
             this.buttonViewer.UseVisualStyleBackColor = true;
             this.buttonViewer.Click += new System.EventHandler(this.buttonViewer_Click);
             // 
@@ -237,7 +237,7 @@
             this.textBoxScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.textBoxScale.Location = new System.Drawing.Point(90, 483);
             this.textBoxScale.Name = "textBoxScale";
-            this.textBoxScale.Size = new System.Drawing.Size(161, 20);
+            this.textBoxScale.Size = new System.Drawing.Size(108, 20);
             this.textBoxScale.TabIndex = 6;
             this.textBoxScale.Text = "1";
             this.textBoxScale.Validating += new System.ComponentModel.CancelEventHandler(this.textBoxScale_Validating);

@@ -39,16 +39,16 @@ namespace Tiled2Unity
 
         private static IEnumerable<string> EnumerateAssetFilesAt(string dir, params string[] extensions)
         {
+            foreach (string f in Directory.GetFiles(dir))
+            {
+                if (extensions.Any(ext => String.Compare(ext, Path.GetExtension(f), true) == 0))
+                {
+                    yield return f;
+                }
+            }
+
             foreach (string d in Directory.GetDirectories(dir))
             {
-                foreach (string f in Directory.GetFiles(d))
-                {
-                    if (extensions.Any(ext => String.Compare(ext, Path.GetExtension(f), true) == 0))
-                    {
-                        yield return f;
-                    }
-                }
-
                 foreach (string f in EnumerateAssetFilesAt(d, extensions))
                 {
                     yield return f;

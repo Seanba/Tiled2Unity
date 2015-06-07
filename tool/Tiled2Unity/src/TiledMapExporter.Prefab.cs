@@ -244,51 +244,80 @@ namespace Tiled2Unity
         private void AssignUnityProperties<T>(T tmx, XElement xml, PrefabContext context) where T : TmxHasProperties
         {
             // Only the root of the prefab can have a scale
-            string unityScale = tmx.Properties.GetPropertyValueAsString("unity:scale", "");
-            if (!String.IsNullOrEmpty(unityScale))
             {
-                float scale = 1.0f;
-                if (context != PrefabContext.Root)
+                string unityScale = tmx.Properties.GetPropertyValueAsString("unity:scale", "");
+                if (!String.IsNullOrEmpty(unityScale))
                 {
-                    Program.WriteWarning("unity:scale only applies to map properties\n{0}", xml.ToString());
+                    float scale = 1.0f;
+                    if (context != PrefabContext.Root)
+                    {
+                        Program.WriteWarning("unity:scale only applies to map properties\n{0}", xml.ToString());
+                    }
+                    else if (!Single.TryParse(unityScale, out scale))
+                    {
+                        Program.WriteError("unity:scale property value '{0}' could not be converted to a float", unityScale);
+                    }
+                    else
+                    {
+                        xml.SetAttributeValue("scale", unityScale);
+                    }
                 }
-                else if (!Single.TryParse(unityScale, out scale))
+            }
+
+            // Only the root of the prefab can be marked a resource
+            {
+                string unityResource = tmx.Properties.GetPropertyValueAsString("unity:resource", "");
+                if (!String.IsNullOrEmpty(unityResource))
                 {
-                    Program.WriteError("unity:scale property value '{0}' could not be converted to a float", unityScale);
-                }
-                else
-                {
-                    xml.SetAttributeValue("scale", unityScale);
+                    bool resource = false;
+                    if (context != PrefabContext.Root)
+                    {
+                        Program.WriteWarning("unity:resource only applies to map properties\n{0}", xml.ToString());
+                    }
+                    else if (!Boolean.TryParse(unityResource, out resource))
+                    {
+                        Program.WriteError("unity:resource property value '{0}' could not be converted to a boolean", unityResource);
+                    }
+                    else
+                    {
+                        xml.SetAttributeValue("resource", unityResource);
+                    }
                 }
             }
 
             // Any object can carry the 'isTrigger' setting and we assume any children to inherit the setting
-            string unityIsTrigger = tmx.Properties.GetPropertyValueAsString("unity:isTrigger", "");
-            if (!String.IsNullOrEmpty(unityIsTrigger))
             {
-                bool isTrigger = false;
-                if (!Boolean.TryParse(unityIsTrigger, out isTrigger))
+                string unityIsTrigger = tmx.Properties.GetPropertyValueAsString("unity:isTrigger", "");
+                if (!String.IsNullOrEmpty(unityIsTrigger))
                 {
-                    Program.WriteError("unity:isTrigger property value '{0}' cound not be converted to a boolean", unityIsTrigger);
-                }
-                else
-                {
-                    xml.SetAttributeValue("isTrigger", unityIsTrigger);
+                    bool isTrigger = false;
+                    if (!Boolean.TryParse(unityIsTrigger, out isTrigger))
+                    {
+                        Program.WriteError("unity:isTrigger property value '{0}' cound not be converted to a boolean", unityIsTrigger);
+                    }
+                    else
+                    {
+                        xml.SetAttributeValue("isTrigger", unityIsTrigger);
+                    }
                 }
             }
 
             // Any part of the prefab can be assigned a 'layer'
-            string unityLayer = tmx.Properties.GetPropertyValueAsString("unity:layer", "");
-            if (!String.IsNullOrEmpty(unityLayer))
             {
-                xml.SetAttributeValue("layer", unityLayer);
+                string unityLayer = tmx.Properties.GetPropertyValueAsString("unity:layer", "");
+                if (!String.IsNullOrEmpty(unityLayer))
+                {
+                    xml.SetAttributeValue("layer", unityLayer);
+                }
             }
 
             // Any part of the prefab can be assigned a 'tag'
-            string unityTag = tmx.Properties.GetPropertyValueAsString("unity:tag", "");
-            if (!String.IsNullOrEmpty(unityTag))
             {
-                xml.SetAttributeValue("tag", unityTag);
+                string unityTag = tmx.Properties.GetPropertyValueAsString("unity:tag", "");
+                if (!String.IsNullOrEmpty(unityTag))
+                {
+                    xml.SetAttributeValue("tag", unityTag);
+                }
             }
 
             List<String> knownProperties = new List<string>();
@@ -300,6 +329,7 @@ namespace Tiled2Unity
             knownProperties.Add("unity:isTrigger");
             knownProperties.Add("unity:ignore");
             knownProperties.Add("unity:collisionOnly");
+            knownProperties.Add("unity:resource");
 
             var unknown = from p in tmx.Properties.PropertyMap
                           where p.Key.StartsWith("unity:")

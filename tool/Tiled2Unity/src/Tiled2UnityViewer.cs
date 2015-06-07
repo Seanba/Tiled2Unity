@@ -694,7 +694,7 @@ namespace Tiled2Unity
             {
                 this.pictureBoxViewer.Image.Save(dialog.FileName);
 
-                Properties.Settings.Default.LastExportDirectory = dialog.FileName;
+                Properties.Settings.Default.LastPreviewDirectory = dialog.FileName;
                 Properties.Settings.Default.Save();
             }
         }

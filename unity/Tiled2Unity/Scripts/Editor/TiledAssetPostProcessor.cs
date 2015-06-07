@@ -9,38 +9,18 @@ using UnityEngine;
 
 namespace Tiled2Unity
 {
-    // Assets that are imported to "Assets/Tiled2Unity/..." will use this post processor
+    // Assets that are imported to "Tiled2Unity/..." will use this post processor
     public class TiledAssetPostProcessor : AssetPostprocessor
     {
-        private static bool IsTiled2UnityFile(string assetPath)
-        {
-            return UseThisImporter(assetPath) && assetPath.EndsWith(".tiled2unity.xml");
-        }
-
-        private static bool IsTiled2UnityTexture(string assetPath)
-        {
-            bool startsWith = assetPath.StartsWith("Assets/Tiled2Unity/Textures/");
-            bool endsWithTxt = assetPath.EndsWith(".txt");
-            return startsWith && !endsWithTxt;
-        }
-
-        private static bool IsTiled2UnityWavefrontObj(string assetPath)
-        {
-            bool startsWith = assetPath.StartsWith("Assets/Tiled2Unity/Meshes/");
-            bool endsWith = assetPath.EndsWith(".obj");
-            return startsWith && endsWith;
-        }
-
-        private static bool IsTiled2UnityPrefab(string assetPath)
-        {
-            bool startsWith = assetPath.StartsWith("Assets/Tiled2Unity/Prefabs/");
-            bool endsWith = assetPath.EndsWith(".prefab");
-            return startsWith && endsWith;
-        }
-
         private static bool UseThisImporter(string assetPath)
         {
-            return assetPath.StartsWith("Assets/Tiled2Unity");
+            // Is this file relative to our Tiled2Unity export marker file?
+            // If so, then we want to use this asset postprocessor
+            string assetFolder = Path.GetFullPath(Path.GetDirectoryName(assetPath));
+            string exportMarkerPath = Path.Combine(assetFolder, "..");
+            exportMarkerPath = Path.Combine(exportMarkerPath, "Tiled2Unity.export.txt");
+
+            return File.Exists(exportMarkerPath);
         }
 
         private bool UseThisImporter()
@@ -61,23 +41,23 @@ namespace Tiled2Unity
                     continue;
                 }
 
-                using (ImportTiled2Unity t2uImporter = new ImportTiled2Unity())
+                using (ImportTiled2Unity t2uImporter = new ImportTiled2Unity(imported))
                 {
-                    if (IsTiled2UnityFile(imported))
+                    if (t2uImporter.IsTiled2UnityFile())
                     {
                         // Start the import process by importing our textures and meshes
                         t2uImporter.XmlImported(imported);
                     }
-                    else if (IsTiled2UnityTexture(imported))
+                    else if (t2uImporter.IsTiled2UnityTexture())
                     {
                         // A texture was imported and the material assigned to it may need to be fixed
                         t2uImporter.TextureImported(imported);
                     }
-                    else if (IsTiled2UnityWavefrontObj(imported))
+                    else if (t2uImporter.IsTiled2UnityWavefrontObj())
                     {
                         t2uImporter.MeshImported(imported);
                     }
-                    else if (IsTiled2UnityPrefab(imported))
+                    else if (t2uImporter.IsTiled2UnityPrefab())
                     {
                         Debug.Log(string.Format("Imported prefab from Tiled map editor: {0}", imported));
                     }
@@ -148,7 +128,7 @@ namespace Tiled2Unity
                 rootName = rootName.Remove(rootIndex);
             }
 
-            ImportTiled2Unity importer = new ImportTiled2Unity();
+            ImportTiled2Unity importer = new ImportTiled2Unity(this.assetPath);
             return importer.FixMaterialForMeshRenderer(rootName, renderer);
         }
 

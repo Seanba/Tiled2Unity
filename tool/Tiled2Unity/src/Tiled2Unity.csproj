@@ -226,10 +226,6 @@
     <Content Include="t2u-icon-bw.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="ThirdParty\Ookii.Dialogs.Modified\src\Ookii.Dialogs\Ookii.Dialogs.csproj">
-      <Project>{779E62B3-C5A6-494D-9D87-96C0DEC7FFB0}</Project>
-      <Name>Ookii.Dialogs</Name>
-    </ProjectReference>
     <ProjectReference Include="ThirdParty\ThemeColorPicker\ThemeColorPicker.csproj">
       <Project>{A4D1EDB0-61E7-4943-AA8D-E545456BC392}</Project>
       <Name>ThemeColorPicker</Name>

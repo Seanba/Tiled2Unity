@@ -88,20 +88,13 @@ WriteUninstaller $INSTDIR\uninstall.exe ; Location of the uninstaller
 File ReadMe.txt
 File ${BUILD_DIR}\${P_NORM}.exe
 File ${BUILD_DIR}\${P_NORM}.exe.config
-File ${BUILD_DIR}\Ookii.Dialogs.Modified.xml
-File ${BUILD_DIR}\Ookii.Dialogs.Modified.dll
-File ${BUILD_DIR}\Interop.Shell32.dll
 File ${BUILD_DIR}\ThemeColorPicker.dll
 File /oname=Tiled2Unity.unitypackage ${ROOT_DIR}\build\Tiled2Unity.${V}.unitypackage
-
-SetOutPath $INSTDIR\nl
-File /r ${BUILD_DIR}\nl\*.dll
 
 SetOutPath $INSTDIR\License
 File /oname=License.Tiled2Unity.txt ${ROOT_DIR}\src\License.txt
 File /oname=License.Clipper.txt ${ROOT_DIR}\src\ThirdParty\Clipper\License.txt
 File /oname=License.NDesk.txt ${ROOT_DIR}\src\ThirdParty\NDesk\License.txt
-File /oname=License.Ookii.txt ${ROOT_DIR}\..\Ookii.Dialogs.Modified\license.txt
 File /oname=License.Blarget2.txt ${ROOT_DIR}\TestData\license.txt
 
 SetOutPath $INSTDIR\Examples
@@ -131,15 +124,11 @@ Section "uninstall"
 Delete $INSTDIR\ReadMe.txt
 Delete $INSTDIR\${P_NORM}.exe
 Delete $INSTDIR\${P_NORM}.exe.config
-Delete $INSTDIR\Ookii.Dialogs.Modified.xml
-Delete $INSTDIR\Ookii.Dialogs.Modified.dll
-Delete $INSTDIR\Interop.Shell32.dll
 Delete $INSTDIR\ThemeColorPicker.dll
 Delete $INSTDIR\Tiled2Unity.unitypackage
 
-RMDir /r $INSTDIR\nl
-RMDir /r $INSTDIR\License
-RMDir /r $INSTDIR\Examples
+; Remove all directories
+RMDir /r $INSTDIR\*
 
 Delete $INSTDIR\uninstall.exe
 RMDir $INSTDIR

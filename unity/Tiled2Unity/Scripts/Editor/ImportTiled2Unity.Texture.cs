@@ -15,7 +15,7 @@ namespace Tiled2Unity
         {
             // This is fixup method due to materials and textures, under some conditions, being imported out of order
             Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texturePath, typeof(Texture2D)) as Texture2D;
-            Material material = AssetDatabase.LoadAssetAtPath(ImportUtils.GetMaterialPath(texturePath), typeof(Material)) as Material;
+            Material material = AssetDatabase.LoadAssetAtPath(GetMaterialAssetPath(texturePath), typeof(Material)) as Material;
             material.SetTexture("_MainTex", texture2d);
         }
     }

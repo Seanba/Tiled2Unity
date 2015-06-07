@@ -9,12 +9,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 
-using Ookii.Dialogs;
-
 namespace Tiled2Unity
 {
     public partial class Tiled2UnityForm : Form
     {
+        private static readonly string Tiled2UnityExportHelperFilter = "Tiled2Unity export|Tiled2Unity.export.txt";
+        private static readonly string Tiled2UnityExportHelperFile = "Tiled2Unity.export.txt";
+
         private string[] args = null;
         private TmxMap tmxMap = null;
         private TiledMapExporter tmxExporter = null;
@@ -190,46 +191,12 @@ namespace Tiled2Unity
             WriteText(line, Color.White);
         }
 
-        // Interop and Win32 API tricks to get text box selection to work like VisualStudio Output window
-        //[System.Runtime.InteropServices.DllImport("user32.dll")]
-        //static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, Int32 wParam, Int32 lParam);
-        //const int WM_USER = 0x400;
-        //const int EM_HIDESELECTION = WM_USER + 63;
-
         private void WriteText(string line, Color color)
         {
             // I'm tired of trying to get this to work, so just always scroll the textbox.
             this.richTextBoxOutput.AppendText(line, color);
             this.richTextBoxOutput.SelectionStart = this.richTextBoxOutput.TextLength;
             this.richTextBoxOutput.ScrollToCaret();
-
-            /*// Code lifted from: http://stackoverflow.com/questions/626988/prevent-autoscrolling-in-c-sharp-richtextbox/627265#627265
-            bool focused = this.richTextBoxOutput.Focused;
-            //backup initial selection
-            int selection = this.richTextBoxOutput.SelectionStart;
-            int length = this.richTextBoxOutput.SelectionLength;
-            //allow autoscroll if selection is at end of text
-            bool autoscroll = (selection == this.richTextBoxOutput.Text.Length);
-
-            if (!autoscroll)
-            {
-                //shift focus from RichTextBox to some other control
-                if (focused) this.richTextBoxOutput.Focus();
-                //hide selection
-                SendMessage(this.richTextBoxOutput.Handle, EM_HIDESELECTION, 1, 0);
-            }
-            this.richTextBoxOutput.AppendText(line, color);
-
-            if (!autoscroll)
-            {
-                //restore initial selection
-                this.richTextBoxOutput.SelectionStart = selection;
-                this.richTextBoxOutput.SelectionLength = length;
-                //unhide selection
-                SendMessage(this.richTextBoxOutput.Handle, EM_HIDESELECTION, 0, 0);
-                //restore focus to RichTextBox
-                if (focused) this.richTextBoxOutput.Focus();
-            }*/
         }
 
         private void buttonFolderBrowser_Click(object sender, EventArgs e)
@@ -239,48 +206,44 @@ namespace Tiled2Unity
 
         private void ChooseExportPath()
         {
-            Ookii.Dialogs.VistaFolderBrowserDialog dlg = new VistaFolderBrowserDialog();
-            dlg.SelectedPath = Properties.Settings.Default.LastExportDirectory;
-            dlg.ShowNewFolderButton = false;
+            // Select a Tiled2Unity.export.txt file to let us know where to export files to
+            OpenFileDialog dialog = new OpenFileDialog();
+            dialog.Filter = Tiled2UnityExportHelperFilter;
+            dialog.Title = "Select Tiled2Unity Export File in Unity Project";
+            dialog.InitialDirectory = Properties.Settings.Default.LastExportDirectory;
+            dialog.CheckFileExists = true;
+            dialog.CheckPathExists = true;
+            dialog.RestoreDirectory = true;
+            dialog.Multiselect = false;
+            dialog.FileName = Tiled2UnityExportHelperFile;
+            dialog.FileOk += new CancelEventHandler(ChooseExportPath_FileOk);
 
-            dlg.OnFolderSelected += new VistaFolderBrowserDialog.FolderSelectedHandler(dlg_OnFolderSelected);
-
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                Properties.Settings.Default.LastExportDirectory = Path.GetFullPath(dlg.SelectedPath);
+                Properties.Settings.Default.LastExportDirectory = Path.GetDirectoryName(Path.GetFullPath(dialog.FileName));
                 Properties.Settings.Default.Save();
             }
+
         }
 
-        void dlg_OnFolderSelected(VistaFolderBrowserDialog dlg, string path)
+        void ChooseExportPath_FileOk(object sender, CancelEventArgs e)
         {
-            dlg.SetTitle("Open existing project");
-
-            // Path may be empty. In this case we have not selected a folder.
-            bool enableOk = false;
-            if (String.IsNullOrEmpty(path))
+            OpenFileDialog dialog = sender as OpenFileDialog;
+            if (dialog != null)
             {
-                dlg.SetDescription("Select project folder to open");
-            }
-            else
-            {
-                bool isUnity = true;
-                isUnity = isUnity && Directory.Exists(path);
-                isUnity = isUnity && Directory.Exists(Path.Combine(path, "Assets"));
+                if (String.Compare(Tiled2UnityExportHelperFile, Path.GetFileName(dialog.FileName), true) != 0)
+                {
+                    string title = "Choose File: Tiled2Unity.export.txt";
 
-                if (isUnity)
-                {
-                    dlg.SetDescription("");
-                    enableOk = true;
-                }
-                else
-                {
-                    String msg = String.Format("Selected folder is not a Unity project");
-                    dlg.SetDescription(msg);
+                    StringBuilder message = new StringBuilder();
+                    message.AppendLine("Choose the file named Tiled2Unity.export.txt in your Unity project.");
+                    message.AppendLine("This is needed for Tiled2Unity to know where to export files to.");
+                    message.AppendLine("\nexample: c:/MyUnityProject/Assets/Tiled2Unity/Tiled2Unity.export.txt");
+                    MessageBox.Show(message.ToString(), title, MessageBoxButtons.OK);
+
+                    e.Cancel = true;
                 }
             }
-
-            dlg.EnableOk(enableOk);
         }
 
         private void buttonViewer_Click(object sender, EventArgs e)
