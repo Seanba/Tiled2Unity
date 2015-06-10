@@ -214,11 +214,7 @@ namespace Tiled2Unity
                 float width = ImportUtils.GetAttributeAsFloat(xmlBoxCollider2D, "width");
                 float height = ImportUtils.GetAttributeAsFloat(xmlBoxCollider2D, "height");
                 collider.size = new Vector2(width, height);
-#if UNITY_5_0
                 collider.offset = new Vector2(width * 0.5f, -height * 0.5f);
-#else
-                collider.center = new Vector2(width * 0.5f, -height * 0.5f);
-#endif
             }
 
             // Circle colliders
@@ -228,11 +224,7 @@ namespace Tiled2Unity
                 collider.isTrigger = isTrigger;
                 float radius = ImportUtils.GetAttributeAsFloat(xmlCircleCollider2D, "radius");
                 collider.radius = radius;
-#if UNITY_5_0
                 collider.offset = new Vector2(radius, -radius);
-#else
-                collider.center = new Vector2(radius, -radius);
-#endif
             }
 
             // Edge colliders
