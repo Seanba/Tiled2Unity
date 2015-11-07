@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -12,7 +13,7 @@ namespace Tiled2Unity
     // Partial class methods for building layer data from xml strings or files
     partial class TmxLayer
     {
-        public static TmxLayer FromXml(XElement elem, int layerIndex)
+        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap, int layerIndex)
         {
             Program.WriteVerbose(elem.ToString());
             TmxLayer tmxLayer = new TmxLayer();
@@ -23,11 +24,64 @@ namespace Tiled2Unity
             tmxLayer.UniqueName = String.Format("{0}_{1}", tmxLayer.DefaultName, layerIndex.ToString("D2")).Replace(" ", "_");
 
             tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
-            tmxLayer.Width = TmxHelper.GetAttributeAsInt(elem, "width");
-            tmxLayer.Height = TmxHelper.GetAttributeAsInt(elem, "height");
+            tmxLayer.Opacity = TmxHelper.GetAttributeAsFloat(elem, "opacity", 1);
+
+            PointF offset = new PointF(0, 0);
+            offset.X = TmxHelper.GetAttributeAsFloat(elem, "offsetx", 0);
+            offset.Y = TmxHelper.GetAttributeAsFloat(elem, "offsety", 0);
+            tmxLayer.Offset = offset;
+
             tmxLayer.Properties = TmxProperties.FromXml(elem);
 
-            tmxLayer.ParseData(elem.Element("data"));
+            // Set the "ignore" setting on this layer
+            tmxLayer.Ignore = tmxLayer.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
+
+            // We can build a layer from a "tile layer" (default) or an "image layer"
+            if (elem.Name == "layer")
+            {
+                tmxLayer.Width = TmxHelper.GetAttributeAsInt(elem, "width");
+                tmxLayer.Height = TmxHelper.GetAttributeAsInt(elem, "height");
+                tmxLayer.ParseData(elem.Element("data"));
+            }
+            else if (elem.Name == "imagelayer")
+            {
+                XElement xmlImage = elem.Element("image");
+                if (xmlImage == null)
+                {
+                    Program.WriteWarning("Image Layer '{0}' is being ignored since it has no image.", tmxLayer.DefaultName);
+                    tmxLayer.Ignore = IgnoreSettings.True;
+                    return tmxLayer;
+                }
+
+                // An image layer is sort of like an tile layer but with just one tile
+                tmxLayer.Width = 1;
+                tmxLayer.Height = 1;
+
+                // Find the "tile" that matches our image
+                string imagePath = TmxHelper.GetAttributeAsFullPath(elem.Element("image"), "source");
+                TmxTile tile = tmxMap.Tiles.First(t => t.Value.TmxImage.Path == imagePath).Value;
+                tmxLayer.TileIds = new uint[1] { tile.GlobalId };
+
+                // The image layer needs to be tranlated in an interesting way when expressed as a tile layer
+                PointF translated = tmxLayer.Offset;
+
+                // Make up for height of a regular tile in the map
+                translated.Y -= (float)tmxMap.TileHeight;
+
+                // Make up for the height of this image
+                translated.Y += (float)tile.TmxImage.Size.Height;
+
+                // Correct for any orientation effects on the map (like isometric)
+                // (We essentially undo the translation via orientation here)
+                PointF orientation = TmxMath.TileCornerInScreenCoordinates(tmxMap, 0, 0);
+                translated.X -= orientation.X;
+                translated.Y -= orientation.Y;
+
+                // Translate by the x and y coordiantes
+                translated.X += TmxHelper.GetAttributeAsFloat(elem, "x", 0);
+                translated.Y += TmxHelper.GetAttributeAsFloat(elem, "y", 0);
+                tmxLayer.Offset = translated;
+            }
 
             return tmxLayer;
         }
@@ -63,34 +117,6 @@ namespace Tiled2Unity
             {
                 TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.UniqueName);
             }
-
-            // Note: This is too noisy and slow and doesn't really add anything.
-            // Pretty-print the tileIds
-            /*
-            //Program.WriteLine("TileIds for {0} layer:", this.Name);
-
-            //uint largest = this.TileIds.Max();
-            //largest = TmxMath.GetTileIdWithoutFlags(largest);
-
-            //int padding = largest.ToString().Length + 2;
-
-            //StringBuilder builder = new StringBuilder();
-            //for (int t = 0; t < this.TileIds.Count(); ++t)
-            //{
-            //    if (t % this.Width == 0)
-            //    {
-            //        Program.WriteLine(builder.ToString());
-            //        builder.Clear();
-            //    }
-
-            //    uint tileId = this.TileIds[t];
-            //    tileId = TmxMath.GetTileIdWithoutFlags(tileId);
-            //    builder.AppendFormat("{0}", tileId.ToString().PadLeft(padding));
-            //}
-
-            //// Write the last row
-            //Program.WriteLine(builder.ToString());
-             * */
         }
 
         private void ParseTileDataAsXml(XElement elemData)

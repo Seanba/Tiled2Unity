@@ -217,7 +217,6 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="DevNotes.txt" />
     <Content Include="License.txt" />
     <Content Include="ThirdParty\Clipper\License.txt" />
     <Content Include="ThirdParty\NDesk\License.txt" />

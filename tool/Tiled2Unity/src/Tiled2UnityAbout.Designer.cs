@@ -40,7 +40,7 @@
             // 
             this.buttonOkay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonOkay.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.buttonOkay.Location = new System.Drawing.Point(535, 366);
+            this.buttonOkay.Location = new System.Drawing.Point(535, 438);
             this.buttonOkay.Name = "buttonOkay";
             this.buttonOkay.Size = new System.Drawing.Size(75, 23);
             this.buttonOkay.TabIndex = 0;
@@ -70,16 +70,16 @@
             // 
             // richTextBoxAbout
             // 
-            this.richTextBoxAbout.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-                        | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.richTextBoxAbout.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.richTextBoxAbout.BackColor = System.Drawing.SystemColors.Control;
             this.richTextBoxAbout.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.richTextBoxAbout.Location = new System.Drawing.Point(72, 41);
             this.richTextBoxAbout.Name = "richTextBoxAbout";
             this.richTextBoxAbout.ReadOnly = true;
             this.richTextBoxAbout.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.None;
-            this.richTextBoxAbout.Size = new System.Drawing.Size(538, 319);
+            this.richTextBoxAbout.Size = new System.Drawing.Size(538, 391);
             this.richTextBoxAbout.TabIndex = 2;
             this.richTextBoxAbout.Text = "Load Rich Text here ...";
             this.richTextBoxAbout.LinkClicked += new System.Windows.Forms.LinkClickedEventHandler(this.richTextBoxAbout_LinkClicked);
@@ -90,7 +90,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.buttonOkay;
-            this.ClientSize = new System.Drawing.Size(622, 401);
+            this.ClientSize = new System.Drawing.Size(622, 473);
             this.Controls.Add(this.labelVersion);
             this.Controls.Add(this.richTextBoxAbout);
             this.Controls.Add(this.pictureBoxMegaDad);

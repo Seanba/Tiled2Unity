@@ -24,37 +24,9 @@ public class SortingLayerExposedEditor : UnityEditor.Editor
             return;
         }
 
-        // Expose the sorting layer name
-        //string newSortingLayerName = EditorGUILayout.TextField("Sorting Layer", renderer.sortingLayerName);
-        //if (newSortingLayerName != renderer.sortingLayerName)
-        //{
-        //    Undo.RecordObject(renderer, "Edit Sorting Layer Name");
-        //    renderer.sortingLayerName = newSortingLayerName;
-        //    EditorUtility.SetDirty(renderer);
-        //}
-
-        // Expose the sorting layer ID
-        //int newSortingLayerId = EditorGUILayout.IntField("Sorting Layer ID", renderer.sortingLayerID);
-        //if (newSortingLayerId != renderer.sortingLayerID)
-        //{
-        //    Undo.RecordObject(renderer, "Edit Sorting Layer ID");
-        //    renderer.sortingLayerID = newSortingLayerId;
-        //    EditorUtility.SetDirty(renderer);
-        //}
-
         // Seanba: Use a popup that is populated with the acceptable sorting layers for the renderer
         // Also allow the player to bring up the Tag/Layers inspector if they choose so
         string[] sortLayerNames = GetSortingLayerNames();
-        //int[] sortLayerIds = GetSortingLayerUniqueIDs();
-        //{
-        //    StringBuilder builder = new StringBuilder("Sorting Layers = ");
-        //    for (int i = 0; i < sortLayerNames.Length; ++i)
-        //    {
-        //        builder.AppendFormat("({0} = {1},{2}) ", i, sortLayerIds[i], sortLayerNames[i]);
-        //    }
-        //    Debug.Log(builder.ToString());
-        //}
-
         int sortLayerSelection = GetSortingLayerIndex(renderer, sortLayerNames);
 
         GUIContent[] sortingLayerContexts = GetSortingLayerContexts();

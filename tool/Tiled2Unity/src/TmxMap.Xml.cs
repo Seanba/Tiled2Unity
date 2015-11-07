@@ -103,6 +103,13 @@ namespace Tiled2Unity
             {
                 ParseSingleTileset(ts);
             }
+
+            // Treat images in imagelayers as tileset with a single entry
+            var imageLayers = from item in doc.Descendants("imagelayer") select item;
+            foreach (var il in imageLayers)
+            {
+                ParseTilesetFromImageLayer(il);
+            }
         }
 
         private void ParseSingleTileset(XElement elem)
@@ -139,6 +146,14 @@ namespace Tiled2Unity
             int spacing = TmxHelper.GetAttributeAsInt(elemTileset, "spacing", 0);
             int margin = TmxHelper.GetAttributeAsInt(elemTileset, "margin", 0);
 
+            PointF tileOffset = PointF.Empty;
+            XElement xmlTileOffset = elemTileset.Element("tileoffset");
+            if (xmlTileOffset != null)
+            {
+                tileOffset.X = TmxHelper.GetAttributeAsInt(xmlTileOffset, "x");
+                tileOffset.Y = TmxHelper.GetAttributeAsInt(xmlTileOffset, "y");
+            }
+
             IList<TmxTile> tilesToAdd = new List<TmxTile>();
 
             // Tilesets may have an image for all tiles within it, or it may have an image per tile
@@ -157,6 +172,7 @@ namespace Tiled2Unity
                         uint localId = (uint) tilesToAdd.Count();
                         uint globalId = firstId + localId;
                         TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                        tile.Offset = tileOffset;
                         tile.SetTileSize(tileWidth, tileHeight);
                         tile.SetLocationOnSource(end_x - tileWidth, end_y - tileHeight);
                         tilesToAdd.Add(tile);
@@ -174,6 +190,7 @@ namespace Tiled2Unity
                     uint localId = (uint)tilesToAdd.Count();
                     uint globalId = firstId + localId;
                     TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                    tile.Offset = tileOffset;
                     tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
                     tile.SetLocationOnSource(0, 0);
                     tilesToAdd.Add(tile);
@@ -211,21 +228,48 @@ namespace Tiled2Unity
             }
         }
 
+        private void ParseTilesetFromImageLayer(XElement elemImageLayer)
+        {
+            string tilesetName = TmxHelper.GetAttributeAsString(elemImageLayer, "name");
+
+            XElement xmlImage = elemImageLayer.Element("image");
+            if (xmlImage == null)
+            {
+                Program.WriteWarning("Image Layer '{0}' has no image assigned.", tilesetName);
+                return;
+            }
+
+            TmxImage tmxImage = TmxImage.FromXml(xmlImage);
+            RegisterImagePath(tmxImage.Path);
+
+            uint firstId = this.Tiles.Max(t => t.Key) + 1;
+            uint localId = 1;
+            uint globalId = firstId + localId;
+
+            TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+            tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
+            tile.SetLocationOnSource(0, 0);
+            this.Tiles[tile.GlobalId] = tile;
+        }
+
         private void ParseAllLayers(XDocument doc)
         {
             Program.WriteLine("Parsing layer elements ...");
-            var layers = (from item in doc.Descendants("layer")
-                           select item).ToList();
+
+            // Parse "layer"s and "imagelayer"s
+            var layers = (from item in doc.Descendants()
+                          where (item.Name == "layer" || item.Name == "imagelayer")
+                          select item).ToList();
 
             foreach (var lay in layers)
             {
-                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this.Layers.Count);
+                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this, this.Layers.Count);
 
                 // Layers may be ignored
-                if (tmxLayer.Properties.GetPropertyValueAsBoolean("unity:ignore", false) == true)
+                if (tmxLayer.Ignore == TmxLayer.IgnoreSettings.True)
                 {
                     // We don't care about this layer
-                    Program.WriteLine("Ignoring layer due to unity:ignore property: {0}", tmxLayer.UniqueName);
+                    Program.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.UniqueName);
                     continue;
                 }
 

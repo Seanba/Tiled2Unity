@@ -13,6 +13,7 @@ namespace Tiled2Unity
         public TmxProperties Properties { get; private set; }
         public List<TmxObject> Objects { get; private set; }
         public Color Color { get; private set; }
+        public PointF Offset { get; private set; }
 
         public TmxObjectGroup()
         {

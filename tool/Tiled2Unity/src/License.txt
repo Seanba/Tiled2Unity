@@ -1,5 +1,5 @@
 ﻿Tiled2Unity
-Copyright (C) 2014 Sean Barton (http://www.seanba.com)
+Copyright (C) 2015 Sean Barton (http://www.seanba.com)
 
 MIT License
 

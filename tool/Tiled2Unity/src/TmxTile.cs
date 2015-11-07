@@ -11,6 +11,7 @@ namespace Tiled2Unity
         public uint GlobalId { get; private set; }
         public uint LocalId { get; private set; }
         public Size TileSize { get; private set; }
+        public PointF Offset { get; set; }
         public TmxImage TmxImage { get; private set; }
         public Point LocationOnSource { get; private set; }
         public TmxProperties Properties { get; private set; }

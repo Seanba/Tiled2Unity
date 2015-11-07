@@ -85,9 +85,9 @@ namespace Tiled2Unity
             return GetAttributeAsColor(elem, attrName);
         }
 
-        public static T GetAttributeAsEnum<T>(XElement elem, string attrName)
+        public static T GetStringAsEnum<T>(string enumString)
         {
-            string enumString = elem.Attribute(attrName).Value.Replace("-", "_");
+            enumString = enumString.Replace("-", "_");
 
             T value = default(T);
             try
@@ -108,6 +108,12 @@ namespace Tiled2Unity
             }
 
             return value;
+        }
+
+        public static T GetAttributeAsEnum<T>(XElement elem, string attrName)
+        {
+            string enumString = elem.Attribute(attrName).Value.Replace("-", "_");
+            return GetStringAsEnum<T>(enumString);
         }
 
         public static T GetAttributeAsEnum<T>(XElement elem, string attrName, T defaultValue)

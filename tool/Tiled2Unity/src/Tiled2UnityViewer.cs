@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
@@ -383,6 +384,7 @@ namespace Tiled2Unity
             // Load all our tiled images
             var images = from layer in this.tmxMap.Layers
                          where layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false
+                         where layer.Ignore != TmxLayer.IgnoreSettings.Visual
                          where layer.Visible == true
                          where IsLayerEnabled(layer.DefaultName)
                          from y in Enumerable.Range(0, layer.Height)
@@ -421,6 +423,20 @@ namespace Tiled2Unity
 
                 if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == true)
                     continue;
+
+                if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
+                    continue;
+
+                // Set the opacity for the layer
+                ColorMatrix colorMatrix = new ColorMatrix();
+                colorMatrix.Matrix33 = layer.Opacity;
+
+                ImageAttributes imageAttributes = new ImageAttributes();
+                imageAttributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+
+                // Translate by the offset
+                GraphicsState state = g.Save();
+                g.TranslateTransform(layer.Offset.X, layer.Offset.Y);
 
                 // The range of x and y depends on the render order of the tiles
                 // By default we draw right and down but may reverse the tiles we visit
@@ -464,6 +480,10 @@ namespace Tiled2Unity
                     // Individual tiles may be larger than the given tile size of the overall map
                     location.Y = (t.Position.Y - t.Tile.TileSize.Height) + this.tmxMap.TileHeight;
 
+                    // Take tile offset into account
+                    location.X += t.Tile.Offset.X;
+                    location.Y += t.Tile.Offset.Y;
+
                     // Make up the 'quad' of texture points and transform them
                     PointF center = new PointF(t.Tile.TileSize.Width * 0.5f, t.Tile.TileSize.Height * 0.5f);
                     destPoints[0] = new Point(0, 0);
@@ -484,8 +504,10 @@ namespace Tiled2Unity
 
                     // Draw the tile
                     Rectangle source = new Rectangle(t.Tile.LocationOnSource, t.Tile.TileSize);
-                    g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel);
+                    g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel, imageAttributes);
                 }
+
+                g.Restore(state);
             }
 
             tileSetBitmaps.Clear();
@@ -496,7 +518,7 @@ namespace Tiled2Unity
             for (int l = 0; l < this.tmxMap.Layers.Count; ++l)
             {
                 TmxLayer layer = this.tmxMap.Layers[l];
-                if (layer.Visible == true && IsLayerEnabled(layer.DefaultName))
+                if (layer.Visible == true && IsLayerEnabled(layer.DefaultName) && layer.Ignore != TmxLayer.IgnoreSettings.Collision)
                 {
                     Color lineColor = this.preferencesForm.GetLayerColor(layer.DefaultName);
                     Color polyColor = Color.FromArgb(128, lineColor);
@@ -554,10 +576,15 @@ namespace Tiled2Unity
 
             foreach (var objGroup in collidersObjectGroup)
             {
+                GraphicsState state = g.Save();
+                g.TranslateTransform(objGroup.Offset.X, objGroup.Offset.Y);
+
                 foreach (var obj in objGroup.Objects)
                 {
                     DrawObjectCollider(g, obj, objGroup.Color);
                 }
+
+                g.Restore(state);
             }
         }
 

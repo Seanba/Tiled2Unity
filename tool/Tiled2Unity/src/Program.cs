@@ -138,13 +138,13 @@ namespace Tiled2Unity
 
                 if (!Directory.Exists(Program.ExportUnityProjectDir))
                 {
-                    Program.WriteError("UNITYDIR Unity Project Directory '{0}' does not exist", Program.ExportUnityProjectDir);
+                    Program.WriteError("UNITYDIR Unity Tiled2Unity Project Directory '{0}' does not exist", Program.ExportUnityProjectDir);
                     PrintHelp();
                     return false;
                 }
-                if (!Directory.Exists(Path.Combine(Program.ExportUnityProjectDir, "Assets")))
+                if (!File.Exists(Path.Combine(Program.ExportUnityProjectDir, "Tiled2Unity.export.txt")))
                 {
-                    Program.WriteError("UNITYDIR '{0}' is not a Unity Project folder", Program.ExportUnityProjectDir);
+                    Program.WriteError("UNITYDIR '{0}' is not a Tiled2Unity Unity Project folder", Program.ExportUnityProjectDir);
                     PrintHelp();
                     return false;
                 }
@@ -194,8 +194,7 @@ namespace Tiled2Unity
             Program.WriteLine("  unity:tag");
             Program.WriteLine("  unity:scale");
             Program.WriteLine("  unity:isTrigger");
-            Program.WriteLine("  unity:ignore");
-            Program.WriteLine("  unity:collisionOnly");
+            Program.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
             Program.WriteLine("  unity:resource");
             Program.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Program.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");

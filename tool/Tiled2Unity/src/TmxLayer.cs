@@ -9,11 +9,22 @@ namespace Tiled2Unity
 {
     public partial class TmxLayer : TmxHasProperties
     {
+        public enum IgnoreSettings
+        {
+            False,      // Ingore nothing (layer fully-enabled)
+            True,       // Ignore everything (like layer doesn't exist)
+            Collision,  // Ignore collision on layer
+            Visual,     // Ignore visual on layer
+        };
+
         public string DefaultName { get; private set; }
         public string UniqueName { get; private set; }
         public bool Visible { get; private set; }
+        public float Opacity { get; private set; }
+        public PointF Offset { get; private set; }
         public int Width { get; private set; }
         public int Height { get; private set; }
+        public IgnoreSettings Ignore { get; private set; }
         public uint[] TileIds { get; private set; }
         public TmxProperties Properties { get; private set; }
 

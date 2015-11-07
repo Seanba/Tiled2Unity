@@ -22,6 +22,11 @@ namespace Tiled2Unity
             tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
             tmxObjectGroup.Properties = TmxProperties.FromXml(xml);
 
+            PointF offset = new PointF(0, 0);
+            offset.X = TmxHelper.GetAttributeAsFloat(xml, "offsetx", 0);
+            offset.Y = TmxHelper.GetAttributeAsFloat(xml, "offsety", 0);
+            tmxObjectGroup.Offset = offset;
+
             // Get all the objects
             Program.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
             var objects = from obj in xml.Elements("object")

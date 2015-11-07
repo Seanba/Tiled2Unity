@@ -79,11 +79,16 @@ namespace Tiled2Unity
                     if (layer.Visible == false)
                         continue;
 
+                    Vector3D offset = PointFToUnityVector(layer.Offset);
+
                     XElement layerElement =
                         new XElement("GameObject",
-                            new XAttribute("name", layer.UniqueName));
+                            new XAttribute("name", layer.UniqueName),
+                            new XAttribute("x", offset.X),
+                            new XAttribute("y", offset.Y));
 
-                    if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false)
+                    if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false && 
+                        layer.Ignore != TmxLayer.IgnoreSettings.Visual)
                     {
                         // Submeshes for the layer (layer+material)
                         var meshElements = CreateMeshElementsForLayer(layer);
@@ -91,8 +96,11 @@ namespace Tiled2Unity
                     }
 
                     // Collision data for the layer
-                    var collisionElements = CreateCollisionElementForLayer(layer);
-                    layerElement.Add(collisionElements);
+                    if (layer.Ignore != TmxLayer.IgnoreSettings.Collision)
+                    {
+                        var collisionElements = CreateCollisionElementForLayer(layer);
+                        layerElement.Add(collisionElements);
+                    }
 
                     AssignUnityProperties(layer, layerElement, PrefabContext.TiledLayer);
                     AssignTiledProperties(layer, layerElement);
@@ -114,6 +122,12 @@ namespace Tiled2Unity
                 foreach (var objGroup in collidersObjectGroup)
                 {
                     XElement gameObject = new XElement("GameObject", new XAttribute("name", objGroup.Name));
+
+                    // Offset the object group
+                    Vector3D offset = PointFToUnityVector(objGroup.Offset);
+                    gameObject.SetAttributeValue("x", offset.X);
+                    gameObject.SetAttributeValue("y", offset.Y);
+
                     AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
                     AssignTiledProperties(objGroup, gameObject);
 
@@ -218,7 +232,7 @@ namespace Tiled2Unity
             List<XElement> xmlMeshes = new List<XElement>();
             foreach (var m in meshes)
             {
-                XElement xmlMesh = new XElement("GameObject", new XAttribute("copy", m.Key));
+                XElement xmlMesh = new XElement("GameObject",new XAttribute("copy", m.Key), new XAttribute("opacity", layer.Opacity));
 
                 // Do we have any animations?
                 var animations = m.Distinct();
@@ -328,7 +342,6 @@ namespace Tiled2Unity
             knownProperties.Add("unity:scale");
             knownProperties.Add("unity:isTrigger");
             knownProperties.Add("unity:ignore");
-            knownProperties.Add("unity:collisionOnly");
             knownProperties.Add("unity:resource");
 
             var unknown = from p in tmx.Properties.PropertyMap

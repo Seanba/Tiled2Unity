@@ -60,5 +60,17 @@ namespace Tiled2Unity
             return defaultValue;
         }
 
+        public T GetPropertyValueAsEnum<T>(string name)
+        {
+            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name]);
+        }
+
+        public T GetPropertyValueAsEnum<T>(string name, T defaultValue)
+        {
+            if (this.PropertyMap.ContainsKey(name))
+                return GetPropertyValueAsEnum<T>(name);
+            return defaultValue;
+        }
+
     } // end class
 } // end namespace

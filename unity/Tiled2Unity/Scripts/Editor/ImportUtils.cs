@@ -103,6 +103,36 @@ namespace Tiled2Unity
             return Encoding.ASCII.GetString(bytes);
         }
 
+        public static void SetCastShadows(MeshRenderer mr, bool set)
+        {
+            // Unfortunate to have to support versions like this
+#if UNITY_4_0 || UNITY_4_0_1 || UNITY_4_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_4 || UNITY_4_5 || UNITY_4_6
+            mr.castShadows = set;
+#else
+            mr.shadowCastingMode = set ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+#endif
+        }
+
+        public static void SetBoxCollider2DOffset(BoxCollider2D bc2d, Vector2 offset)
+        {
+            // Unfortunate to have to support versions like this
+#if UNITY_4_0 || UNITY_4_0_1 || UNITY_4_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_4 || UNITY_4_5 || UNITY_4_6
+            bc2d.center = offset;
+#else
+            bc2d.offset = offset;
+#endif
+        }
+
+        public static void SetCircleCollider2DOffset(CircleCollider2D bc2d, Vector2 offset)
+        {
+            // Unfortunate to have to support versions like this
+#if UNITY_4_0 || UNITY_4_0_1 || UNITY_4_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_4 || UNITY_4_5 || UNITY_4_6
+            bc2d.center = offset;
+#else
+            bc2d.offset = offset;
+#endif
+        }
+
         // Bah! This won't work (at least yet) due to Mono being a bit behind the .Net libraries
         //public static byte[] GzipBase64ToBytes(string gzipBase64)
         //{

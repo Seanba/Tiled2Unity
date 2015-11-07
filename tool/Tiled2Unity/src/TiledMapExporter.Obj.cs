@@ -52,6 +52,7 @@ namespace Tiled2Unity
             var faces = from layer in this.tmxMap.Layers
                         where layer.Visible == true
                         where layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false
+                        where layer.Ignore != TmxLayer.IgnoreSettings.Visual
 
                         // Draw order forces us to visit tiles in a particular order
                         from y in (this.tmxMap.DrawOrderVertical == 1) ? Enumerable.Range(0, layer.Height) : Enumerable.Range(0, layer.Height).Reverse()
@@ -70,7 +71,7 @@ namespace Tiled2Unity
                         select new
                         {
                             LayerName = layer.UniqueName,
-                            Vertices = CalculateFaceVertices(this.tmxMap.GetMapPositionAt(x, y), frame.Tile.TileSize, this.tmxMap.TileHeight, frame.Position_z),
+                            Vertices = CalculateFaceVertices(this.tmxMap.GetMapPositionAt(x, y), frame.Tile.TileSize, this.tmxMap.TileHeight, new SizeF(frame.Tile.Offset), frame.Position_z),
                             TextureCoordinates = CalculateFaceTextureCoordinates(frame.Tile, fd, fh, fv),
                             ImagePath = frame.Tile.TmxImage.Path,
                             ImageName = Path.GetFileNameWithoutExtension(frame.Tile.TmxImage.Path),
@@ -164,7 +165,7 @@ namespace Tiled2Unity
             return objWriter;
         }
 
-        private Vector3D[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, float pos_z)
+        private Vector3D[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, SizeF offset, float pos_z)
         {
             // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
             mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
@@ -173,6 +174,12 @@ namespace Tiled2Unity
             PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
             PointF pt2 = PointF.Add(mapLocation, tileSize);
             PointF pt3 = PointF.Add(mapLocation, new Size(0, tileSize.Height));
+
+            // Apply the tile offset
+            pt0 = PointF.Add(pt0, offset);
+            pt1 = PointF.Add(pt1, offset);
+            pt2 = PointF.Add(pt2, offset);
+            pt3 = PointF.Add(pt3, offset);
 
             // We need to use ccw winding for Wavefront objects
             Vector3D[] vertices  = new Vector3D[4];

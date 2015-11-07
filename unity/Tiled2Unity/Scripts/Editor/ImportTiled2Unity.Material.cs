@@ -57,7 +57,6 @@ namespace Tiled2Unity
             {
                 Debug.LogError(String.Format("Could not find material: {0}", materialName));
             }
-            renderer.sharedMaterial = material;
 
             // Set the sorting layer for the mesh
             string sortingLayer = match.Attribute("sortingLayerName").Value;
@@ -83,10 +82,10 @@ namespace Tiled2Unity
                 byte g = byte.Parse(htmlColor.Substring(3, 2), System.Globalization.NumberStyles.HexNumber);
                 byte b = byte.Parse(htmlColor.Substring(5, 2), System.Globalization.NumberStyles.HexNumber);
                 Color color = new Color32(r, g, b, 255);
-                renderer.sharedMaterial.SetColor("_AlphaColorKey", color);
+                material.SetColor("_AlphaColorKey", color);
             }
 
-            return renderer.sharedMaterial;
+            return material;
         }
     }
 }
