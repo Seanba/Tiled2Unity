@@ -28,14 +28,30 @@ namespace Tiled2Unity
 
             {
                 // Add all image files as compressed base64 strings
-                var imagePaths = from layer in this.tmxMap.Layers
-                                 where layer.Visible == true
-                                 from rawTileId in layer.TileIds
-                                 where rawTileId != 0
-                                 let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                                 let tile = this.tmxMap.Tiles[tileId]
-                                 select tile.TmxImage.AbsolutePath;
-                imagePaths = imagePaths.Distinct();
+                var layerImagePaths = from layer in this.tmxMap.Layers
+                                      where layer.Visible == true
+                                      from rawTileId in layer.TileIds
+                                      where rawTileId != 0
+                                      let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
+                                      let tile = this.tmxMap.Tiles[tileId]
+                                      select tile.TmxImage.AbsolutePath;
+                layerImagePaths = layerImagePaths.Distinct();
+
+                // Tile Objects may have images not yet references by a layer
+                var objectImagePaths = from objectGroup in this.tmxMap.ObjectGroups
+                                       where objectGroup.Visible == true
+                                       from tmxObject in objectGroup.Objects
+                                       where tmxObject.Visible == true
+                                       where tmxObject is TmxObjectTile
+                                       let tmxTileObject = tmxObject as TmxObjectTile
+                                       from mesh in tmxTileObject.Tile.Meshes
+                                       select mesh.TmxImage.AbsolutePath;
+                objectImagePaths = objectImagePaths.Distinct();
+
+                List<string> imagePaths = new List<string>();
+                imagePaths.AddRange(layerImagePaths);
+                imagePaths.AddRange(objectImagePaths);
+                imagePaths = imagePaths.Distinct().ToList();
 
                 // Do not import files if they are already in the project (in the /Assets/ directory of where we're exporting too)
                 string unityAssetsDir = Path.Combine(exportToUnityProjectPath, "Assets");

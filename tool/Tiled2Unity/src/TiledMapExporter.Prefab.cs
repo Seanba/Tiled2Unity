@@ -431,7 +431,7 @@ namespace Tiled2Unity
             // We combine the properties of the tile that is referenced and add it to our own properties
             AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
 
-            // TileObjects can be scaled
+            // TileObjects can be scaled (this is separate from vertex scaling)
             SizeF scale = tmxObjectTile.GetTileObjectScale();
             xmlTileObjectRoot.SetAttributeValue("scaleX", scale.Width);
             xmlTileObjectRoot.SetAttributeValue("scaleY", scale.Height);
@@ -442,12 +442,12 @@ namespace Tiled2Unity
 
             if (tmxObjectTile.FlippedHorizontal)
             {
-                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width);
+                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width * Program.Scale);
                 xmlTileObject.SetAttributeValue("flipX", true);
             }
             if (tmxObjectTile.FlippedVertical)
             {
-                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height);
+                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Program.Scale);
                 xmlTileObject.SetAttributeValue("flipY", true);
             }
 
@@ -477,8 +477,8 @@ namespace Tiled2Unity
                 if (objElement != null)
                 {
                     // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
-                    objElement.SetAttributeValue("offsetX", tmxObject.Position.X);
-                    objElement.SetAttributeValue("offsetY", tmxObjectTile.Size.Height - tmxObject.Position.Y);
+                    objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Program.Scale);
+                    objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Program.Scale);
 
                     xmlTileObject.Add(objElement);
                 }
@@ -493,6 +493,10 @@ namespace Tiled2Unity
                 xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
                 xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.ParentObjectGroup.SortingLayerName);
                 xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.ParentObjectGroup.SortingOrder);
+
+                // This object, that actually displays the tile, has to be bumped up to account for the bottom-left corner problem with Tile Objects in Tiled
+                xmlMeshObject.SetAttributeValue("x", 0);
+                xmlMeshObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Program.Scale);
 
                 if (mesh.FullAnimationDurationMs > 0)
                 {

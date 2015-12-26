@@ -85,12 +85,8 @@ namespace Tiled2Unity
                 // Get the single tile associated with this mesh
                 TmxTile tmxTile = this.tmxMap.Tiles[tmxMesh.TileIds[0]];
 
-                Point position = Point.Empty;
-                var vertices = CalculateFaceVertices(position, tmxTile.TileSize, this.tmxMap.TileHeight, tmxTile.Offset);
+                var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
                 var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
-
-                // The vertices need to be bumped up because of the way Tiled uses the bottom-left corner as the origin
-                vertices = vertices.Select(pt => TmxMath.AddPoints(pt, new PointF(0, this.tmxMap.TileHeight))).ToArray();
 
                 // Adds vertices and uvs to the database as we build the face strings
                 string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[0]) + 1, uvDatabase.Add(uvs[0]) + 1);
@@ -153,6 +149,32 @@ namespace Tiled2Unity
 
             // We need to use ccw winding for Wavefront objects
             PointF[] vertices  = new PointF[4];
+            vertices[3] = PointFToObjVertex(pt0);
+            vertices[2] = PointFToObjVertex(pt1);
+            vertices[1] = PointFToObjVertex(pt2);
+            vertices[0] = PointFToObjVertex(pt3);
+            return vertices;
+        }
+
+        private PointF[] CalculateFaceVertices_TileObject(Size tileSize, PointF offset)
+        {
+            // Tile Object vertices are not concerned about where they are placed in the world
+            PointF origin = PointF.Empty;
+
+            PointF pt0 = origin;
+            PointF pt1 = PointF.Add(origin, new Size(tileSize.Width, 0));
+            PointF pt2 = PointF.Add(origin, tileSize);
+            PointF pt3 = PointF.Add(origin, new Size(0, tileSize.Height));
+
+            // Apply the tile offset
+
+            pt0 = TmxMath.AddPoints(pt0, offset);
+            pt1 = TmxMath.AddPoints(pt1, offset);
+            pt2 = TmxMath.AddPoints(pt2, offset);
+            pt3 = TmxMath.AddPoints(pt3, offset);
+
+            // We need to use ccw winding for Wavefront objects
+            PointF[] vertices = new PointF[4];
             vertices[3] = PointFToObjVertex(pt0);
             vertices[2] = PointFToObjVertex(pt1);
             vertices[1] = PointFToObjVertex(pt2);
