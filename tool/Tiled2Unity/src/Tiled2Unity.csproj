@@ -85,6 +85,7 @@
     <Compile Include="ChDir.cs" />
     <Compile Include="DataGridViewButtonCell_ColorPicker.cs" />
     <Compile Include="DataGridViewColumn_ColorPicker.cs" />
+    <Compile Include="HashIndexOf.cs" />
     <Compile Include="LayerClipper.cs" />
     <Compile Include="PerLayerColorData.cs" />
     <Compile Include="PolylineReduction.cs" />
@@ -129,7 +130,6 @@
     <Compile Include="TiledMapExporter.Obj.cs" />
     <Compile Include="TiledMapExporter.ImportFiles.cs" />
     <Compile Include="TiledMapExporter.Prefab.cs" />
-    <Compile Include="TiledMapExpoterUtils.cs" />
     <Compile Include="TmxAnimation.cs" />
     <Compile Include="TmxException.cs" />
     <Compile Include="TmxFrame.cs" />
@@ -140,9 +140,11 @@
     <Compile Include="TmxImage.Xml.cs" />
     <Compile Include="TmxLayer.cs" />
     <Compile Include="TmxLayer.Xml.cs" />
+    <Compile Include="TmxLayerBase.cs" />
     <Compile Include="TmxMap.cs" />
     <Compile Include="TmxMap.Xml.cs" />
     <Compile Include="TmxMath.cs" />
+    <Compile Include="TmxMesh.cs" />
     <Compile Include="TmxObject.cs" />
     <Compile Include="TmxObject.Xml.cs" />
     <Compile Include="TmxObjectEllipse.cs" />

@@ -18,6 +18,9 @@ namespace Tiled2Unity
         public TmxObjectGroup ObjectGroup { get; private set; }
         public TmxAnimation Animation { get; private set; }
 
+        // Some tiles may be represented as a mesh for tile objects (a list is needed for animations)
+        public List<TmxMesh> Meshes { get; set; }
+
 
         public TmxTile(uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
         {
@@ -26,6 +29,8 @@ namespace Tiled2Unity
             this.TmxImage = tmxImage;
             this.Properties = new TmxProperties();
             this.ObjectGroup = new TmxObjectGroup();
+            this.Animation = TmxAnimation.FromTileId(globalId);
+            this.Meshes = new List<TmxMesh>();
         }
 
         public bool IsEmpty

@@ -13,27 +13,23 @@ namespace Tiled2Unity
         public static TmxImage FromXml(XElement elemImage)
         {
             TmxImage tmxImage = new TmxImage();
-            tmxImage.Path = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
+            tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
 
-            // Width and height are optional.
-            int width = TmxHelper.GetAttributeAsInt(elemImage, "width", 0);
-            int height = TmxHelper.GetAttributeAsInt(elemImage, "height", 0);
-
-            // Prefer to use the actual width and height anyway so that UVs do not get jacked
-            using (Image bitmap = Bitmap.FromFile(tmxImage.Path))
-            {
-                width = bitmap.Width;
-                height = bitmap.Height;
-            }
-
-            tmxImage.Size = new System.Drawing.Size(width, height);
+            tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+            tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
 
             // Some images use a transparency color key instead of alpha (blerg)
             tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
-            if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && !tmxImage.TransparentColor.StartsWith("#"))
+            if (!String.IsNullOrEmpty(tmxImage.TransparentColor))
             {
-                // The hash makes it an HTML color
-                tmxImage.TransparentColor = "#" + tmxImage.TransparentColor;
+                if (!tmxImage.TransparentColor.StartsWith("#"))
+                {
+                    // The hash makes it an HTML color
+                    tmxImage.TransparentColor = "#" + tmxImage.TransparentColor;
+                }
+
+                System.Drawing.Color transColor = System.Drawing.ColorTranslator.FromHtml(tmxImage.TransparentColor);
+                tmxImage.ImageBitmap.MakeTransparent(transColor);
             }
 
             return tmxImage;

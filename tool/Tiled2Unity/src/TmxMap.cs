@@ -52,7 +52,7 @@ namespace Tiled2Unity
         public IList<TmxLayer> Layers = new List<TmxLayer>();
         public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
 
-        private IList<string> registeredImageNames = new List<string>();
+        private uint nextUniqueId = 0;
 
         public override string ToString()
         {
@@ -65,6 +65,15 @@ namespace Tiled2Unity
                 this.Layers.Count(),
                 this.ObjectGroups.Count(),
                 this.Name);
+        }
+
+        public TmxTile GetTileFromTileId(uint tileId)
+        {
+            if (tileId == 0)
+                return null;
+
+            tileId = TmxMath.GetTileIdWithoutFlags(tileId);
+            return this.Tiles[tileId];
         }
 
         public Point GetMapPositionAt(int x, int y)
@@ -83,46 +92,10 @@ namespace Tiled2Unity
             return point;
         }
 
-        public void RegisterImagePath(string imagePath)
+        // Get a unique Id tied to this map instance.
+        public uint GetUniqueId()
         {
-            string fileName = Path.GetFileNameWithoutExtension(imagePath);
-
-            if (!this.registeredImageNames.Contains(fileName))
-            {
-                this.registeredImageNames.Add(fileName);
-            }
-        }
-
-        public string GetMeshName(string layerName, string imageName)
-        {
-            int layerIndex = -1;
-            for (int i = 0; i < this.Layers.Count(); ++i)
-            {
-                var layer = this.Layers[i];
-                if (String.Compare(layer.UniqueName, layerName, true) == 0)
-                {
-                    layerIndex = i;
-                    break;
-                }
-            }
-
-            int imageIndex = this.registeredImageNames.IndexOf(imageName);
-
-            string meshName = String.Format("mesh_[{0}]_[{1}]",
-                layerIndex == -1 ? "bad_layer" : layerIndex.ToString("D2"),
-                imageIndex == -1 ? "bad_image" : imageIndex.ToString("D2"));
-
-            return meshName;
-        }
-
-        private static uint NextUniqueId = 0;
-        private static object NextUniqueIdLock = new Object();
-        public static uint GetUniqueId()
-        {
-            lock (TmxMap.NextUniqueIdLock)
-            {
-                return ++TmxMap.NextUniqueId;
-            }
+            return ++this.nextUniqueId;
         }
 
         public Size MapSizeInPixels()
@@ -163,5 +136,22 @@ namespace Tiled2Unity
             // Default orientation (orthongonal)
             return new Size(this.Width * this.TileWidth, this.Height * this.TileHeight);
         }
+
+        // Get a unique list of all the tiles that are used as tile objects
+        public List<TmxMesh> GetUniqueListOfVisibleObjectTileMeshes()
+        {
+            var tiles = from objectGroup in this.ObjectGroups
+                        where objectGroup.Visible == true
+                        from tmxObject in objectGroup.Objects
+                        where tmxObject.Visible == true
+                        let tmxObjectTile = tmxObject as TmxObjectTile
+                        where tmxObjectTile != null
+                        from tmxMesh in tmxObjectTile.Tile.Meshes
+                        select tmxMesh;
+
+            // Make list unique based on mesh name
+            return tiles.GroupBy(m => m.UniqueMeshName).Select(g => g.First()).ToList();
+        }
+
     }
 }

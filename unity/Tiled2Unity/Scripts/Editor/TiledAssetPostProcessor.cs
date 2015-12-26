@@ -34,7 +34,7 @@ namespace Tiled2Unity
             {
                 if (UseThisImporter(imported))
                 {
-                    //Debug.Log(string.Format("Imported: {0}", imported));
+                   //Debug.Log(string.Format("Imported: {0}", imported));
                 }
                 else
                 {
@@ -45,8 +45,8 @@ namespace Tiled2Unity
                 {
                     if (t2uImporter.IsTiled2UnityFile())
                     {
-                        // Start the import process by importing our textures and meshes
-                        t2uImporter.XmlImported(imported);
+                        // Start the import process. This will trigger textures and meshes to be imported as well.
+                        t2uImporter.ImportBegin(imported);
                     }
                     else if (t2uImporter.IsTiled2UnityTexture())
                     {
@@ -55,10 +55,13 @@ namespace Tiled2Unity
                     }
                     else if (t2uImporter.IsTiled2UnityWavefrontObj())
                     {
+                        // Now that the mesh has been imported we will build the prefab
                         t2uImporter.MeshImported(imported);
                     }
                     else if (t2uImporter.IsTiled2UnityPrefab())
                     {
+                        // Now the the prefab is built and imported we are done
+                        t2uImporter.ImportFinished(imported);
                         Debug.Log(string.Format("Imported prefab from Tiled map editor: {0}", imported));
                     }
                 }
@@ -74,12 +77,12 @@ namespace Tiled2Unity
 
             // Keep normals otherwise Unity will complain about needing them.
             // Normals may not be a bad idea anyhow
-            modelImporter.normalImportMode = ModelImporterTangentSpaceMode.Import;
+            modelImporter.importNormals = ModelImporterNormals.Import;
 
             // Don't need animations or tangents.
             modelImporter.generateAnimations = ModelImporterGenerateAnimations.None;
             modelImporter.animationType = ModelImporterAnimationType.None;
-            modelImporter.tangentImportMode = ModelImporterTangentSpaceMode.None;
+            modelImporter.importTangents = ModelImporterTangents.None;
 
             // Do not need mesh colliders on import.
             modelImporter.addCollider = false;
@@ -99,16 +102,13 @@ namespace Tiled2Unity
             {
                 mr.gameObject.AddComponent<SortingLayerExposed>();
 
-                // Also, no shadows
+                // No shadows
                 mr.receiveShadows = false;
-                ImportUtils.SetCastShadows(mr, false);
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-#if UNITY_4_0 || UNITY_4_0_1 || UNITY_4_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_4 || UNITY_4_5 || UNITY_4_6
-                // Do not set light probes or reflection probes in Unity 4.x
-#else
+                // No probes
                 mr.useLightProbes = false;
                 mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
-#endif
             }
         }
 

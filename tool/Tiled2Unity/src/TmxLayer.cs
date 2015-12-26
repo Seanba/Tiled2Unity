@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Tiled2Unity
 {
-    public partial class TmxLayer : TmxHasProperties
+    public partial class TmxLayer : TmxLayerBase
     {
         public enum IgnoreSettings
         {
@@ -17,8 +17,8 @@ namespace Tiled2Unity
             Visual,     // Ignore visual on layer
         };
 
-        public string DefaultName { get; private set; }
-        public string UniqueName { get; private set; }
+        public TmxMap TmxMap { get; private set; }
+        public string Name { get; private set; }
         public bool Visible { get; private set; }
         public float Opacity { get; private set; }
         public PointF Offset { get; private set; }
@@ -26,7 +26,12 @@ namespace Tiled2Unity
         public int Height { get; private set; }
         public IgnoreSettings Ignore { get; private set; }
         public uint[] TileIds { get; private set; }
-        public TmxProperties Properties { get; private set; }
+        public List<TmxMesh> Meshes { get; private set; }
+
+        public TmxLayer(TmxMap map)
+        {
+            this.TmxMap = map;
+        }
 
         public uint GetTileIdAt(int x, int y)
         {
@@ -38,8 +43,13 @@ namespace Tiled2Unity
         {
             Debug.Assert(x < this.Width && y < this.Height);
             Debug.Assert(x >= 0 && y >= 0);
-            int index = y * this.Width + x;
+            int index = GetTileIndex(x, y);
             return this.TileIds[index];
+        }
+
+        public int GetTileIndex(int x, int y)
+        {
+            return y * this.Width + x;
         }
 
     }

@@ -5,78 +5,58 @@ using System.Linq;
 using System.Text;
 
 using UnityEngine;
+using UnityEngine.Assertions;
 
 namespace Tiled2Unity
 {
     public class TileAnimator : MonoBehaviour
     {
-        [System.Serializable]
-        public class Frame
-        {
-            public int DurationMs = 0;
-            public float Vertex_z = 0;
-        }
+        public float StartTime = -1;
+        public float Duration = -1;
+        public float TotalAnimationTime = -1;
 
-        public List<Frame> frames = new List<Frame>();
-        private int currentFrameIndex = 0;
+        private float timer = 0;
 
         private void Start()
         {
-            this.currentFrameIndex = 0;
+            Assert.IsTrue(this.StartTime >= 0, "StartTime cannot be negative");
+            Assert.IsTrue(this.Duration > 0, "Duration must be positive and non-zero.");
+            Assert.IsTrue(this.TotalAnimationTime > 0, "Total time of animation must be positive non-zero");
 
-            if (this.frames.Count == 0)
+            this.timer = 0.0f;
+        }
+
+        private void Update()
+        {
+            this.timer += Time.deltaTime;
+
+            // Roll around the time if needed
+            while (this.timer > this.TotalAnimationTime)
             {
-                Debug.LogError(String.Format("TileAnimation on '{0}' has no frames.", this.name));
+                this.timer -= this.TotalAnimationTime;
+            }
+
+            // Should our mesh be rendered or not?
+            MeshRenderer renderer = this.gameObject.GetComponent<MeshRenderer>();
+            bool isEnabled = renderer.enabled;
+
+            if (timer >= this.StartTime && timer < (this.StartTime + this.Duration))
+            {
+                // Our mesh should be visible at this time
+                if (!isEnabled)
+                {
+                    renderer.enabled = true;
+                }
             }
             else
             {
-                StartCoroutine(AnimationRoutine());
-            }
-        }
-
-        private IEnumerator AnimationRoutine()
-        {
-            while (true)
-            {
-                Frame frame = this.frames[this.currentFrameIndex];
-
-                // Make the frame 'visible' by making negative 'z' vertex positions positive
-                ModifyVertices(-frame.Vertex_z);
-
-                // Wait until the next frame
-                float timeToWait = frame.DurationMs / 1000.0f;
-                yield return new WaitForSeconds(timeToWait);
-
-                // Make the frame 'invisible' again. Make matching positive 'z' values negative
-                ModifyVertices(frame.Vertex_z);
-
-                // Go to the next frame
-                this.currentFrameIndex = (this.currentFrameIndex + 1) % this.frames.Count;
-            }
-        }
-
-        // Find 'z' values on vertices that match and negate them
-        private void ModifyVertices(float z)
-        {
-            float negated = -z;
-
-            // Because meshes may be split we have to go over all them in our tree
-            MeshFilter[] meshFilters = GetComponentsInChildren<MeshFilter>();
-            foreach (var mf in meshFilters)
-            {
-
-                Vector3[] vertices = mf.mesh.vertices;
-                for (int i = 0; i < vertices.Length; ++i)
+                // Mesh should not be visible at this time
+                if (isEnabled)
                 {
-                    if (vertices[i].z == z)
-                    {
-                        vertices[i].z = negated;
-                    }
+                    renderer.enabled = false;
                 }
-
-                // Save the vertices back
-                mf.mesh.vertices = vertices;
             }
+
         }
 
     }

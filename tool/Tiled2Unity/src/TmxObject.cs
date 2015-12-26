@@ -16,6 +16,7 @@ namespace Tiled2Unity
         public SizeF Size { get; protected set; }
         public float Rotation { get; private set; }
         public TmxProperties Properties { get; private set; }
+        public TmxObjectGroup ParentObjectGroup { get; private set; }
 
         public string GetNonEmptyName()
         {

@@ -15,11 +15,19 @@ namespace Tiled2Unity
     // Concentrates on the Xml file being imported
     partial class ImportTiled2Unity
     {
-        public static readonly string ThisVersion = "0.9.13.0";
+        public static readonly string ThisVersion = "1.0.0.0";
 
-        public void XmlImported(string xmlPath)
+        // Called when Unity detects the *.tiled2unity.xml file needs to be (re)imported
+        public void ImportBegin(string xmlPath)
         {
-            XDocument xml = XDocument.Load(xmlPath);
+            // Normally, this is where we first create the XmlDocument for the whole import.
+            ImportBehaviour importBehaviour = ImportBehaviour.FindOrCreateImportBehaviour(xmlPath);
+            XDocument xml = importBehaviour.XmlDocument;
+            if (xml == null)
+            {
+                Debug.LogErrorFormat("GameObject {0} not successfully initialized. Is it left over from a previous import. Try removing from scene are re-importing {1}.", importBehaviour.gameObject.name, xmlPath);
+                return;
+            }
 
             CheckVersion(xmlPath, xml);
 
@@ -28,6 +36,15 @@ namespace Tiled2Unity
             ImportTexturesFromXml(xml);
             CreateMaterialsFromInternalTextures(xml);
             ImportMeshesFromXml(xml);
+        }
+
+        // Called when the import process has completed and we have a prefab ready to go
+        public void ImportFinished(string prefabPath)
+        {
+            // Get at the import behavour tied to this prefab and remove it from the scene
+            string xmlAssetPath = GetXmlImportAssetPath(prefabPath);
+            ImportBehaviour importBehaviour = ImportBehaviour.FindOrCreateImportBehaviour(xmlAssetPath);
+            importBehaviour.DestroyImportBehaviour();
         }
 
         private void CheckVersion(string xmlPath, XDocument xml)

@@ -11,56 +11,43 @@ namespace Tiled2Unity
     {
         private List<XElement> CreateAssignMaterialsElements()
         {
-            // Need to match all "submeshes" with a material
-            // The material will have the same name as the texture
-            // Each "submesh" is a Layer+Texture combination since Wavefront Obj meshes support only 1 set of texture coordinates
-            var faces = from layer in tmxMap.Layers
-                        where layer.Visible == true
-                        from y in Enumerable.Range(0, layer.Height)
-                        from x in Enumerable.Range(0, layer.Width)
-                        let tileId = layer.GetTileIdAt(x, y)
-                        where tileId != 0
-                        let tile = this.tmxMap.Tiles[tileId]
-                        select new
-                        {
-                            LayerName = layer.UniqueName,
-                            ImageName = Path.GetFileNameWithoutExtension(tile.TmxImage.Path),
-                            TransparentColor = tile.TmxImage.TransparentColor,
-                            SortingLayer = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", ""),
-                            SortingOrder = layer.Properties.GetPropertyValueAsInt("unity:sortingOrder", tmxMap.Layers.IndexOf(layer)),
-                        };
-
-            var groups = from f in faces
-                         group f by TiledMapExpoterUtils.UnityFriendlyMeshName(tmxMap, f.LayerName, f.ImageName);
-
-            var assignments = from g in groups
-                              select new
-                              {
-                                  MeshName = g.Key,
-                                  MaterialName = g.First().ImageName,
-                                  TransparentColor = g.First().TransparentColor,
-                                  SortingLayer = g.First().SortingLayer,
-                                  SortingOrder = g.First().SortingOrder,
-                              };
-
+            // Each mesh in each viewable layer needs to have its material assigned to it
             List<XElement> elements = new List<XElement>();
-            foreach (var ass in assignments)
+            foreach (var layer in this.tmxMap.Layers)
+            {
+                if (layer.Visible == false)
+                    continue;
+                if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
+                    continue;
+
+                foreach (TmxMesh mesh in layer.Meshes)
+                {
+                   XElement assignment =
+                        new XElement("AssignMaterial",
+                            new XAttribute("mesh", mesh.UniqueMeshName),
+                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
+
+                    // Is there a transparent color key?
+                    if (!String.IsNullOrEmpty(mesh.TmxImage.TransparentColor))
+                    {
+                        assignment.SetAttributeValue("alphaColorKey", mesh.TmxImage.TransparentColor);
+                    }
+
+                    elements.Add(assignment);
+                }
+            }
+
+            // Each mesh for each TileObject needs its material assigned
+            foreach (var tmxMesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
             {
                 XElement assignment =
-                    new XElement("AssignMaterial",
-                        new XAttribute("mesh", ass.MeshName),
-                        new XAttribute("material", ass.MaterialName),
-                        new XAttribute("sortingLayerName", ass.SortingLayer),
-                        new XAttribute("sortingOrder", ass.SortingOrder));
+                     new XElement("AssignMaterial",
+                         new XAttribute("mesh", tmxMesh.UniqueMeshName),
+                         new XAttribute("material", Path.GetFileNameWithoutExtension(tmxMesh.TmxImage.AbsolutePath)));
 
-                // Is there a transparent color key?
-                if (!String.IsNullOrEmpty(ass.TransparentColor))
-                {
-                    assignment.SetAttributeValue("alphaColorKey", ass.TransparentColor);
-                }
-
-                elements.Add(assignment);
+                    elements.Add(assignment);
             }
+
             return elements;
         }
     }

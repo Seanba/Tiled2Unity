@@ -34,7 +34,7 @@ namespace Tiled2Unity
                                  where rawTileId != 0
                                  let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
                                  let tile = this.tmxMap.Tiles[tileId]
-                                 select tile.TmxImage.Path;
+                                 select tile.TmxImage.AbsolutePath;
                 imagePaths = imagePaths.Distinct();
 
                 // Do not import files if they are already in the project (in the /Assets/ directory of where we're exporting too)

@@ -10,7 +10,7 @@ namespace Tiled2Unity
 {
     partial class TmxObject
     {
-        public static TmxObject FromXml(XElement xml, TmxMap tmxMap)
+        public static TmxObject FromXml(XElement xml, TmxObjectGroup tmxObjectGroup, TmxMap tmxMap)
         {
             Program.WriteLine("Parsing object ...");
             Program.WriteVerbose(xml.ToString());
@@ -44,6 +44,7 @@ namespace Tiled2Unity
             tmxObject.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
             tmxObject.Type = TmxHelper.GetAttributeAsString(xml, "type", "");
             tmxObject.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
+            tmxObject.ParentObjectGroup = tmxObjectGroup;
 
             float x = TmxHelper.GetAttributeAsFloat(xml, "x");
             float y = TmxHelper.GetAttributeAsFloat(xml, "y");

@@ -6,11 +6,10 @@ using System.Text;
 
 namespace Tiled2Unity
 {
-    public partial class TmxObjectGroup : TmxHasProperties
+    public partial class TmxObjectGroup : TmxLayerBase
     {
         public string Name { get; private set; }
         public bool Visible { get; private set; }
-        public TmxProperties Properties { get; private set; }
         public List<TmxObject> Objects { get; private set; }
         public Color Color { get; private set; }
         public PointF Offset { get; private set; }

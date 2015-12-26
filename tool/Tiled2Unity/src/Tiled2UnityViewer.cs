@@ -79,7 +79,7 @@ namespace Tiled2Unity
             // Take boundaries from objects embedded in tiles
             var tileBounds = from layer in tmxMap.Layers
                              where layer.Visible == true
-                             where IsLayerEnabled(layer.DefaultName)
+                             where IsLayerEnabled(layer.Name)
                              from y in Enumerable.Range(0, layer.Height)
                              from x in Enumerable.Range(0, layer.Width)
                              let tileId = layer.GetTileIdAt(x, y)
@@ -381,47 +381,12 @@ namespace Tiled2Unity
 
         private void DrawTiles(Graphics g)
         {
-            // Load all our tiled images
-            var images = from layer in this.tmxMap.Layers
-                         where layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false
-                         where layer.Ignore != TmxLayer.IgnoreSettings.Visual
-                         where layer.Visible == true
-                         where IsLayerEnabled(layer.DefaultName)
-                         from y in Enumerable.Range(0, layer.Height)
-                         from x in Enumerable.Range(0, layer.Width)
-                         let tileId = layer.GetTileIdAt(x, y)
-                         where tileId != 0
-                         let tile = this.tmxMap.Tiles[tileId]
-                         select new
-                         {
-                             Path = tile.TmxImage.Path,
-                             Trans = tile.TmxImage.TransparentColor,
-                         };
-            images = images.Distinct();
-
-            Dictionary<string, Bitmap> tileSetBitmaps = new Dictionary<string, Bitmap>();
-            foreach (var img in images)
-            {
-                Bitmap bmp = (Bitmap)Bitmap.FromFile(img.Path);
-
-                if (!String.IsNullOrEmpty(img.Trans))
-                {
-                    System.Drawing.Color transColor = System.Drawing.ColorTranslator.FromHtml(img.Trans);
-                    bmp.MakeTransparent(transColor);
-                }
-
-                tileSetBitmaps.Add(img.Path, bmp);
-            }
-
             foreach (TmxLayer layer in this.tmxMap.Layers)
             {
                 if (layer.Visible == false)
                     continue;
 
-                if (IsLayerEnabled(layer.DefaultName) == false)
-                    continue;
-
-                if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == true)
+                if (IsLayerEnabled(layer.Name) == false)
                     continue;
 
                 if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
@@ -459,13 +424,13 @@ namespace Tiled2Unity
                             let tile = this.tmxMap.Tiles[tileId]
 
                             // Support for animated tiles. Just show the first frame of the animation.
-                            let frame = (tile.Animation == null) ? tile : this.tmxMap.Tiles[tile.Animation.Frames[0].GlobalTileId]
+                            let frame = this.tmxMap.Tiles[tile.Animation.Frames[0].GlobalTileId]
 
                             select new
                             {
                                 Tile = frame,
                                 Position = TmxMath.TileCornerInScreenCoordinates(this.tmxMap, x, y),
-                                Bitmap = tileSetBitmaps[frame.TmxImage.Path],
+                                Bitmap = frame.TmxImage.ImageBitmap,
                                 IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
                                 IsFlippedHorizontally = TmxMath.IsTileFlippedHorizontally(rawTileId),
                                 IsFlippedVertically = TmxMath.IsTileFlippedVertically(rawTileId),
@@ -509,8 +474,6 @@ namespace Tiled2Unity
 
                 g.Restore(state);
             }
-
-            tileSetBitmaps.Clear();
         }
 
         private void DrawColliders(Graphics g)
@@ -518,9 +481,9 @@ namespace Tiled2Unity
             for (int l = 0; l < this.tmxMap.Layers.Count; ++l)
             {
                 TmxLayer layer = this.tmxMap.Layers[l];
-                if (layer.Visible == true && IsLayerEnabled(layer.DefaultName) && layer.Ignore != TmxLayer.IgnoreSettings.Collision)
+                if (layer.Visible == true && IsLayerEnabled(layer.Name) && layer.Ignore != TmxLayer.IgnoreSettings.Collision)
                 {
-                    Color lineColor = this.preferencesForm.GetLayerColor(layer.DefaultName);
+                    Color lineColor = this.preferencesForm.GetLayerColor(layer.Name);
                     Color polyColor = Color.FromArgb(128, lineColor);
                     DrawLayerColliders(g, layer, polyColor, lineColor);
                 }
@@ -581,7 +544,10 @@ namespace Tiled2Unity
 
                 foreach (var obj in objGroup.Objects)
                 {
-                    DrawObjectCollider(g, obj, objGroup.Color);
+                    if (obj.Visible)
+                    {
+                        DrawObjectCollider(g, obj, objGroup.Color);
+                    }
                 }
 
                 g.Restore(state);
@@ -629,15 +595,46 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
+                    GraphicsState tileState = g.Save();
                     TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
 
-                    RectangleF rcTile = new RectangleF();
-                    rcTile.X = 0;
-                    rcTile.Y = -tmxObjectTile.Tile.TileSize.Height;
-                    rcTile.Size = tmxObjectTile.Tile.TileSize;
+                    // Apply scale
+                    SizeF scale = tmxObjectTile.GetTileObjectScale();
+                    g.ScaleTransform(scale.Width, scale.Height);
 
-                    g.FillRectangle(brush, rcTile);
-                    g.DrawRectangle(pen, rcTile.X, rcTile.Y, rcTile.Width - 1, rcTile.Height - 1);
+                    // Apply horizontal flip
+                    if (tmxObjectTile.FlippedHorizontal)
+                    {
+                        g.TranslateTransform(tmxObjectTile.Tile.TileSize.Width, 0);
+                        g.ScaleTransform(-1, 1);
+                    }
+
+                    // Apply vertical flip
+                    if (tmxObjectTile.FlippedVertical)
+                    {
+                        g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
+                        g.ScaleTransform(1, -1);
+                    }
+
+                    // (Note: Now we can draw the tile and collisions as normal as the transforms have been set up.)
+
+                    // Draw the tile
+                    Rectangle destination = new Rectangle(0, -tmxObjectTile.Tile.TileSize.Height, tmxObjectTile.Tile.TileSize.Width, tmxObjectTile.Tile.TileSize.Height);
+                    Rectangle source = new Rectangle(tmxObjectTile.Tile.LocationOnSource, tmxObjectTile.Tile.TileSize);
+                    g.DrawImage(tmxObjectTile.Tile.TmxImage.ImageBitmap, destination, source, GraphicsUnit.Pixel);
+
+                    // Put a black border around the tile so it sticks out a bit as an object
+                    g.DrawRectangle(Pens.Black, destination);
+
+                    // Draw the collisions
+                    // Make up for the fact that the bottom-left corner is the origin
+                    g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
+                    foreach (var obj in tmxObjectTile.Tile.ObjectGroup.Objects)
+                    {
+                        DrawObjectCollider(g, obj, Color.Gray);
+                    }
+
+                    g.Restore(tileState);
                 }
                 else
                 {

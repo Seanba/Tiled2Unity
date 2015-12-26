@@ -10,6 +10,7 @@ namespace Tiled2Unity
     public partial class TmxAnimation
     {
         public List<TmxFrame> Frames { get; private set; }
+        public int TotalTimeMs { get; private set; }
 
         public TmxAnimation()
         {
@@ -24,7 +25,19 @@ namespace Tiled2Unity
             {
                 TmxFrame tmxFrame = TmxFrame.FromXml(xmlFrame, globalStartId);
                 tmxAnimation.Frames.Add(tmxFrame);
+                tmxAnimation.TotalTimeMs += tmxFrame.DurationMs;
             }
+
+            return tmxAnimation;
+        }
+
+        // Returns an single frame animation
+        public static TmxAnimation FromTileId(uint globalTileId)
+        {
+            TmxAnimation tmxAnimation = new TmxAnimation();
+
+            TmxFrame tmxFrame = TmxFrame.FromTileId(globalTileId);
+            tmxAnimation.Frames.Add(tmxFrame);
 
             return tmxAnimation;
         }

@@ -62,7 +62,7 @@ namespace Tiled2Unity
             {
                 if (groupIndex % 5 == 0)
                 {
-                    progFunc(String.Format("Clipping '{0}' polygons: {1}%", tmxLayer.UniqueName, (groupIndex / (float)groupCount) * 100));
+                    progFunc(String.Format("Clipping '{0}' polygons: {1}%", tmxLayer.Name, (groupIndex / (float)groupCount) * 100));
                 }
                 groupIndex++;
 
@@ -76,7 +76,7 @@ namespace Tiled2Unity
                     ClipperPolygon clipperPolygon = new ClipperPolygon();
 
                     // Our points may be transformed due to tile flipping/rotation
-                    // Before we transform then we put all the points into local space relative to the tile
+                    // Before we transform them we put all the points into local space relative to the tile
                     SizeF offset = new SizeF(poly.TmxObjectInterface.Position);
                     PointF[] transformedPoints = poly.HasPointsInterface.Points.Select(pt => PointF.Add(pt, offset)).ToArray();
 
@@ -107,7 +107,7 @@ namespace Tiled2Unity
                 fullClipper.AddPaths(Clipper.ClosedPathsFromPolyTree(solution), PolyType.ptSubject, true);
                 fullClipper.AddPaths(Clipper.OpenPathsFromPolyTree(solution), PolyType.ptSubject, false);
             }
-            progFunc(String.Format("Clipping '{0}' polygons: 100%", tmxLayer.UniqueName));
+            progFunc(String.Format("Clipping '{0}' polygons: 100%", tmxLayer.Name));
 
             ClipperLib.PolyTree fullSolution = new ClipperLib.PolyTree();
             fullClipper.Execute(ClipperLib.ClipType.ctUnion, fullSolution, LayerClipper.SubjectFillRule, LayerClipper.ClipFillRule);

@@ -10,7 +10,7 @@ namespace Tiled2Unity
     // partial class methods that build tile data from xml
     partial class TmxTile
     {
-        public void ParseXml(XElement elem, TmxMap tmxMap, uint firstId)
+        public void ParseTileXml(XElement elem, TmxMap tmxMap, uint firstId)
         {
             Program.WriteLine("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
             Program.WriteVerbose(elem.ToString());

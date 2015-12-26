@@ -17,6 +17,9 @@ namespace Tiled2Unity
 
             TmxObjectGroup tmxObjectGroup = new TmxObjectGroup();
 
+            // Order within Xml file is import for layer types
+            tmxObjectGroup.XmlElementIndex = xml.NodesBeforeSelf().Count();
+
             tmxObjectGroup.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
             tmxObjectGroup.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
             tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
@@ -30,7 +33,7 @@ namespace Tiled2Unity
             // Get all the objects
             Program.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
             var objects = from obj in xml.Elements("object")
-                            select TmxObject.FromXml(obj, tmxMap);
+                          select TmxObject.FromXml(obj, tmxObjectGroup, tmxMap);
 
             tmxObjectGroup.Objects = objects.ToList();
 

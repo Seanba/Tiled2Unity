@@ -10,9 +10,9 @@ namespace Tiled2Unity
 {
     class TmxMath
     {
-        static private readonly uint FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
-        static private readonly uint FLIPPED_VERTICALLY_FLAG = 0x40000000;
-        static private readonly uint FLIPPED_DIAGONALLY_FLAG = 0x20000000;
+        static public readonly uint FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
+        static public readonly uint FLIPPED_VERTICALLY_FLAG = 0x40000000;
+        static public readonly uint FLIPPED_DIAGONALLY_FLAG = 0x20000000;
 
         static public uint GetTileIdWithoutFlags(uint tileId)
         {
@@ -232,6 +232,11 @@ namespace Tiled2Unity
         public static PointF AddPoints(PointF a, PointF b)
         {
             return new PointF(a.X + b.X, a.Y + b.Y);
+        }
+
+        public static PointF ScalePoints(PointF p, float s)
+        {
+            return new PointF(p.X * s, p.Y * s);
         }
 
         public static List<PointF> GetPointsInMapSpace(TmxMap tmxMap, TmxHasPoints objectWithPoints)

@@ -1,11 +1,14 @@
-﻿using System;
+﻿// This file is used for scripting and is dependent on TILED_2_UNITY_SCRIPT conditional compile flag
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
+
+#if !TILED_2_UNITY_SCRIPT
+using System.Reflection;
+#endif
 
 namespace Tiled2Unity
 {
@@ -28,10 +31,10 @@ namespace Tiled2Unity
 
         static private readonly float DefaultTexelBias = 8192.0f;
 
-        // The distance between "layers" in our meshes
-        static public readonly float Vertex_ZScale = 1.0f / 256.0f;
-
+#if !TILED_2_UNITY_SCRIPT
+        // AutoExport is redundant in Tiled2UnityScript 
         static public bool AutoExport { get; private set; }
+#endif
         static public float Scale { get; set; }
         static public float TexelBias { get; private set; }
         static public bool Verbose { get; private set; }
@@ -44,16 +47,23 @@ namespace Tiled2Unity
 
         static private NDesk.Options.OptionSet Options = new NDesk.Options.OptionSet()
             {
+#if !TILED_2_UNITY_SCRIPT
                 { "a|auto-export", "Automatically export to UNITYDIR and close.", ae => Program.AutoExport = true },
+#endif
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
-                { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\nA value of 2048 has been useful for shaders that show seams.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
+                { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
                 { "v|verbose", "Print verbose messages.", v => Program.Verbose = true },
                 { "h|help", "Display this help message.", h => Program.Help = true },
             };
 
-        /// <summary>
-        /// The main entry point for the application.
-        /// </summary>
+#if TILED_2_UNITY_SCRIPT
+        // Scripting main
+        static void Main(string[] args)
+        {
+            Console.WriteLine("fixit - hello Tiled2Unity scripting world");
+        }
+#else
+        // Windows exe main
         [STAThread]
         static void Main(string[] args)
         {
@@ -65,8 +75,12 @@ namespace Tiled2Unity
             SetCulture();
 
             // Default options
+#if TILED_2_UNITY_SCRIPT
+            Program.Scale = 1.0f;
+#else
             Program.AutoExport = false;
             Program.Scale = -1.0f;
+#endif
             Program.TexelBias = DefaultTexelBias;
             Program.Verbose = false;
             Program.Help = false;
@@ -82,6 +96,7 @@ namespace Tiled2Unity
                 Application.Run(form);
             }
         }
+#endif
 
         public static bool ParseOptions(string[] args)
         {
@@ -89,6 +104,7 @@ namespace Tiled2Unity
             List<string> extra = Program.Options.Parse(args);
 
             // If we didn''t overide scale then use the old value
+#if !TILED_2_UNITY_SCRIPT
             if (Program.Scale <= 0.0f)
             {
                 if (Properties.Settings.Default.LastVertexScale > 0)
@@ -106,8 +122,9 @@ namespace Tiled2Unity
                 Properties.Settings.Default.LastVertexScale = Program.Scale;
                 Properties.Settings.Default.Save();
             }
+#endif
 
-            // First left over option must exist and it is the TMX file we are exporting
+            // First left over option is the TMX file we are exporting
             if (extra.Count() == 0)
             {
                 Program.WriteLine("Missing TMXPATH argument.");
@@ -124,6 +141,7 @@ namespace Tiled2Unity
                 if (!File.Exists(Program.TmxPath))
                 {
                     Program.WriteError("TMXPATH file '{0}' does not exist.", Program.TmxPath);
+                    Program.TmxPath = null;
                     PrintHelp();
                     return false;
                 }
@@ -131,7 +149,7 @@ namespace Tiled2Unity
                 extra.RemoveAt(0);
             }
 
-            // The next 'left over' option is the Unity project that we are exporting to
+            // The next 'left over' option is the Tiled2Unity folder of the Unity project that we are exporting to
             if (extra.Count() > 0)
             {
                 Program.ExportUnityProjectDir = Path.GetFullPath(extra[0]);
@@ -139,18 +157,21 @@ namespace Tiled2Unity
                 if (!Directory.Exists(Program.ExportUnityProjectDir))
                 {
                     Program.WriteError("UNITYDIR Unity Tiled2Unity Project Directory '{0}' does not exist", Program.ExportUnityProjectDir);
+                    Program.ExportUnityProjectDir = null;
                     PrintHelp();
                     return false;
                 }
                 if (!File.Exists(Path.Combine(Program.ExportUnityProjectDir, "Tiled2Unity.export.txt")))
                 {
                     Program.WriteError("UNITYDIR '{0}' is not a Tiled2Unity Unity Project folder", Program.ExportUnityProjectDir);
+                    Program.ExportUnityProjectDir = null;
                     PrintHelp();
                     return false;
                 }
 
                 extra.RemoveAt(0);
             }
+#if !TILED_2_UNITY_SCRIPT
             else if (Program.AutoExport)
             {
                 // If we are auto-exporting then this arugment *must* be present (and it isn't so bail)
@@ -158,6 +179,7 @@ namespace Tiled2Unity
                 PrintHelp();
                 return false;
             }
+#endif
 
             // Do we have any other options left over? We shouldn't.
             if (extra.Count() > 0)
@@ -283,12 +305,14 @@ namespace Tiled2Unity
             return String.Format("{0}.tiled2unity.xml", tmxMap.Name);
         }
 
+#if !TILED_2_UNITY_SCRIPT
         public static string GetVersion()
         {
             var thisApp = Assembly.GetExecutingAssembly();
             AssemblyName name = new AssemblyName(thisApp.FullName);
             return name.Version.ToString();
         }
+#endif
 
         static private void StartLogging(string[] args)
         {
@@ -325,6 +349,7 @@ namespace Tiled2Unity
             System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
         }
 
+#if !TILED_2_UNITY_SCRIPT
         static private bool PrintVersionOnly(string[] args)
         {
             if (args != null && args.Count() == 1)
@@ -339,6 +364,7 @@ namespace Tiled2Unity
 
             return false;
         }
+#endif
 
         static private float ParseFloatDefault(string str, float defaultValue)
         {

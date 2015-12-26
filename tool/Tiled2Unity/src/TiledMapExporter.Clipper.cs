@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Text;
-using System.Windows.Media.Media3D;
 using System.Xml.Linq;
 
 using ClipperLib;
@@ -31,7 +30,7 @@ namespace Tiled2Unity
                 delegate(float x, float y)
                 {
                     // Transform point to Unity space
-                    Vector3D pointUnity3d = PointFToUnityVector_NoScale(new PointF(x, y));
+                    PointF pointUnity3d = PointFToUnityVector_NoScale(new PointF(x, y));
                     IntPoint point = new IntPoint(pointUnity3d.X, pointUnity3d.Y);
                     return point;
                 };

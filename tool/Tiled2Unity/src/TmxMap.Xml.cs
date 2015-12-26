@@ -14,9 +14,6 @@ namespace Tiled2Unity
     {
         public static TmxMap LoadFromFile(string tmxPath)
         {
-            // Refresh uniqueId counter
-            TmxMap.NextUniqueId = 0;
-
             string fullTmxPath = Path.GetFullPath(tmxPath);
             using (ChDir chdir = new ChDir(fullTmxPath))
             {
@@ -24,7 +21,7 @@ namespace Tiled2Unity
                 XDocument doc = tmxMap.LoadDocument(fullTmxPath);
 
                 tmxMap.Name = Path.GetFileNameWithoutExtension(fullTmxPath);
-                tmxMap.ParseMap(doc);
+                tmxMap.ParseMapXml(doc);
 
                 // We're done reading and parsing the tmx file
                 Program.WriteLine("Map details: {0}", tmxMap.ToString());
@@ -61,10 +58,10 @@ namespace Tiled2Unity
             return doc;
         }
 
-        private void ParseMap(XDocument doc)
+        private void ParseMapXml(XDocument doc)
         {
             Program.WriteLine("Parsing map root ...");
-            Program.WriteVerbose(doc.ToString());
+            //Program.WriteVerbose(doc.ToString()); // Some TMX files are far too big (cause out of memory exception) so don't do this
             XElement map = doc.Element("map");
             try
             {
@@ -91,6 +88,9 @@ namespace Tiled2Unity
             ParseAllTilesets(doc);
             ParseAllLayers(doc);
             ParseAllObjectGroups(doc);
+
+            // Once everything is loaded, take a moment to do additional plumbing
+            ParseCompleted();
         }
 
         private void ParseAllTilesets(XDocument doc)
@@ -160,7 +160,6 @@ namespace Tiled2Unity
             if (elemTileset.Element("image") != null)
             {
                 TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"));
-                RegisterImagePath(tmxImage.Path);
 
                 // Create all the tiles
                 // This is a bit complicated because of spacing and margin
@@ -185,7 +184,6 @@ namespace Tiled2Unity
                 foreach (var t in elemTileset.Elements("tile"))
                 {
                     TmxImage tmxImage = TmxImage.FromXml(t.Element("image"));
-                    RegisterImagePath(tmxImage.Path);
 
                     uint localId = (uint)tilesToAdd.Count();
                     uint globalId = firstId + localId;
@@ -214,7 +212,7 @@ namespace Tiled2Unity
                 var tiles = from t in this.Tiles
                             where t.Value.GlobalId == localTileId + firstId
                             select t.Value;
-                tiles.First().ParseXml(elemTile, this, firstId);
+                tiles.First().ParseTileXml(elemTile, this, firstId);
             }
         }
 
@@ -240,7 +238,6 @@ namespace Tiled2Unity
             }
 
             TmxImage tmxImage = TmxImage.FromXml(xmlImage);
-            RegisterImagePath(tmxImage.Path);
 
             uint firstId = this.Tiles.Max(t => t.Key) + 1;
             uint localId = 1;
@@ -263,27 +260,14 @@ namespace Tiled2Unity
 
             foreach (var lay in layers)
             {
-                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this, this.Layers.Count);
+                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this);
 
                 // Layers may be ignored
                 if (tmxLayer.Ignore == TmxLayer.IgnoreSettings.True)
                 {
                     // We don't care about this layer
-                    Program.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.UniqueName);
+                    Program.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.Name);
                     continue;
-                }
-
-                int maxVertices = 65535;
-                int numVertices = (from tileId in tmxLayer.TileIds
-                                   where tileId != 0
-                                   select tileId).Count() * 4;
-                if (numVertices > maxVertices)
-                {
-                    Program.WriteWarning("Layer '{0}' will have more than {1} vertices (vertex count = {2}) and will be split into {3} parts by Unity.",
-                        tmxLayer.UniqueName,
-                        maxVertices,
-                        numVertices,
-                        numVertices / maxVertices + 1);
                 }
 
                 this.Layers.Add(tmxLayer);
@@ -300,6 +284,24 @@ namespace Tiled2Unity
             {
                 TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
                 this.ObjectGroups.Add(tmxObjectGroup);
+            }
+        }
+
+        private void ParseCompleted()
+        {
+            // Every "layer type" instance needs its sort ordering figured out
+            var layers = new List<TmxLayerBase>();
+            layers.AddRange(this.Layers);
+            layers.AddRange(this.ObjectGroups);
+
+            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
+            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
+
+            for (int i = 0; i < layers.Count(); ++i)
+            {
+                TmxLayerBase layer = layers[i];
+                layer.SortingLayerName = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
+                layer.SortingOrder = layer.Properties.GetPropertyValueAsInt("unity:sortingOrder", i);
             }
         }
 

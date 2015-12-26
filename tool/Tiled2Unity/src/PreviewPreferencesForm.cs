@@ -32,7 +32,7 @@ namespace Tiled2Unity
             {
                 if (layer.Visible)
                 {
-                    string name = layer.DefaultName;
+                    string name = layer.Name;
                     System.Drawing.Color color = layers2Colors.ContainsKey(name) ? layers2Colors[name] : defaultColor;
                     this.Preferences.Add(new LayerPreference() { Name = name, Previewing = true, Color = color, CanEditColor = true });
                 }

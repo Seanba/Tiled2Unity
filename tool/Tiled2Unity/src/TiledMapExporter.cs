@@ -9,7 +9,6 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Reflection;
-using System.Windows.Media.Media3D;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -113,19 +112,19 @@ namespace Tiled2Unity
             Program.WriteSuccess("Succesfully exported: {0}\n  vertex scale = {1}", pathToSave, Program.Scale);
         }
 
-        public static Vector3D PointFToUnityVector_NoScale(PointF pt)
+        public static PointF PointFToUnityVector_NoScale(PointF pt)
         {
             // Unity's coordinate sytem has y-up positive, y-down negative
             // Have to watch for negative zero, ffs
-            return new Vector3D(pt.X, pt.Y == 0 ? 0 : -pt.Y, 0.0f);
+            return new PointF(pt.X, pt.Y == 0 ? 0 : -pt.Y);
         }
 
-        public static Vector3D PointFToUnityVector(float x, float y)
+        public static PointF PointFToUnityVector(float x, float y)
         {
             return PointFToUnityVector(new PointF(x, y));
         }
 
-        public static Vector3D PointFToUnityVector(PointF pt)
+        public static PointF PointFToUnityVector(PointF pt)
         {
             // Unity's coordinate sytem has y-up positive, y-down negative
             // Apply scaling
@@ -134,20 +133,19 @@ namespace Tiled2Unity
             scaled.Y *= Program.Scale;
 
             // Have to watch for negative zero, ffs
-            return new Vector3D(scaled.X, scaled.Y == 0 ? 0 : -scaled.Y, 0.0f);
+            return new PointF(scaled.X, scaled.Y == 0 ? 0 : -scaled.Y);
         }
 
-        public static Vector3D PointFToObjVertex(PointF pt, float pos_z)
+        public static PointF PointFToObjVertex(PointF pt)
         {
             // Note, we negate the x and y due to Wavefront's coordinate system
             // Applying scaling
             PointF scaled = pt;
             scaled.X *= Program.Scale;
             scaled.Y *= Program.Scale;
-            float scaled_z = pos_z * Program.Vertex_ZScale;
 
             // Watch for negative zero, ffs
-            return new Vector3D(scaled.X == 0 ? 0 : -scaled.X, scaled.Y == 0 ? 0 : -scaled.Y, scaled_z);
+            return new PointF(scaled.X == 0 ? 0 : -scaled.X, scaled.Y == 0 ? 0 : -scaled.Y);
         }
 
         public static PointF PointToTextureCoordinate(PointF pt, Size imageSize)

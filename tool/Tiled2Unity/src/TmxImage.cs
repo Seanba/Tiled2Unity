@@ -8,8 +8,9 @@ namespace Tiled2Unity
 {
     public partial class TmxImage
     {
-        public string Path { get; private set; }
+        public string AbsolutePath { get; private set; }
         public Size Size { get; private set; }
         public String TransparentColor { get; set; }
+        public Bitmap ImageBitmap { get; private set; }
     }
 }

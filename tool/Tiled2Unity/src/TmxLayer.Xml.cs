@@ -13,15 +13,17 @@ namespace Tiled2Unity
     // Partial class methods for building layer data from xml strings or files
     partial class TmxLayer
     {
-        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap, int layerIndex)
+        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap)
         {
             Program.WriteVerbose(elem.ToString());
-            TmxLayer tmxLayer = new TmxLayer();
+            TmxLayer tmxLayer = new TmxLayer(tmxMap);
+
+            // Order within Xml file is import for layer types
+            tmxLayer.XmlElementIndex = elem.NodesBeforeSelf().Count();
 
             // Have to decorate layer names in order to force them into being unique
             // Also, can't have whitespace in the name because Unity will add underscores
-            tmxLayer.DefaultName = TmxHelper.GetAttributeAsString(elem, "name");
-            tmxLayer.UniqueName = String.Format("{0}_{1}", tmxLayer.DefaultName, layerIndex.ToString("D2")).Replace(" ", "_");
+            tmxLayer.Name = TmxHelper.GetAttributeAsString(elem, "name");
 
             tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
             tmxLayer.Opacity = TmxHelper.GetAttributeAsFloat(elem, "opacity", 1);
@@ -31,6 +33,7 @@ namespace Tiled2Unity
             offset.Y = TmxHelper.GetAttributeAsFloat(elem, "offsety", 0);
             tmxLayer.Offset = offset;
 
+            // Set our properties
             tmxLayer.Properties = TmxProperties.FromXml(elem);
 
             // Set the "ignore" setting on this layer
@@ -48,7 +51,7 @@ namespace Tiled2Unity
                 XElement xmlImage = elem.Element("image");
                 if (xmlImage == null)
                 {
-                    Program.WriteWarning("Image Layer '{0}' is being ignored since it has no image.", tmxLayer.DefaultName);
+                    Program.WriteWarning("Image Layer '{0}' is being ignored since it has no image.", tmxLayer.Name);
                     tmxLayer.Ignore = IgnoreSettings.True;
                     return tmxLayer;
                 }
@@ -59,7 +62,7 @@ namespace Tiled2Unity
 
                 // Find the "tile" that matches our image
                 string imagePath = TmxHelper.GetAttributeAsFullPath(elem.Element("image"), "source");
-                TmxTile tile = tmxMap.Tiles.First(t => t.Value.TmxImage.Path == imagePath).Value;
+                TmxTile tile = tmxMap.Tiles.First(t => t.Value.TmxImage.AbsolutePath == imagePath).Value;
                 tmxLayer.TileIds = new uint[1] { tile.GlobalId };
 
                 // The image layer needs to be tranlated in an interesting way when expressed as a tile layer
@@ -83,12 +86,15 @@ namespace Tiled2Unity
                 tmxLayer.Offset = translated;
             }
 
+            // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
+            tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
+
             return tmxLayer;
         }
 
         private void ParseData(XElement elem)
         {
-            Program.WriteLine("Parse {0} layer data ...", this.UniqueName);
+            Program.WriteLine("Parse {0} layer data ...", this.Name);
             Program.WriteVerbose(elem.ToString());
 
             string encoding = TmxHelper.GetAttributeAsString(elem, "encoding", "");
@@ -115,7 +121,7 @@ namespace Tiled2Unity
             }
             else
             {
-                TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.UniqueName);
+                TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.Name);
             }
         }
 

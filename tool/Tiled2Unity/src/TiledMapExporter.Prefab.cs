@@ -4,7 +4,6 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Windows.Media.Media3D;
 using System.Xml.Linq;
 
 
@@ -21,6 +20,9 @@ namespace Tiled2Unity
             Object,
         }
 
+        // Helper delegate to modify points by some transformation
+        private delegate void TransformVerticesFunc(PointF[] verts);
+
         private XElement CreatePrefabElement()
         {
             // And example of the kind of xml element we're building
@@ -28,8 +30,8 @@ namespace Tiled2Unity
             //  <Prefab name="NameOfTmxFile">
             //
             //    <GameObject name="FirstLayerName tag="OptionalTagName" layer="OptionalUnityLayerName">
-            //      <GameObject Copy="FirstLayerName+FirstTilesetName" />
-            //      <GameObject Copy="FirstLayerName+SecondTilesetName" />
+            //      <GameObject Copy="[mesh_name]" />
+            //      <GameObject Copy="[another_mesh_name]" />
             //      <GameOject name="Collision">
             //        <PolygonCollider2D>
             //          <Path>data for first path</Path>
@@ -39,7 +41,7 @@ namespace Tiled2Unity
             //    </GameObject>
             //
             //    <GameObject name="SecondLayerName">
-            //      <GameObject Copy="SecondLayerName+AnotherTilesetName" />
+            //      <GameObject Copy="[yet_another_mesh_name]" />
             //    </GameObject>
             //
             //    <GameObject name="Colliders">
@@ -79,16 +81,15 @@ namespace Tiled2Unity
                     if (layer.Visible == false)
                         continue;
 
-                    Vector3D offset = PointFToUnityVector(layer.Offset);
+                    PointF offset = PointFToUnityVector(layer.Offset);
 
                     XElement layerElement =
                         new XElement("GameObject",
-                            new XAttribute("name", layer.UniqueName),
+                            new XAttribute("name", layer.Name),
                             new XAttribute("x", offset.X),
                             new XAttribute("y", offset.Y));
 
-                    if (layer.Properties.GetPropertyValueAsBoolean("unity:collisionOnly", false) == false && 
-                        layer.Ignore != TmxLayer.IgnoreSettings.Visual)
+                    if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
                     {
                         // Submeshes for the layer (layer+material)
                         var meshElements = CreateMeshElementsForLayer(layer);
@@ -124,7 +125,7 @@ namespace Tiled2Unity
                     XElement gameObject = new XElement("GameObject", new XAttribute("name", objGroup.Name));
 
                     // Offset the object group
-                    Vector3D offset = PointFToUnityVector(objGroup.Offset);
+                    PointF offset = PointFToUnityVector(objGroup.Offset);
                     gameObject.SetAttributeValue("x", offset.X);
                     gameObject.SetAttributeValue("y", offset.Y);
 
@@ -160,7 +161,7 @@ namespace Tiled2Unity
 
                 // Transform object locaction into map space (needed for isometric and hex modes) 
                 PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
-                Vector3D pos = PointFToUnityVector(xfPosition);
+                PointF pos = PointFToUnityVector(xfPosition);
                 xmlObject.SetAttributeValue("x", pos.X);
                 xmlObject.SetAttributeValue("y", pos.Y);
                 xmlObject.SetAttributeValue("rotation", tmxObject.Rotation);
@@ -216,40 +217,26 @@ namespace Tiled2Unity
 
         private List<XElement> CreateMeshElementsForLayer(TmxLayer layer)
         {
-            // Mesh elements look like this:
-            // <GameObject copy="LayerName+TilesetName" />
-            // (The importer in Unity will look a submesh of that name and copy it to our prefab)
-            // (This is complicated by potential tile animations now)
-
-            var meshes = from rawTileId in layer.TileIds
-                         where rawTileId != 0
-                         let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                         let tile = this.tmxMap.Tiles[tileId]
-                         let name = TiledMapExpoterUtils.UnityFriendlyMeshName(tmxMap, layer.UniqueName, Path.GetFileNameWithoutExtension(tile.TmxImage.Path))
-                         group tile.Animation by name into meshGroup
-                         select meshGroup;
-
             List<XElement> xmlMeshes = new List<XElement>();
-            foreach (var m in meshes)
+
+            foreach (TmxMesh mesh in layer.Meshes)
             {
-                XElement xmlMesh = new XElement("GameObject",new XAttribute("copy", m.Key), new XAttribute("opacity", layer.Opacity));
-
-                // Do we have any animations?
-                var animations = m.Distinct();
-                foreach (var anim in animations)
-                {
-                    if (anim != null)
-                    {
-                        XElement xmlAnim = new XElement("TileAnimator");
-                        foreach (var frame in anim.Frames)
-                        {
-                            xmlAnim.Add(new XElement("Frame", new XAttribute("vertex_z", frame.UniqueFrameId * Program.Vertex_ZScale), new XAttribute("duration", frame.DurationMs)));
-                        }
-                        xmlMesh.Add(xmlAnim);
-                    }
-                }
-
+                XElement xmlMesh = new XElement("GameObject",
+                    new XAttribute("name", mesh.ObjectName),
+                    new XAttribute("copy", mesh.UniqueMeshName),
+                    new XAttribute("sortingLayerName", layer.SortingLayerName),
+                    new XAttribute("sortingOrder", layer.SortingOrder),
+                    new XAttribute("opacity", layer.Opacity));
                 xmlMeshes.Add(xmlMesh);
+
+                if (mesh.FullAnimationDurationMs > 0)
+                {
+                    XElement xmlAnimation = new XElement("TileAnimator",
+                        new XAttribute("startTimeMs", mesh.StartTimeMs),
+                        new XAttribute("durationMs", mesh.DurationMs),
+                        new XAttribute("fullTimeMs", mesh.FullAnimationDurationMs));
+                    xmlMesh.Add(xmlAnimation);
+                }
             }
 
             return xmlMeshes;
@@ -382,7 +369,6 @@ namespace Tiled2Unity
             xml.Add(xmlProperties);
         }
 
-
         private XElement CreateBoxColliderElement(TmxObjectRectangle tmxRectangle)
         {
             XElement xmlCollider =
@@ -427,10 +413,10 @@ namespace Tiled2Unity
             return polygonCollider;
         }
 
-        private XElement CreateEdgeColliderElement(TmxObjectPolyline tmxPolyine)
+        private XElement CreateEdgeColliderElement(TmxObjectPolyline tmxPolyline)
         {
             // The points need to be transformed into unity space
-            var points = from pt in TmxMath.GetPointsInMapSpace(this.tmxMap, tmxPolyine)
+            var points = from pt in TmxMath.GetPointsInMapSpace(this.tmxMap, tmxPolyline)
                          select PointFToUnityVector(pt);
 
             XElement edgeCollider =
@@ -440,24 +426,34 @@ namespace Tiled2Unity
             return edgeCollider;
         }
 
-        private void AddTileObjectElements(TmxObjectTile tmxTile, XElement xmlTileObject)
+        private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot)
         {
             // We combine the properties of the tile that is referenced and add it to our own properties
-            AssignTiledProperties(tmxTile.Tile, xmlTileObject);
+            AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
+
+            // TileObjects can be scaled
+            SizeF scale = tmxObjectTile.GetTileObjectScale();
+            xmlTileObjectRoot.SetAttributeValue("scaleX", scale.Width);
+            xmlTileObjectRoot.SetAttributeValue("scaleY", scale.Height);
+
+            // Need another transform to help us with flipping of the tile (and their collisions)
+            XElement xmlTileObject = new XElement("GameObject");
+            xmlTileObject.SetAttributeValue("name", "TileObject");
+
+            if (tmxObjectTile.FlippedHorizontal)
+            {
+                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width);
+                xmlTileObject.SetAttributeValue("flipX", true);
+            }
+            if (tmxObjectTile.FlippedVertical)
+            {
+                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height);
+                xmlTileObject.SetAttributeValue("flipY", true);
+            }
 
             // Add any colliders that might be on the tile
-            foreach (TmxObject tmxObject in tmxTile.Tile.ObjectGroup.Objects)
+            foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
             {
-                // All the objects/colliders in our object group need to be separate game objects because they can have unique tags/layers
-                XElement xmlObject = new XElement("GameObject", new XAttribute("name", tmxObject.GetNonEmptyName()));
-
-                // Transform object locaction into map space (needed for isometric and hex modes) 
-                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
-                Vector3D pos = PointFToUnityVector(xfPosition);
-                xmlObject.SetAttributeValue("x", pos.X);
-                xmlObject.SetAttributeValue("y", pos.Y);
-                xmlObject.SetAttributeValue("rotation", tmxObject.Rotation);
-
                 XElement objElement = null;
 
                 if (tmxObject.GetType() == typeof(TmxObjectRectangle))
@@ -467,7 +463,7 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
-                    objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxTile.Tile.ObjectGroup.Name);
+                    objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
@@ -480,9 +476,37 @@ namespace Tiled2Unity
 
                 if (objElement != null)
                 {
+                    // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
+                    objElement.SetAttributeValue("offsetX", tmxObject.Position.X);
+                    objElement.SetAttributeValue("offsetY", tmxObjectTile.Size.Height - tmxObject.Position.Y);
+
                     xmlTileObject.Add(objElement);
                 }
             }
+
+            // Add a child for each mesh (with animation if needed)
+            foreach (var mesh in tmxObjectTile.Tile.Meshes)
+            {
+                XElement xmlMeshObject = new XElement("GameObject");
+
+                xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
+                xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
+                xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.ParentObjectGroup.SortingLayerName);
+                xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.ParentObjectGroup.SortingOrder);
+
+                if (mesh.FullAnimationDurationMs > 0)
+                {
+                    XElement xmlAnimation = new XElement("TileAnimator",
+                        new XAttribute("startTimeMs", mesh.StartTimeMs),
+                        new XAttribute("durationMs", mesh.DurationMs),
+                        new XAttribute("fullTimeMs", mesh.FullAnimationDurationMs));
+                    xmlMeshObject.Add(xmlAnimation);
+                }
+
+                xmlTileObject.Add(xmlMeshObject);
+            }
+
+            xmlTileObjectRoot.Add(xmlTileObject);
         }
 
 
