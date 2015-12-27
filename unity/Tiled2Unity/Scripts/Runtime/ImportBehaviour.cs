@@ -6,7 +6,10 @@ using System.Text;
 using System.Xml.Linq;
 
 using UnityEngine;
+
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
 namespace Tiled2Unity
 {
@@ -16,6 +19,9 @@ namespace Tiled2Unity
     public class ImportBehaviour : MonoBehaviour
     {
         public string ImportName;
+
+        // This isn't supposed to exist outside the editor
+#if UNITY_EDITOR
         public XDocument XmlDocument { get; private set; }
 
         private int importCounter = 0;
@@ -74,7 +80,9 @@ namespace Tiled2Unity
             UnityEditor.EditorUtility.ClearProgressBar();
             UnityEngine.Object.DestroyImmediate(this.gameObject);
         }
+#endif
 
+        // In case this behaviour leaks out of an import and into the runtime, complain.
         private void Update()
         {
             Debug.LogErrorFormat("ImportBehaviour {0} left in scene after importing. Check if import was successful and remove this object from scene {1}", this.ImportName, this.gameObject.name);
