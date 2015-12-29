@@ -90,6 +90,7 @@ File ${BUILD_DIR}\${P_NORM}.exe
 File ${BUILD_DIR}\${P_NORM}.exe.config
 File ${BUILD_DIR}\ThemeColorPicker.dll
 File /oname=Tiled2Unity.unitypackage ${ROOT_DIR}\build\Tiled2Unity.${V}.unitypackage
+File /oname=Tiled2UnityLite.cs ${ROOT_DIR}\build\Tiled2UnityLite.cs
 
 SetOutPath $INSTDIR\License
 File /oname=License.Tiled2Unity.txt ${ROOT_DIR}\src\License.txt
@@ -126,6 +127,7 @@ Delete $INSTDIR\${P_NORM}.exe
 Delete $INSTDIR\${P_NORM}.exe.config
 Delete $INSTDIR\ThemeColorPicker.dll
 Delete $INSTDIR\Tiled2Unity.unitypackage
+Delete $INSTDIR\Tiled2UnityLite.cs
 
 ; Remove all directories
 RMDir /r $INSTDIR\*

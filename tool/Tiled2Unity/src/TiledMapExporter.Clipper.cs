@@ -6,12 +6,10 @@ using System.Linq;
 using System.Text;
 using System.Xml.Linq;
 
-using ClipperLib;
-
 namespace Tiled2Unity
 {
-    using ClipperPolygon = List<IntPoint>;
-    using ClipperPolygons = List<List<IntPoint>>;
+    using ClipperPolygon = List<ClipperLib.IntPoint>;
+    using ClipperPolygons = List<List<ClipperLib.IntPoint>>;
 
     partial class TiledMapExporter
     {
@@ -31,7 +29,7 @@ namespace Tiled2Unity
                 {
                     // Transform point to Unity space
                     PointF pointUnity3d = PointFToUnityVector_NoScale(new PointF(x, y));
-                    IntPoint point = new IntPoint(pointUnity3d.X, pointUnity3d.Y);
+                    ClipperLib.IntPoint point = new ClipperLib.IntPoint(pointUnity3d.X, pointUnity3d.Y);
                     return point;
                 };
 
@@ -45,8 +43,8 @@ namespace Tiled2Unity
 
             // Add our polygon and edge colliders
             List<XElement> polyColliderElements = new List<XElement>();
-            AddPolygonCollider2DElements(Clipper.ClosedPathsFromPolyTree(solution), polyColliderElements);
-            AddEdgeCollider2DElements(Clipper.OpenPathsFromPolyTree(solution), polyColliderElements);
+            AddPolygonCollider2DElements(ClipperLib.Clipper.ClosedPathsFromPolyTree(solution), polyColliderElements);
+            AddEdgeCollider2DElements(ClipperLib.Clipper.OpenPathsFromPolyTree(solution), polyColliderElements);
 
             if (polyColliderElements.Count() == 0)
             {

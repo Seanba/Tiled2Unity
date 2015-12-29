@@ -58,8 +58,7 @@ namespace Tiled2Unity
             this.errors.Clear();
 
             bool success = Program.ParseOptions(this.args);
-
-            if (success)
+            if (success && !Program.Help)
             {
                 // Are we updating the last export directory?
                 if (!String.IsNullOrEmpty(Program.ExportUnityProjectDir))

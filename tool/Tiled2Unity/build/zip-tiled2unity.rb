@@ -29,7 +29,7 @@ if installedVersion != t2uVersion then
 	exit
 end
 
-# Create the zip file
+# Create the zip file for Tiled2Unity
 zipName = "Tiled2Unity-#{t2uVersion}.zip"
 puts "Creating zip file: #{zipName}"
 
@@ -44,3 +44,19 @@ Zip::File.open(zipName, Zip::File::CREATE) do |zipfile|
 		zipfile.add(file.sub(dir, ''), file)
     end
 end
+
+# Create the zip fle for Tiled2UnityLite
+zipName = "Tiled2UnityLite-#{t2uVersion}.zip"
+puts "Creating zip file: #{zipName}"
+
+FileUtils.rm(zipName) if File.exists? zipName
+dir = "C:/Program Files (x86)/Tiled2Unity/"
+Zip::File.open(zipName, Zip::File::CREATE) do |zipfile|
+	# Copy .unitypackage and .cs files
+	Dir[File.join(dir, '*.{unitypackage,cs}')].each do |file|
+		puts File.basename(file)
+		zipfile.add(file.sub(dir, ''), file)
+    end
+end
+
+

@@ -1,14 +1,11 @@
-﻿// This file is used for scripting and is dependent on TILED_2_UNITY_SCRIPT conditional compile flag
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows.Forms;
 
-#if !TILED_2_UNITY_SCRIPT
-using System.Reflection;
-#endif
 
 namespace Tiled2Unity
 {
@@ -31,8 +28,8 @@ namespace Tiled2Unity
 
         static private readonly float DefaultTexelBias = 8192.0f;
 
-#if !TILED_2_UNITY_SCRIPT
-        // AutoExport is redundant in Tiled2UnityScript 
+#if !TILED_2_UNITY_LITE
+        // AutoExport is redundant in Tiled2UnityLite
         static public bool AutoExport { get; private set; }
 #endif
         static public float Scale { get; set; }
@@ -47,7 +44,7 @@ namespace Tiled2Unity
 
         static private NDesk.Options.OptionSet Options = new NDesk.Options.OptionSet()
             {
-#if !TILED_2_UNITY_SCRIPT
+#if !TILED_2_UNITY_LITE
                 { "a|auto-export", "Automatically export to UNITYDIR and close.", ae => Program.AutoExport = true },
 #endif
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
@@ -56,11 +53,36 @@ namespace Tiled2Unity
                 { "h|help", "Display this help message.", h => Program.Help = true },
             };
 
-#if TILED_2_UNITY_SCRIPT
+#if TILED_2_UNITY_LITE
         // Scripting main
         static void Main(string[] args)
         {
-            Console.WriteLine("fixit - hello Tiled2Unity scripting world");
+            SetCulture();
+
+            // Default options
+            Program.Scale = 1.0f;
+            Program.TexelBias = DefaultTexelBias;
+            Program.Verbose = false;
+            Program.Help = false;
+            Program.TmxPath = "";
+            Program.ExportUnityProjectDir = "";
+
+            bool success = ParseOptions(args);
+
+            if (success && !Program.Help)
+            {
+                if (String.IsNullOrEmpty(Program.ExportUnityProjectDir))
+                {
+                    Console.Error.WriteLine("UNITYDIR is missing!");
+                    PrintHelp();
+                    return;
+                }
+
+                // We should have everyting we need to export a TMX file to a Unity project
+                TmxMap tmxMap = TmxMap.LoadFromFile(Program.TmxPath);
+                TiledMapExporter tiledMapExporter = new TiledMapExporter(tmxMap);
+                tiledMapExporter.Export(Program.ExportUnityProjectDir);
+            }
         }
 #else
         // Windows exe main
@@ -75,12 +97,8 @@ namespace Tiled2Unity
             SetCulture();
 
             // Default options
-#if TILED_2_UNITY_SCRIPT
-            Program.Scale = 1.0f;
-#else
             Program.AutoExport = false;
             Program.Scale = -1.0f;
-#endif
             Program.TexelBias = DefaultTexelBias;
             Program.Verbose = false;
             Program.Help = false;
@@ -103,8 +121,15 @@ namespace Tiled2Unity
             // Parse the options
             List<string> extra = Program.Options.Parse(args);
 
+            // Did we ask for help?
+            if (Program.Help)
+            {
+                Program.PrintHelp();
+                return true;
+            }
+
             // If we didn''t overide scale then use the old value
-#if !TILED_2_UNITY_SCRIPT
+#if !TILED_2_UNITY_LITE
             if (Program.Scale <= 0.0f)
             {
                 if (Properties.Settings.Default.LastVertexScale > 0)
@@ -171,7 +196,7 @@ namespace Tiled2Unity
 
                 extra.RemoveAt(0);
             }
-#if !TILED_2_UNITY_SCRIPT
+#if !TILED_2_UNITY_LITE
             else if (Program.AutoExport)
             {
                 // If we are auto-exporting then this arugment *must* be present (and it isn't so bail)
@@ -189,19 +214,15 @@ namespace Tiled2Unity
                 return false;
             }
 
-            // Did we ask for help?
-            if (Program.Help)
-                Program.PrintHelp();
-
             // Success
             return true;
         }
 
         public static void PrintHelp()
         {
-            Program.WriteLine("Tiled2Unity Utility, Version: {0}", GetVersion());
-            Program.WriteLine("Usage: Tiled2Unity [OPTIONS]+ TMXPATH [UNITYDIR]");
-            Program.WriteLine("Example: Tiled2Unity --verbose -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder");
+            Program.WriteLine("{0} Utility, Version: {1}", GetProgramName(), GetVersion());
+            Program.WriteLine("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", GetProgramName());
+            Program.WriteLine("Example: {0} --verbose -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", GetProgramName());
             Program.WriteLine("");
             Program.WriteLine("Options:");
 
@@ -305,12 +326,25 @@ namespace Tiled2Unity
             return String.Format("{0}.tiled2unity.xml", tmxMap.Name);
         }
 
-#if !TILED_2_UNITY_SCRIPT
+#if !TILED_2_UNITY_LITE
+        // GetVersion() is automatically generated with Tiled2UnityLite
         public static string GetVersion()
         {
             var thisApp = Assembly.GetExecutingAssembly();
             AssemblyName name = new AssemblyName(thisApp.FullName);
             return name.Version.ToString();
+        }
+#endif
+
+#if TILED_2_UNITY_LITE
+        public static string GetProgramName()
+        {
+            return "Tiled2UnityLite";
+        }
+#else
+        public static string GetProgramName()
+        {
+            return "Tiled2Unity";
         }
 #endif
 
@@ -335,10 +369,13 @@ namespace Tiled2Unity
 
         static private void Log(string line)
         {
+#if !TILED_2_UNITY_LITE
+            // No logging in Tiled2UnityLite
             using (StreamWriter writer = File.AppendText(Program.LogFilePath))
             {
                 writer.Write(line);
             }
+#endif
         }
 
         static private void SetCulture()
@@ -349,7 +386,7 @@ namespace Tiled2Unity
             System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
         }
 
-#if !TILED_2_UNITY_SCRIPT
+#if !TILED_2_UNITY_LITE
         static private bool PrintVersionOnly(string[] args)
         {
             if (args != null && args.Count() == 1)

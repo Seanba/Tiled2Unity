@@ -9,6 +9,9 @@ call "%VS100COMNTOOLS%vsvars32.bat"
 devenv /rebuild Release ../Tiled2Unity.sln
 if ERRORLEVEL 1 goto BuildFailed
 
+rem Use CS-Script to biuld Tiled2UnityLite
+%CSSCRIPT_DIR%\cscs build-tiled2unitylite.cs
+
 rem Call our CSharp build script. This will create the auto-gen-builder.bat file we call next.
 %CSSCRIPT_DIR%\cscs build-installer.cs
 

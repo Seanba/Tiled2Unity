@@ -68,6 +68,19 @@ namespace Tiled2Unity
             return Path.GetFullPath(elem.Attribute(attrName).Value);
         }
 
+#if TILED_2_UNITY_LITE
+        // System.Windows.Media.Color is a Microsoft-only library not supported (yet) by Mono
+        // It turns out we don't need ARGB colors for Tiled2UnityLite anyhow.
+        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName)
+        {
+            return System.Drawing.Color.FromArgb(255, 128, 128, 128);
+        }
+
+        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName, System.Drawing.Color defaultValue)
+        {
+            return System.Drawing.Color.FromArgb(255, 128, 128, 128);
+        }
+#else
         public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName)
         {
             string colorString = elem.Attribute(attrName).Value;
@@ -84,6 +97,7 @@ namespace Tiled2Unity
             }
             return GetAttributeAsColor(elem, attrName);
         }
+#endif
 
         public static T GetStringAsEnum<T>(string enumString)
         {

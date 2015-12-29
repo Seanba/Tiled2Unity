@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 
-using SD.Tools.Algorithmia.GeneralDataStructures;
 
 namespace Tiled2Unity
 {
@@ -22,7 +21,7 @@ namespace Tiled2Unity
         }
 
         // Hash polylines by their endpoints so we can combine them
-        MultiValueDictionary<ClipperLib.IntPoint, InternalPolyline> tablePolyline = new MultiValueDictionary<ClipperLib.IntPoint, InternalPolyline>();
+        SD.Tools.Algorithmia.GeneralDataStructures.MultiValueDictionary<ClipperLib.IntPoint, InternalPolyline> tablePolyline = new SD.Tools.Algorithmia.GeneralDataStructures.MultiValueDictionary<ClipperLib.IntPoint, InternalPolyline>();
 
         public void AddLine(List<ClipperLib.IntPoint> points)
         {

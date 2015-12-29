@@ -4,13 +4,11 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 
-using ClipperLib;
-
 // Given a TmxMap and TmxLayer, crank out a Clipper polytree solution
 namespace Tiled2Unity
 {
-    using ClipperPolygon = List<IntPoint>;
-    using ClipperPolygons = List<List<IntPoint>>;
+    using ClipperPolygon = List<ClipperLib.IntPoint>;
+    using ClipperPolygons = List<List<ClipperLib.IntPoint>>;
 
     class LayerClipper
     {
@@ -18,14 +16,14 @@ namespace Tiled2Unity
         private static readonly int GroupBySize = 10;
 
         // Note: Will need to work with this. We need Even Odd fill rules right now because winding order on polygons is not deterministic
-        private static PolyFillType SubjectFillRule = PolyFillType.pftNonZero;
-        private static PolyFillType ClipFillRule = PolyFillType.pftEvenOdd;
+        private static ClipperLib.PolyFillType SubjectFillRule = ClipperLib.PolyFillType.pftNonZero;
+        private static ClipperLib.PolyFillType ClipFillRule = ClipperLib.PolyFillType.pftEvenOdd;
 
         // Need a method to transform points into our coordinate system (different between Windows and Unity)
         public delegate ClipperLib.IntPoint TransformPointFunc(float x, float y);
         public delegate void ProgressFunc(string progress);
 
-        public static PolyTree ExecuteClipper(TmxMap tmxMap, TmxLayer tmxLayer, TransformPointFunc xfFunc, ProgressFunc progFunc)
+        public static ClipperLib.PolyTree ExecuteClipper(TmxMap tmxMap, TmxLayer tmxLayer, TransformPointFunc xfFunc, ProgressFunc progFunc)
         {
             // The "fullClipper" combines the clipper results from the smaller pieces
             ClipperLib.Clipper fullClipper = new ClipperLib.Clipper();
@@ -104,8 +102,8 @@ namespace Tiled2Unity
                 groupClipper.Execute(ClipperLib.ClipType.ctUnion, solution, LayerClipper.SubjectFillRule, LayerClipper.ClipFillRule);
 
                 // Combine the solutions into the full clipper
-                fullClipper.AddPaths(Clipper.ClosedPathsFromPolyTree(solution), PolyType.ptSubject, true);
-                fullClipper.AddPaths(Clipper.OpenPathsFromPolyTree(solution), PolyType.ptSubject, false);
+                fullClipper.AddPaths(ClipperLib.Clipper.ClosedPathsFromPolyTree(solution), ClipperLib.PolyType.ptSubject, true);
+                fullClipper.AddPaths(ClipperLib.Clipper.OpenPathsFromPolyTree(solution), ClipperLib.PolyType.ptSubject, false);
             }
             progFunc(String.Format("Clipping '{0}' polygons: 100%", tmxLayer.Name));
 
