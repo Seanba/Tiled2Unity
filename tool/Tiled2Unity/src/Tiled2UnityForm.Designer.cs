@@ -50,6 +50,7 @@
             this.labelScale = new System.Windows.Forms.Label();
             this.textBoxScale = new System.Windows.Forms.TextBox();
             this.textBoxExportFolder = new System.Windows.Forms.TextBox();
+            this.batchProcessToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -134,6 +135,7 @@
             // 
             this.fileToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.openTiledFileToolStripMenuItem,
+            this.batchProcessToolStripMenuItem,
             this.exitToolStripMenuItem});
             this.fileToolStripMenuItem.Name = "fileToolStripMenuItem";
             this.fileToolStripMenuItem.Size = new System.Drawing.Size(37, 20);
@@ -142,14 +144,14 @@
             // openTiledFileToolStripMenuItem
             // 
             this.openTiledFileToolStripMenuItem.Name = "openTiledFileToolStripMenuItem";
-            this.openTiledFileToolStripMenuItem.Size = new System.Drawing.Size(165, 22);
+            this.openTiledFileToolStripMenuItem.Size = new System.Drawing.Size(199, 22);
             this.openTiledFileToolStripMenuItem.Text = "&Open Tiled File ...";
             this.openTiledFileToolStripMenuItem.Click += new System.EventHandler(this.openTiledFileToolStripMenuItem_Click);
             // 
             // exitToolStripMenuItem
             // 
             this.exitToolStripMenuItem.Name = "exitToolStripMenuItem";
-            this.exitToolStripMenuItem.Size = new System.Drawing.Size(165, 22);
+            this.exitToolStripMenuItem.Size = new System.Drawing.Size(199, 22);
             this.exitToolStripMenuItem.Text = "E&xit";
             this.exitToolStripMenuItem.Click += new System.EventHandler(this.exitToolStripMenuItem_Click);
             // 
@@ -255,6 +257,13 @@
             this.textBoxExportFolder.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
             this.textBoxExportFolder.TextChanged += new System.EventHandler(this.textBoxExportFolder_TextChanged);
             // 
+            // batchProcessToolStripMenuItem
+            // 
+            this.batchProcessToolStripMenuItem.Name = "batchProcessToolStripMenuItem";
+            this.batchProcessToolStripMenuItem.Size = new System.Drawing.Size(199, 22);
+            this.batchProcessToolStripMenuItem.Text = "Process Multiple Files ...";
+            this.batchProcessToolStripMenuItem.Click += new System.EventHandler(this.batchProcessToolStripMenuItem_Click);
+            // 
             // Tiled2UnityForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -305,6 +314,7 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
         private System.Windows.Forms.ToolStripMenuItem supportTiledMapEditorToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
+        private System.Windows.Forms.ToolStripMenuItem batchProcessToolStripMenuItem;
     }
 }
 

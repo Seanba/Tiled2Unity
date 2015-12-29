@@ -19,7 +19,7 @@ namespace Tiled2Unity
         private string[] args = null;
         private TmxMap tmxMap = null;
         private TiledMapExporter tmxExporter = null;
-
+        
         private List<string> warnings = new List<string>();
         private List<string> errors = new List<string>();
 
@@ -347,6 +347,24 @@ namespace Tiled2Unity
             System.Diagnostics.Process.Start(e.LinkText);
         }
 
+        private void batchProcessToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog();
+            dialog.InitialDirectory = Properties.Settings.Default.LastOpenDirectory;
+            dialog.Title = "Open Tiled (*.tmx) File";
+            dialog.Filter = "TMX files (*.tmx)|*.tmx";
+            dialog.RestoreDirectory = true;
+            dialog.Multiselect = true;
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK) {
+                string path = this.textBoxExportFolder.Text;
+
+                foreach (var fileName in dialog.FileNames) {
+                    OpenTmxFile(fileName);
+                    this.tmxExporter.Export(path);
+                }
+            }
+        }
     }
 }
 
