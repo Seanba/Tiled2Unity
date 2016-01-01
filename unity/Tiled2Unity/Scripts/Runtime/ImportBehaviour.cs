@@ -1,15 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Xml.Linq;
+﻿#if UNITY_WEBPLAYER
+#error Unity Webplayer no longer supported.
+#else
 
-using UnityEngine;
+using System;
 
 #if UNITY_EDITOR
+using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using UnityEditor;
 #endif
+
+using UnityEngine;
 
 namespace Tiled2Unity
 {
@@ -90,3 +92,4 @@ namespace Tiled2Unity
 
     }
 }
+#endif

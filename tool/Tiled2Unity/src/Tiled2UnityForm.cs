@@ -347,6 +347,11 @@ namespace Tiled2Unity
             System.Diagnostics.Process.Start(e.LinkText);
         }
 
+        private void donateToTiled2UnityToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start("http://www.seanba.com/donate");
+        }
+
     }
 }
 

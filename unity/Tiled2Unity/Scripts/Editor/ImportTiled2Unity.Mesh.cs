@@ -1,4 +1,8 @@
-﻿using System;
+﻿#if UNITY_WEBPLAYER
+#error Unity Webplayer no longer supported
+#else
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -420,3 +424,5 @@ namespace Tiled2Unity
 
     } // end class
 } // end namespace
+
+#endif

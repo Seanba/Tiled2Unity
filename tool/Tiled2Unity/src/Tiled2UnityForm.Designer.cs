@@ -50,6 +50,7 @@
             this.labelScale = new System.Windows.Forms.Label();
             this.textBoxScale = new System.Windows.Forms.TextBox();
             this.textBoxExportFolder = new System.Windows.Forms.TextBox();
+            this.donateToTiled2UnityToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -175,6 +176,7 @@
             this.showHelpToolStripMenuItem,
             this.toolStripSeparator1,
             this.supportTiledMapEditorToolStripMenuItem,
+            this.donateToTiled2UnityToolStripMenuItem,
             this.toolStripSeparator2,
             this.aboutTiled2UnityToolStripMenuItem});
             this.helpToolStripMenuItem.Name = "helpToolStripMenuItem";
@@ -255,6 +257,13 @@
             this.textBoxExportFolder.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
             this.textBoxExportFolder.TextChanged += new System.EventHandler(this.textBoxExportFolder_TextChanged);
             // 
+            // donateToTiled2UnityToolStripMenuItem
+            // 
+            this.donateToTiled2UnityToolStripMenuItem.Name = "donateToTiled2UnityToolStripMenuItem";
+            this.donateToTiled2UnityToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
+            this.donateToTiled2UnityToolStripMenuItem.Text = "&Donate to Tiled2Unity";
+            this.donateToTiled2UnityToolStripMenuItem.Click += new System.EventHandler(this.donateToTiled2UnityToolStripMenuItem_Click);
+            // 
             // Tiled2UnityForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -305,6 +314,7 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
         private System.Windows.Forms.ToolStripMenuItem supportTiledMapEditorToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
+        private System.Windows.Forms.ToolStripMenuItem donateToTiled2UnityToolStripMenuItem;
     }
 }
 

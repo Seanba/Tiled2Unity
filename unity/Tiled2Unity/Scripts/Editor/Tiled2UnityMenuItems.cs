@@ -16,6 +16,7 @@ namespace Tiled2Unity
         [MenuItem("Tiled2Unity/Export Tiled2Unity Library ...")]
         static void ExportLibrary()
         {
+#if !UNITY_WEBPLAYER
             string name = String.Format("Tiled2Unity.{0}.unitypackage", ImportTiled2Unity.ThisVersion);
             var path = EditorUtility.SaveFilePanel("Save texture as PNG", "", name, "unitypackage");
             if (path.Length != 0)
@@ -24,6 +25,7 @@ namespace Tiled2Unity
                 packageFiles.AddRange(EnumerateAssetFilesAt("Assets/Tiled2Unity", ".cs", ".shader", ".txt"));
                 AssetDatabase.ExportPackage(packageFiles.ToArray(), path);
             }
+#endif
         }
 
         // Not ready for public consumption yet. (But handy to have for development)

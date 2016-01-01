@@ -1,4 +1,7 @@
-﻿using System;
+﻿#if UNITY_WEBPLAYER
+#error Unity Webplayer no longer supported
+#else
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,7 +18,7 @@ namespace Tiled2Unity
     // Concentrates on the Xml file being imported
     partial class ImportTiled2Unity
     {
-        public static readonly string ThisVersion = "1.0.1.0";
+        public static readonly string ThisVersion = "1.0.1.1";
 
         // Called when Unity detects the *.tiled2unity.xml file needs to be (re)imported
         public void ImportBegin(string xmlPath)
@@ -140,3 +143,4 @@ namespace Tiled2Unity
         }
     }
 }
+#endif

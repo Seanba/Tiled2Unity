@@ -241,6 +241,7 @@ namespace Tiled2Unity
             Program.WriteLine("  unity:resource");
             Program.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Program.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
+            Program.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
         }
 
         public static void WriteLine()
