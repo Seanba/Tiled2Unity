@@ -19,11 +19,19 @@ namespace Tiled2Unity
         {
             // Is this file relative to our Tiled2Unity export marker file?
             // If so, then we want to use this asset postprocessor
-            string assetFolder = Path.GetFullPath(Path.GetDirectoryName(assetPath));
-            string exportMarkerPath = Path.Combine(assetFolder, "..");
-            exportMarkerPath = Path.Combine(exportMarkerPath, "Tiled2Unity.export.txt");
+            string path = assetPath;
+            while (!String.IsNullOrEmpty(path))
+            {
+                path = Path.GetDirectoryName(path);
+                string exportMarkerPath = Path.Combine(path, "Tiled2Unity.export.txt");
+                if (File.Exists(exportMarkerPath))
+                {
+                    // This is a file under the Tiled2Unity root.
+                    return true;
+                }
+            }
 
-            return File.Exists(exportMarkerPath);
+            return false;
         }
 
         private bool UseThisImporter()
