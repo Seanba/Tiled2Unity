@@ -95,15 +95,23 @@ namespace Tiled2Unity
             return xmlAsset;
         }
 
-        public string GetPrefabAssetPath(string name, bool isResource)
+        public string GetPrefabAssetPath(string name, bool isResource, string extraPath)
         {
             name = Path.GetFileNameWithoutExtension(name);
 
             string prefabAsset = "";
             if (isResource)
             {
-                // Put the prefab into a "Resources" folder so it can be instantiated through script
-                prefabAsset = String.Format("{0}/Prefabs/Resources/{1}.prefab", this.assetPathToTiled2UnityRoot, name);
+                if (String.IsNullOrEmpty(extraPath))
+                {
+                    // Put the prefab into a "Resources" folder so it can be instantiated through script
+                    prefabAsset = String.Format("{0}/Prefabs/Resources/{1}.prefab", this.assetPathToTiled2UnityRoot, name);
+                }
+                else
+                {
+                    // Put the prefab into a "Resources/extraPath" folder so it can be instantiated through script
+                    prefabAsset = String.Format("{0}/Prefabs/Resources/{1}/{2}.prefab", this.assetPathToTiled2UnityRoot, extraPath, name);
+                }
             }
             else
             {

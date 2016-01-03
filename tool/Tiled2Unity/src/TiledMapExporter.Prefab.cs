@@ -286,6 +286,30 @@ namespace Tiled2Unity
                 }
             }
 
+            // Some users may want resource prefabs to be saved to a particular path
+            {
+                string unityResourcePath = tmx.Properties.GetPropertyValueAsString("unity:resourcePath", "");
+                if (!String.IsNullOrEmpty(unityResourcePath))
+                {
+                    if (context != PrefabContext.Root)
+                    {
+                        Program.WriteWarning("unity:resourcePath only applies to map properties\n{0}", xml.ToString());
+                    }
+                    else
+                    {
+                        bool isInvalid = Path.GetInvalidPathChars().Any(c => unityResourcePath.Contains(c));
+                        if (isInvalid)
+                        {
+                            Program.WriteError("unity:resourcePath has invalid path characters: {0}", unityResourcePath);
+                        }
+                        else
+                        {
+                            xml.SetAttributeValue("resourcePath", unityResourcePath);
+                        }
+                    }
+                }
+            }
+
             // Any object can carry the 'isTrigger' setting and we assume any children to inherit the setting
             {
                 string unityIsTrigger = tmx.Properties.GetPropertyValueAsString("unity:isTrigger", "");
@@ -330,6 +354,7 @@ namespace Tiled2Unity
             knownProperties.Add("unity:isTrigger");
             knownProperties.Add("unity:ignore");
             knownProperties.Add("unity:resource");
+            knownProperties.Add("unity:resourcePath");
 
             var unknown = from p in tmx.Properties.PropertyMap
                           where p.Key.StartsWith("unity:")

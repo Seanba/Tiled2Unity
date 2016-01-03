@@ -238,7 +238,8 @@ namespace Tiled2Unity
             Program.WriteLine("  unity:scale");
             Program.WriteLine("  unity:isTrigger");
             Program.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
-            Program.WriteLine("  unity:resource");
+            Program.WriteLine("  unity:resource (value = [false|true])");
+            Program.WriteLine("  unity:resourcePath");
             Program.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Program.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
             Program.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");

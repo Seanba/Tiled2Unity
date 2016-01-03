@@ -25,7 +25,7 @@ namespace Tiled2Unity
             string xmlPath = GetXmlImportAssetPath(objPath);
 
             ImportBehaviour importBehaviour = ImportBehaviour.FindOrCreateImportBehaviour(xmlPath);
-            importBehaviour.IncrementProgressBar(String.Format("Create prefab: {0}", Path.GetFileNameWithoutExtension(GetPrefabAssetPath(objPath, false))));
+            importBehaviour.IncrementProgressBar(String.Format("Create prefab: {0}", Path.GetFileNameWithoutExtension(GetPrefabAssetPath(objPath, false, null))));
 
             foreach (var xmlPrefab in importBehaviour.XmlDocument.Root.Elements("Prefab"))
             {
@@ -57,8 +57,9 @@ namespace Tiled2Unity
             tempPrefab.transform.localScale = new Vector3(prefabScale, prefabScale, prefabScale);
 
             // Part 4: Save the prefab, keeping references intact.
-            bool isResource = ImportUtils.GetAttributeAsBoolean(xmlPrefab, "resource", false);
-            string prefabPath = GetPrefabAssetPath(prefabName, isResource);
+            string resourcePath = ImportUtils.GetAttributeAsString(xmlPrefab, "resourcePath", "");
+            bool isResource = !String.IsNullOrEmpty(resourcePath) || ImportUtils.GetAttributeAsBoolean(xmlPrefab, "resource", false);
+            string prefabPath = GetPrefabAssetPath(prefabName, isResource, resourcePath);
             UnityEngine.Object finalPrefab = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(GameObject));
 
             if (finalPrefab == null)
