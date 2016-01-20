@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml;
@@ -15,7 +16,16 @@ namespace Tiled2Unity
             TmxImage tmxImage = new TmxImage();
             tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
 
-            tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+            try
+            {
+                tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+            }
+            catch (FileNotFoundException fnf)
+            {
+                string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
+                throw new TmxException(msg, fnf);
+            }
+
             tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
 
             // Some images use a transparency color key instead of alpha (blerg)

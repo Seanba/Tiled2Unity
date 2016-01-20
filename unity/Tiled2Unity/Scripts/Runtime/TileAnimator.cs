@@ -5,7 +5,10 @@ using System.Linq;
 using System.Text;
 
 using UnityEngine;
+
+#if !UNITY_5_0
 using UnityEngine.Assertions;
+#endif
 
 namespace Tiled2Unity
 {
@@ -19,10 +22,11 @@ namespace Tiled2Unity
 
         private void Start()
         {
+#if !UNITY_5_0
             Assert.IsTrue(this.StartTime >= 0, "StartTime cannot be negative");
             Assert.IsTrue(this.Duration > 0, "Duration must be positive and non-zero.");
             Assert.IsTrue(this.TotalAnimationTime > 0, "Total time of animation must be positive non-zero");
-
+#endif
             this.timer = 0.0f;
         }
 

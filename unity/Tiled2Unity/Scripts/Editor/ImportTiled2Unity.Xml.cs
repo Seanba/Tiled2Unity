@@ -1,6 +1,6 @@
-﻿#if UNITY_WEBPLAYER
-#error Unity Webplayer no longer supported
-#else
+﻿#if !UNITY_WEBPLAYER
+// Note: This parital class is not compiled in for WebPlayer builds.
+// The Unity Webplayer is deprecated. If you *must* use it then make sure Tiled2Unity assets are imported via another build target first.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,7 +18,7 @@ namespace Tiled2Unity
     // Concentrates on the Xml file being imported
     partial class ImportTiled2Unity
     {
-        public static readonly string ThisVersion = "1.0.2.0";
+        public static readonly string ThisVersion = "1.0.2.3";
 
         // Called when Unity detects the *.tiled2unity.xml file needs to be (re)imported
         public void ImportBegin(string xmlPath)

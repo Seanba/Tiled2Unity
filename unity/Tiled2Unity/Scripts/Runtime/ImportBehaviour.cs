@@ -1,13 +1,12 @@
-﻿#if UNITY_WEBPLAYER
-#error Unity Webplayer no longer supported.
-#else
-
+﻿#if !UNITY_WEBPLAYER
+// Note: This behaviour cannot be used in WebPlayer
 using System;
 
 #if UNITY_EDITOR
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+
 using UnityEditor;
 #endif
 
@@ -45,7 +44,6 @@ namespace Tiled2Unity
             }
 
             // Couldn't find, so create.
-            Debug.LogFormat("Tiled2Unity import status create for file {0}", xmlPath);
             GameObject gameObject = new GameObject("__temp_tiled2unity_import");
             gameObject.transform.SetAsFirstSibling();
 
@@ -92,4 +90,4 @@ namespace Tiled2Unity
 
     }
 }
-#endif
+#endif // if UNITY_WEBPLAYER
