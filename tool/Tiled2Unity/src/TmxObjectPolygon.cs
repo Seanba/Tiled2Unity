@@ -9,7 +9,7 @@ namespace Tiled2Unity
 {
     class TmxObjectPolygon : TmxObject, TmxHasPoints
     {
-        public List<PointF> Points { get; protected set; }
+        public List<PointF> Points { get; set; }
 
         public TmxObjectPolygon()
         {
@@ -97,10 +97,8 @@ namespace Tiled2Unity
             return true;
         }
 
-        static public TmxObjectPolygon FromIsometricRectangle(TmxMap tmxMap, TmxObjectRectangle tmxRectangle)
+        static public TmxObjectPolygon FromRectangle(TmxMap tmxMap, TmxObjectRectangle tmxRectangle)
         {
-            Debug.Assert(tmxMap.Orientation == TmxMap.MapOrientation.Isometric);
-
             TmxObjectPolygon tmxPolygon = new TmxObjectPolygon();
             TmxObject.CopyBaseProperties(tmxRectangle, tmxPolygon);
 

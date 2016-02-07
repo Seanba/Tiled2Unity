@@ -401,7 +401,7 @@ namespace Tiled2Unity
                              from t in a.GetTypes()
                              where typeof(ICustomTiledImporter).IsAssignableFrom(t)
                              where !t.IsAbstract
-                             where Attribute.GetCustomAttribute(t, typeof(CustomTiledImporterAttribute)) == null
+                             where System.Attribute.GetCustomAttribute(t, typeof(CustomTiledImporterAttribute)) == null
                              select t;
             foreach (var t in errorTypes)
             {
@@ -413,7 +413,7 @@ namespace Tiled2Unity
                         from t in a.GetTypes()
                         where typeof(ICustomTiledImporter).IsAssignableFrom(t)
                         where !t.IsAbstract
-                        from attr in Attribute.GetCustomAttributes(t, typeof(CustomTiledImporterAttribute))
+                        from attr in System.Attribute.GetCustomAttributes(t, typeof(CustomTiledImporterAttribute))
                         let custom = attr as CustomTiledImporterAttribute
                         orderby custom.Order
                         select t;

@@ -24,6 +24,21 @@ namespace Tiled2Unity
             {
                 string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
                 throw new TmxException(msg, fnf);
+
+                // Testing for when image files are missing. Just make up an image.
+                //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+                //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+                //tmxImage.ImageBitmap = new Bitmap(width, height);
+                //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
+                //{
+                //    int color32 = tmxImage.AbsolutePath.GetHashCode();
+                //    Color color = Color.FromArgb(color32);
+                //    color = Color.FromArgb(255, color);
+                //    using (Brush brush = new SolidBrush(color))
+                //    {
+                //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
+                //    }
+                //}
             }
 
             tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);

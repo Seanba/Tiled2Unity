@@ -15,7 +15,7 @@ namespace Tiled2Unity
         private static bool UseThisImporter(string assetPath)
         {
             // Certain file types are ignored by this asset post processor (i.e. scripts)
-            string[] ignoreThese = { ".cs", ".txt" };
+            string[] ignoreThese = { ".cs", ".txt", };
             if (ignoreThese.Any(ext => String.Compare(ext, Path.GetExtension(assetPath), true) == 0))
             {
                 return false;
@@ -110,7 +110,7 @@ namespace Tiled2Unity
             // Keep normals otherwise Unity will complain about needing them.
             // Normals may not be a bad idea anyhow
 #if UNITY_5_0 || UNITY_5_1 || UNITY_5_2
-            modelImporter.normalImportMode = ModelImporterTangentSpaceMode.None;
+            modelImporter.normalImportMode = ModelImporterTangentSpaceMode.Import;
 #else
             modelImporter.importNormals = ModelImporterNormals.Import;
 #endif

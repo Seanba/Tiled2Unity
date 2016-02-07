@@ -497,18 +497,26 @@ namespace Tiled2Unity
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
 
+            float inverseScale = 1.0f / this.scale;
+            if (inverseScale > 1)
+                inverseScale = 1;
+
             using (GraphicsPath path = new GraphicsPath())
-            using (Pen pen = new Pen(lineColor, 1.0f))
-            using (Brush brush = new HatchBrush(HatchStyle.ForwardDiagonal, lineColor, polyColor))
+            using (Pen pen = new Pen(lineColor, 2.0f * inverseScale))
+            using (Brush brush = new HatchBrush(HatchStyle.Percent60, polyColor, Color.Transparent))
             {
                 pen.Alignment = PenAlignment.Inset;
 
                 // Draw all closed polygons
-                foreach (var points in ClipperLib.Clipper.ClosedPathsFromPolyTree(solution))
+                // First, add them to the path
+                // (But are we using convex polygons are complex polygons?
+                var polygons = layer.IsExportingConvexPolygons() ? LayerClipper.SolutionPolygons_Simple(solution) : LayerClipper.SolutionPolygons_Complex(solution);
+                foreach (var pointfArray in polygons)
                 {
-                    var pointfs = points.Select(pt => new PointF(pt.X, pt.Y));
-                    path.AddPolygon(pointfs.ToArray());
+                    path.AddPolygon(pointfArray);
                 }
+
+                // Then, fill and draw the path full of polygons
                 if (path.PointCount > 0)
                 {
                     g.FillPath(brush, path);
@@ -576,7 +584,7 @@ namespace Tiled2Unity
                 {
                     if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
-                        TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromIsometricRectangle(this.tmxMap, tmxObject as TmxObjectRectangle);
+                        TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromRectangle(this.tmxMap, tmxObject as TmxObjectRectangle);
                         DrawPolygon(g, pen, brush, tmxIsometricRectangle);
                     }
                     else

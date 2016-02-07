@@ -52,5 +52,23 @@ namespace Tiled2Unity
             return y * this.Width + x;
         }
 
+        public bool IsExportingConvexPolygons()
+        {
+            // Always obey layer first
+            if (this.Properties.PropertyMap.ContainsKey("unity:convex"))
+            {
+                return this.Properties.GetPropertyValueAsBoolean("unity:convex", true);
+            }
+
+            // Use the map next
+            if (this.TmxMap.Properties.PropertyMap.ContainsKey("unity:convex"))
+            {
+                return this.TmxMap.Properties.GetPropertyValueAsBoolean("unity:convex", true);
+            }
+
+            // Use the program setting last
+            return Program.PreferConvexPolygons;
+        }
+
     }
 }

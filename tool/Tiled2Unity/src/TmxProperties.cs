@@ -11,7 +11,7 @@ namespace Tiled2Unity
 
         public TmxProperties()
         {
-            this.PropertyMap = new Dictionary<string, string>();
+            this.PropertyMap = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
         }
 
         public string GetPropertyValueAsString(string name)
@@ -28,7 +28,15 @@ namespace Tiled2Unity
 
         public int GetPropertyValueAsInt(string name)
         {
-            return Convert.ToInt32(this.PropertyMap[name]);
+            try
+            {
+                return Convert.ToInt32(this.PropertyMap[name]);
+            }
+            catch (System.FormatException inner)
+            {
+                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name]);
+                throw new TmxException(message, inner);
+            }
         }
 
         public int GetPropertyValueAsInt(string name, int defaultValue)

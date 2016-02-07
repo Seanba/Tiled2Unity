@@ -43,7 +43,16 @@ namespace Tiled2Unity
 
             // Add our polygon and edge colliders
             List<XElement> polyColliderElements = new List<XElement>();
-            AddPolygonCollider2DElements(ClipperLib.Clipper.ClosedPathsFromPolyTree(solution), polyColliderElements);
+
+            if (layer.IsExportingConvexPolygons())
+            {
+                AddPolygonCollider2DElements_Convex(solution, polyColliderElements);
+            }
+            else
+            {
+                AddPolygonCollider2DElements_Complex(solution, polyColliderElements);
+            }
+
             AddEdgeCollider2DElements(ClipperLib.Clipper.OpenPathsFromPolyTree(solution), polyColliderElements);
 
             if (polyColliderElements.Count() == 0)
@@ -60,8 +69,26 @@ namespace Tiled2Unity
             return gameObjectCollision;
         }
 
-        private void AddPolygonCollider2DElements(ClipperPolygons polygons, List<XElement> xmlList)
+        private void AddPolygonCollider2DElements_Convex(ClipperLib.PolyTree solution, List<XElement> xmlList)
         {
+            // This may generate many convex polygons as opposed to one "complicated" one
+            var polygons = LayerClipper.SolutionPolygons_Simple(solution);
+
+            // Each PointF array is a polygon with a single path
+            foreach (var pointfArray in polygons)
+            {
+                string data = String.Join(" ", pointfArray.Select(pt => String.Format("{0},{1}", pt.X * Program.Scale, pt.Y * Program.Scale)));
+                XElement pathElement = new XElement("Path", data);
+
+                XElement polyColliderElement = new XElement("PolygonCollider2D", pathElement);
+                xmlList.Add(polyColliderElement);
+            }
+        }
+
+        private void AddPolygonCollider2DElements_Complex(ClipperLib.PolyTree solution, List<XElement> xmlList)
+        {
+            // This should generate one "complicated" polygon which may contain holes and concave edges
+            var polygons = ClipperLib.Clipper.ClosedPathsFromPolyTree(solution);
             if (polygons.Count == 0)
                 return;
 

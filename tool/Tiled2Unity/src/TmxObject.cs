@@ -13,7 +13,7 @@ namespace Tiled2Unity
         public string Type { get; private set; }
         public bool Visible { get; private set; }
         public PointF Position { get; private set; }
-        public SizeF Size { get; protected set; }
+        public SizeF Size { get; private set; }
         public float Rotation { get; private set; }
         public TmxProperties Properties { get; private set; }
         public TmxObjectGroup ParentObjectGroup { get; private set; }
@@ -30,6 +30,22 @@ namespace Tiled2Unity
             return String.Format("{0} {1} pos={2}, size={3} rot = {4}", GetType().Name, GetNonEmptyName(), this.Position, this.Size, this.Rotation);
         }
 
+        public void BakeRotation()
+        {
+            // Rotate (0, 0)
+            PointF[] pointfs = new PointF[1] { PointF.Empty };
+            TmxMath.RotatePoints(pointfs, this);
+
+            // Bake that rotation into our position, sanitizing the result
+            float x = this.Position.X - pointfs[0].X;
+            float y = this.Position.Y - pointfs[0].Y;
+            this.Position = new PointF(x, y);
+            this.Position = TmxMath.Sanitize(this.Position);
+
+            // Null out our rotation
+            this.Rotation = 0;
+        }
+
         static protected void CopyBaseProperties(TmxObject from, TmxObject to)
         {
             to.Name = from.Name;
@@ -39,6 +55,7 @@ namespace Tiled2Unity
             to.Size = from.Size;
             to.Rotation = from.Rotation;
             to.Properties = from.Properties;
+            to.ParentObjectGroup = from.ParentObjectGroup;
         }
 
         public abstract RectangleF GetWorldBounds();

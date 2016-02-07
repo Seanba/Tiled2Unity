@@ -112,5 +112,31 @@ namespace Tiled2Unity
 
             return fullSolution;
         }
+
+        // Put the closed path polygons into an enumerable collection of an array of points.
+        // Each array of points in a path in a "complex" polygon that supports convace edges and holes
+        public static IEnumerable<PointF[]> SolutionPolygons_Complex(ClipperLib.PolyTree solution)
+        {
+            foreach (var points in ClipperLib.Clipper.ClosedPathsFromPolyTree(solution))
+            {
+                var pointfs = points.Select(pt => new PointF(pt.X, pt.Y));
+                yield return pointfs.ToArray();
+            }
+        }
+
+        // Put the closed path polygons into an enumerable collection of an array of points.
+        // Each array of points in a separate convex polygon
+        public static IEnumerable<PointF[]> SolutionPolygons_Simple(ClipperLib.PolyTree solution)
+        {
+            ConvexPolygonSet convexPolygonSet = new ConvexPolygonSet();
+            convexPolygonSet.MakeConvextSetFromClipperSolution(solution);
+
+            foreach (var polygon in convexPolygonSet.Polygons)
+            {
+                var pointfs = polygon.Select(pt => new PointF(pt.Xf, pt.Yf));
+                yield return pointfs.ToArray();
+            }
+        }
+
     }
 }

@@ -186,6 +186,11 @@ namespace Tiled2Unity
                     TmxImage tmxImage = TmxImage.FromXml(t.Element("image"));
 
                     uint localId = (uint)tilesToAdd.Count();
+
+                    // Local Id can be overridden by the tile element
+                    // This is because tiles can be removed from the tileset, so we won'd always have a zero-based index
+                    localId = TmxHelper.GetAttributeAsUInt(t, "id", localId);
+
                     uint globalId = firstId + localId;
                     TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
                     tile.Offset = tileOffset;
@@ -212,7 +217,16 @@ namespace Tiled2Unity
                 var tiles = from t in this.Tiles
                             where t.Value.GlobalId == localTileId + firstId
                             select t.Value;
-                tiles.First().ParseTileXml(elemTile, this, firstId);
+
+                // Note that some old tile data may be sticking around
+                if (tiles.Count() == 0)
+                {
+                    Program.WriteWarning("Tile '{0}' in tileset '{1}' does not exist but there is tile data for it.\n{2}", localTileId, tilesetName, elemTile.ToString());
+                }
+                else
+                {
+                    tiles.First().ParseTileXml(elemTile, this, firstId);
+                }
             }
         }
 

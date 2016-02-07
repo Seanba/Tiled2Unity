@@ -8,7 +8,7 @@ namespace Tiled2Unity
 {
     interface TmxHasPoints
     {
-        List<PointF> Points { get; }
+        List<PointF> Points { get; set; }
         bool ArePointsClosed();
     }
 }

@@ -32,7 +32,19 @@ namespace Tiled2Unity
             }
             else if (xml.Attribute("gid") != null)
             {
-                tmxObject = new TmxObjectTile();
+                uint gid = TmxHelper.GetAttributeAsUInt(xml, "gid");
+                gid = TmxMath.GetTileIdWithoutFlags(gid);
+                if (tmxMap.Tiles.ContainsKey(gid))
+                {
+                    tmxObject = new TmxObjectTile();
+                }
+                else
+                {
+                    // For some reason, the tile is not in any of our tilesets
+                    // Warn the user and use a rectangle
+                    Program.WriteWarning("Tile Id {0} not found in tilesets. Using a rectangle instead.\n{1}", gid, xml.ToString());
+                    tmxObject = new TmxObjectRectangle();
+                }
             }
             else
             {

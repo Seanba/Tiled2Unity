@@ -48,6 +48,16 @@ namespace Tiled2Unity
             return Convert.ToUInt32(elem.Attribute(attrName).Value);
         }
 
+        public static uint GetAttributeAsUInt(XElement elem, string attrName, uint defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsUInt(elem, attrName);
+        }
+
         public static float GetAttributeAsFloat(XElement elem, string attrName)
         {
             return Convert.ToSingle(elem.Attribute(attrName).Value);

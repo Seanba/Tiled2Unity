@@ -33,6 +33,7 @@ namespace Tiled2Unity
         static public bool AutoExport { get; private set; }
 #endif
         static public float Scale { get; set; }
+        static public bool PreferConvexPolygons { get; set; }
         static public float TexelBias { get; private set; }
         static public bool Verbose { get; private set; }
         static public bool Help { get; private set; }
@@ -48,6 +49,7 @@ namespace Tiled2Unity
                 { "a|auto-export", "Automatically export to UNITYDIR and close.", ae => Program.AutoExport = true },
 #endif
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
+                { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Program.PreferConvexPolygons = true },
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
                 { "v|verbose", "Print verbose messages.", v => Program.Verbose = true },
                 { "h|help", "Display this help message.", h => Program.Help = true },
@@ -61,6 +63,7 @@ namespace Tiled2Unity
 
             // Default options
             Program.Scale = 1.0f;
+            Program.PreferConvexPolygons = false;
             Program.TexelBias = DefaultTexelBias;
             Program.Verbose = false;
             Program.Help = false;
@@ -99,6 +102,7 @@ namespace Tiled2Unity
             // Default options
             Program.AutoExport = false;
             Program.Scale = -1.0f;
+            Program.PreferConvexPolygons = false;
             Program.TexelBias = DefaultTexelBias;
             Program.Verbose = false;
             Program.Help = false;
@@ -147,6 +151,15 @@ namespace Tiled2Unity
                 Properties.Settings.Default.LastVertexScale = Program.Scale;
                 Properties.Settings.Default.Save();
             }
+#endif
+           // If we didn't set convex polygons as default then use old value
+#if !TILED_2_UNITY_LITE
+            if (Program.PreferConvexPolygons == false)
+            {
+                Program.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
+            }
+            Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
+            Properties.Settings.Default.Save();
 #endif
 
             // First left over option is the TMX file we are exporting
@@ -237,6 +250,7 @@ namespace Tiled2Unity
             Program.WriteLine("  unity:tag");
             Program.WriteLine("  unity:scale");
             Program.WriteLine("  unity:isTrigger");
+            Program.WriteLine("  unity:convex");
             Program.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
             Program.WriteLine("  unity:resource (value = [false|true])");
             Program.WriteLine("  unity:resourcePath");

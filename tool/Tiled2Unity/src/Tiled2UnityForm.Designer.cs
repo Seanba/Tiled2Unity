@@ -45,12 +45,13 @@
             this.showHelpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.supportTiledMapEditorToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.donateToTiled2UnityToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.aboutTiled2UnityToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.labelScale = new System.Windows.Forms.Label();
             this.textBoxScale = new System.Windows.Forms.TextBox();
             this.textBoxExportFolder = new System.Windows.Forms.TextBox();
-            this.donateToTiled2UnityToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.checkBoxPreferConvexPolygons = new System.Windows.Forms.CheckBox();
             this.menuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -65,7 +66,7 @@
             this.richTextBoxOutput.Location = new System.Drawing.Point(12, 27);
             this.richTextBoxOutput.Name = "richTextBoxOutput";
             this.richTextBoxOutput.ReadOnly = true;
-            this.richTextBoxOutput.Size = new System.Drawing.Size(899, 375);
+            this.richTextBoxOutput.Size = new System.Drawing.Size(899, 373);
             this.richTextBoxOutput.TabIndex = 0;
             this.richTextBoxOutput.Text = "";
             this.richTextBoxOutput.WordWrap = false;
@@ -76,7 +77,7 @@
             this.labelExport.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.labelExport.AutoSize = true;
-            this.labelExport.Location = new System.Drawing.Point(27, 418);
+            this.labelExport.Location = new System.Drawing.Point(27, 416);
             this.labelExport.Name = "labelExport";
             this.labelExport.Size = new System.Drawing.Size(56, 13);
             this.labelExport.TabIndex = 1;
@@ -87,7 +88,7 @@
             // 
             this.buttonFolderBrowser.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.buttonFolderBrowser.Enabled = false;
-            this.buttonFolderBrowser.Location = new System.Drawing.Point(89, 444);
+            this.buttonFolderBrowser.Location = new System.Drawing.Point(89, 442);
             this.buttonFolderBrowser.Name = "buttonFolderBrowser";
             this.buttonFolderBrowser.Size = new System.Drawing.Size(109, 23);
             this.buttonFolderBrowser.TabIndex = 3;
@@ -99,7 +100,7 @@
             // 
             this.buttonExport.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonExport.Enabled = false;
-            this.buttonExport.Location = new System.Drawing.Point(730, 418);
+            this.buttonExport.Location = new System.Drawing.Point(730, 416);
             this.buttonExport.Name = "buttonExport";
             this.buttonExport.Size = new System.Drawing.Size(180, 79);
             this.buttonExport.TabIndex = 7;
@@ -111,7 +112,7 @@
             // 
             this.buttonViewer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonViewer.Enabled = false;
-            this.buttonViewer.Location = new System.Drawing.Point(575, 444);
+            this.buttonViewer.Location = new System.Drawing.Point(575, 442);
             this.buttonViewer.Name = "buttonViewer";
             this.buttonViewer.Size = new System.Drawing.Size(120, 23);
             this.buttonViewer.TabIndex = 4;
@@ -209,6 +210,13 @@
             this.supportTiledMapEditorToolStripMenuItem.Text = "&Support Tiled On Patreon ...";
             this.supportTiledMapEditorToolStripMenuItem.Click += new System.EventHandler(this.supportTiledMapEditorToolStripMenuItem_Click);
             // 
+            // donateToTiled2UnityToolStripMenuItem
+            // 
+            this.donateToTiled2UnityToolStripMenuItem.Name = "donateToTiled2UnityToolStripMenuItem";
+            this.donateToTiled2UnityToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
+            this.donateToTiled2UnityToolStripMenuItem.Text = "&Donate to Tiled2Unity";
+            this.donateToTiled2UnityToolStripMenuItem.Click += new System.EventHandler(this.donateToTiled2UnityToolStripMenuItem_Click);
+            // 
             // toolStripSeparator2
             // 
             this.toolStripSeparator2.Name = "toolStripSeparator2";
@@ -226,7 +234,7 @@
             this.labelScale.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.labelScale.AutoSize = true;
-            this.labelScale.Location = new System.Drawing.Point(13, 483);
+            this.labelScale.Location = new System.Drawing.Point(13, 481);
             this.labelScale.Name = "labelScale";
             this.labelScale.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.labelScale.Size = new System.Drawing.Size(70, 13);
@@ -237,7 +245,7 @@
             // textBoxScale
             // 
             this.textBoxScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.textBoxScale.Location = new System.Drawing.Point(90, 483);
+            this.textBoxScale.Location = new System.Drawing.Point(90, 481);
             this.textBoxScale.Name = "textBoxScale";
             this.textBoxScale.Size = new System.Drawing.Size(108, 20);
             this.textBoxScale.TabIndex = 6;
@@ -249,7 +257,7 @@
             this.textBoxExportFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBoxExportFolder.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastExportDirectory", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.textBoxExportFolder.Location = new System.Drawing.Point(89, 418);
+            this.textBoxExportFolder.Location = new System.Drawing.Point(89, 416);
             this.textBoxExportFolder.Name = "textBoxExportFolder";
             this.textBoxExportFolder.ReadOnly = true;
             this.textBoxExportFolder.Size = new System.Drawing.Size(607, 20);
@@ -257,19 +265,25 @@
             this.textBoxExportFolder.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
             this.textBoxExportFolder.TextChanged += new System.EventHandler(this.textBoxExportFolder_TextChanged);
             // 
-            // donateToTiled2UnityToolStripMenuItem
+            // checkBoxPreferConvexPolygons
             // 
-            this.donateToTiled2UnityToolStripMenuItem.Name = "donateToTiled2UnityToolStripMenuItem";
-            this.donateToTiled2UnityToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
-            this.donateToTiled2UnityToolStripMenuItem.Text = "&Donate to Tiled2Unity";
-            this.donateToTiled2UnityToolStripMenuItem.Click += new System.EventHandler(this.donateToTiled2UnityToolStripMenuItem_Click);
+            this.checkBoxPreferConvexPolygons.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.checkBoxPreferConvexPolygons.AutoSize = true;
+            this.checkBoxPreferConvexPolygons.Location = new System.Drawing.Point(234, 484);
+            this.checkBoxPreferConvexPolygons.Name = "checkBoxPreferConvexPolygons";
+            this.checkBoxPreferConvexPolygons.Size = new System.Drawing.Size(326, 17);
+            this.checkBoxPreferConvexPolygons.TabIndex = 8;
+            this.checkBoxPreferConvexPolygons.Text = "Convex Polygon Colliders (may be overridden with unity:convex)";
+            this.checkBoxPreferConvexPolygons.UseVisualStyleBackColor = true;
+            this.checkBoxPreferConvexPolygons.CheckedChanged += new System.EventHandler(this.checkBoxPreferConvexPolygons_CheckedChanged);
             // 
             // Tiled2UnityForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.ClientSize = new System.Drawing.Size(923, 509);
+            this.ClientSize = new System.Drawing.Size(923, 507);
+            this.Controls.Add(this.checkBoxPreferConvexPolygons);
             this.Controls.Add(this.textBoxScale);
             this.Controls.Add(this.labelScale);
             this.Controls.Add(this.buttonViewer);
@@ -315,6 +329,7 @@
         private System.Windows.Forms.ToolStripMenuItem supportTiledMapEditorToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripMenuItem donateToTiled2UnityToolStripMenuItem;
+        private System.Windows.Forms.CheckBox checkBoxPreferConvexPolygons;
     }
 }
 

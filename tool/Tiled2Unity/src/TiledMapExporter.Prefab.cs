@@ -175,7 +175,7 @@ namespace Tiled2Unity
                 {
                     if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
-                        TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromIsometricRectangle(this.tmxMap, tmxObject as TmxObjectRectangle);
+                        TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromRectangle(this.tmxMap, tmxObject as TmxObjectRectangle);
                         objElement = CreatePolygonColliderElement(tmxIsometricRectangle);
                     }
                     else
@@ -352,6 +352,7 @@ namespace Tiled2Unity
             knownProperties.Add("unity:sortingOrder");
             knownProperties.Add("unity:scale");
             knownProperties.Add("unity:isTrigger");
+            knownProperties.Add("unity:convex");
             knownProperties.Add("unity:ignore");
             knownProperties.Add("unity:resource");
             knownProperties.Add("unity:resourcePath");
@@ -516,8 +517,9 @@ namespace Tiled2Unity
 
                 xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
                 xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
-                xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.ParentObjectGroup.SortingLayerName);
-                xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.ParentObjectGroup.SortingOrder);
+
+                xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
+                xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
 
                 // This object, that actually displays the tile, has to be bumped up to account for the bottom-left corner problem with Tile Objects in Tiled
                 xmlMeshObject.SetAttributeValue("x", 0);

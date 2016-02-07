@@ -34,6 +34,13 @@ namespace Tiled2Unity
             return (tileId & FLIPPED_VERTICALLY_FLAG) != 0;
         }
 
+        static public void RotatePoints(PointF[] points, TmxObject tmxObject)
+        {
+            Matrix rotate = new Matrix();
+            rotate.RotateAt(tmxObject.Rotation, tmxObject.Position);
+            rotate.TransformPoints(points);
+        }
+
         static public void TransformPoints(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
         {
             Matrix translate = new Matrix();
@@ -250,5 +257,15 @@ namespace Tiled2Unity
             return xfPoints;
         }
 
+        // We don't want ugly floating point issues. Take for granted that sanitized values can be rounded to nearest 1/256th of value
+        public static float Sanitize(float v)
+        {
+            return (float)Math.Round(v * 256) / 256.0f;
+        }
+
+        public static PointF Sanitize(PointF pt)
+        {
+            return new PointF(Sanitize(pt.X), Sanitize(pt.Y));
+        }
     }
 }

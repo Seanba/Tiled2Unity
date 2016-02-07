@@ -9,7 +9,7 @@ namespace Tiled2Unity
 {
     class TmxObjectPolyline : TmxObject, TmxHasPoints
     {
-        public List<PointF> Points { get; protected set; }
+        public List<PointF> Points { get; set; }
 
         public TmxObjectPolyline()
         {

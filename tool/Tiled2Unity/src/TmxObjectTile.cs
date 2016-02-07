@@ -12,6 +12,14 @@ namespace Tiled2Unity
         public bool FlippedHorizontal { get; private set; }
         public bool FlippedVertical { get; private set; }
 
+        public string SortingLayerName { get; private set; }
+        public int? SortingOrder { get; private set; }
+
+        public TmxObjectTile()
+        {
+            this.SortingLayerName = null;
+        }
+
         public override System.Drawing.RectangleF GetWorldBounds()
         {
             RectangleF myBounds = new RectangleF(this.Position.X, this.Position.Y - this.Size.Height, this.Size.Width, this.Size.Height);
@@ -52,6 +60,16 @@ namespace Tiled2Unity
             if (this.Tile.Meshes.Count() == 0)
             {
                 this.Tile.Meshes = TmxMesh.FromTmxTile(this.Tile, tmxMap);
+            }
+
+            // Check properties for layer placement
+            if (this.Properties.PropertyMap.ContainsKey("unity:sortingLayerName"))
+            {
+                this.SortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName");
+            }
+            if (this.Properties.PropertyMap.ContainsKey("unity:sortingOrder"))
+            {
+                this.SortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
             }
         }
 

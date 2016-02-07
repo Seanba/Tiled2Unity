@@ -306,7 +306,15 @@ namespace Tiled2Unity
             string path = System.Reflection.Assembly.GetExecutingAssembly().Location;
             string folder = Path.GetDirectoryName(path);
             string package = Path.Combine(folder, "Tiled2Unity.unitypackage");
-            System.Diagnostics.Process.Start(package);
+            try
+            {
+                System.Diagnostics.Process.Start(package);
+            }
+            catch (Exception ex)
+            {
+                string msg = String.Format("There was an importing Tiled2Unity.unitypackage with command:\n  {0}\n\nError: {1}", package, ex.Message);
+                MessageBox.Show(msg, "Tiled2Unity Error");
+            }
         }
 
         private void textBoxScale_Validating(object sender, CancelEventArgs e)
@@ -350,6 +358,12 @@ namespace Tiled2Unity
         private void donateToTiled2UnityToolStripMenuItem_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("http://www.seanba.com/donate");
+        }
+
+        private void checkBoxPreferConvexPolygons_CheckedChanged(object sender, EventArgs e)
+        {
+            Program.PreferConvexPolygons = this.checkBoxPreferConvexPolygons.Checked;
+            Properties.Settings.Default.Save();
         }
 
     }
