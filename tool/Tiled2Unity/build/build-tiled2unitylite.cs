@@ -54,7 +54,7 @@ namespace Tiled2UnityLite_Builder
 				if (!ignoreReferences.Any(i => library.Contains(i)))
 				{
 					// We want to reference this library
-					string comment = string.Format("//css_reference {0}", library);
+					string comment = string.Format("//css_reference {0};", library);
 					references.Add(comment);
 				}
 			}			

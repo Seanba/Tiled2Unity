@@ -11,9 +11,6 @@ if t2uVersion == nil
 	exit
 end
 
-# Run Tiled2Unity to get version information
-`"C:\\Program Files (x86)\\Tiled2Unity\\Tiled2Unity.exe" --write-version-file`
-
 # Check for version file
 if !File.exists? "t2u-version.txt"
 	puts "t2u-version.txt file not created" 

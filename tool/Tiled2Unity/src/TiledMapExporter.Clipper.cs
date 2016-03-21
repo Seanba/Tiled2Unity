@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Text;
 using System.Xml.Linq;
@@ -13,6 +12,9 @@ namespace Tiled2Unity
 
     partial class TiledMapExporter
     {
+        // After a certain number of paths in a polygon collider Unity will start to slow down considerably
+        private static readonly int MaxNumberOfSafePaths = 16 * 16;
+
         private XElement CreateCollisionElementForLayer(TmxLayer layer)
         {
             // Collision elements look like this
@@ -40,6 +42,18 @@ namespace Tiled2Unity
                 };
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
+
+            var paths = ClipperLib.Clipper.ClosedPathsFromPolyTree(solution);
+            if (paths.Count >= MaxNumberOfSafePaths)
+            {
+                StringBuilder warning = new StringBuilder();
+                warning.AppendFormat("Layer '{0}' has a large number of polygon paths ({1}).", layer.Name, paths.Count);
+                warning.AppendLine("  Importing this layer may be slow in Unity.");
+                warning.AppendLine("  Check polygon/rectangle objects in Tile Collision Editor in Tiled and use 'Snap to Grid' or 'Snap to Fine Grid'.");
+                warning.AppendLine("  You want colliders to be set up so they can be merged with colliders on neighboring tiles, reducing path count considerably.");
+                warning.AppendLine("  In some cases, the size of the map may need to be reduced.");
+                Program.WriteWarning(warning.ToString());
+            }
 
             // Add our polygon and edge colliders
             List<XElement> polyColliderElements = new List<XElement>();

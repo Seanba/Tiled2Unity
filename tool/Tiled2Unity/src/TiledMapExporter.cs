@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing.Drawing2D;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
@@ -95,15 +94,13 @@ namespace Tiled2Unity
                     if (Program.GetVersion() != group.ToString())
                     {
                         StringBuilder builder = new StringBuilder();
-                        builder.AppendFormat("Warning exporting '{0}'\n", fileToSave);
-                        builder.AppendFormat("Version mismatch\n");
-                        builder.AppendFormat("  Tiled2Unity version: {0}\n", Program.GetVersion());
-                        builder.AppendFormat("  Project version    : {0}\n", group.ToString());
+                        builder.AppendFormat("Export/Import Version mismatch\n");
+                        builder.AppendFormat("  Tiled2Unity version   : {0}\n", Program.GetVersion());
+                        builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
                         Program.WriteWarning(builder.ToString());
                     }
                 }
             }
-
 
             // Save the file (which is importing it into Unity)
             string pathToSave = Path.Combine(exportDir, fileToSave);

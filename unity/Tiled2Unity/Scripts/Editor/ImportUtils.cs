@@ -95,13 +95,6 @@ namespace Tiled2Unity
             }
         }
 
-        public static void ApplyColliderOffset(XElement xmlCollider, Collider2D collider)
-        {
-            float x = GetAttributeAsFloat(xmlCollider, "offsetX", 0);
-            float y = GetAttributeAsFloat(xmlCollider, "offsetY", 0);
-            collider.offset += new Vector2(x, y);
-        }
-
         public static byte[] Base64ToBytes(string base64)
         {
             return Convert.FromBase64String(base64);

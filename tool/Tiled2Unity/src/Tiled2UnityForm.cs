@@ -104,7 +104,7 @@ namespace Tiled2Unity
                 this.tmxMap = TmxMap.LoadFromFile(tmxPath);
                 this.tmxExporter = new TiledMapExporter(this.tmxMap);
                 CheckExportButton();
-                ReportSummary();
+                ReportSummary("Compilation complete");
             }
             catch (TmxException tmx)
             {
@@ -132,7 +132,7 @@ namespace Tiled2Unity
             this.buttonExport.Enabled = (this.tmxExporter != null) && exportPathExists;
         }
 
-        private void ReportSummary()
+        private void ReportSummary(string header)
         {
             WriteText("----------------------------------------\n");
             Color complete = Color.Lime;
@@ -141,7 +141,7 @@ namespace Tiled2Unity
             else if (this.warnings.Count() > 0)
                 complete = Color.Yellow;
 
-            WriteText("Compilation complete\n", complete);
+            WriteText(header + "\n", complete);
 
             WriteText(String.Format("Warnings: {0}\n", this.warnings.Count()));
             foreach (string warning in this.warnings)
@@ -256,10 +256,13 @@ namespace Tiled2Unity
             CheckExportButton();
         }
 
-        private void buttonExport_Click_1(object sender, EventArgs e)
+        private void buttonExport_Click(object sender, EventArgs e)
         {
+            this.warnings.Clear();
+            this.errors.Clear();
             string path = this.textBoxExportFolder.Text;
             this.tmxExporter.Export(path);
+            ReportSummary("Export complete");
         }
 
         private void openTiledFileToolStripMenuItem_Click(object sender, EventArgs e)

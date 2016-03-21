@@ -1,13 +1,13 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.4.2
+// version 1.0.4.4
 
-//css_reference System
-//css_reference System.Core
-//css_reference System.Xml.Linq
-//css_reference System.Data.DataSetExtensions
-//css_reference System.Data
-//css_reference System.Drawing
-//css_reference System.Xml
+//css_reference System;
+//css_reference System.Core;
+//css_reference System.Xml.Linq;
+//css_reference System.Data.DataSetExtensions;
+//css_reference System.Data;
+//css_reference System.Drawing;
+//css_reference System.Xml;
 
 #define TILED_2_UNITY_LITE
 #define use_lines
@@ -19,7 +19,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -39,7 +38,7 @@ namespace Tiled2Unity
     {
         public static string GetVersion()
         {
-            return "1.0.4.2";
+            return "1.0.4.4";
         }
     }
 }
@@ -768,10 +767,35 @@ namespace Tiled2Unity
             };
 
 #if TILED_2_UNITY_LITE
+
         // Scripting main
         static void Main(string[] args)
         {
             SetCulture();
+
+            // Listen to any success, warning, and error messages. Give a report when finished.
+            List<string> errors = new List<string>();
+            Action<string> funcError = delegate(string line)
+            {
+                errors.Add(line);
+            };
+
+            List<string> warnings = new List<string>();
+            Action<string> funcWaring = delegate(string line)
+            {
+                warnings.Add(line);
+            };
+
+            List<string> successes = new List<string>();
+            Action<string> funcSuccess = delegate(string line)
+            {
+                successes.Add(line);
+            };
+
+            // Temporarily capture output while exporting
+            Program.OnWriteError += new Program.WriteErrorDelegate(funcError);
+            Program.OnWriteWarning += new Program.WriteWarningDelegate(funcWaring);
+            Program.OnWriteSuccess += new Program.WriteSuccessDelegate(funcSuccess);
 
             // Default options
             Program.Scale = 1.0f;
@@ -797,6 +821,27 @@ namespace Tiled2Unity
                 TmxMap tmxMap = TmxMap.LoadFromFile(Program.TmxPath);
                 TiledMapExporter tiledMapExporter = new TiledMapExporter(tmxMap);
                 tiledMapExporter.Export(Program.ExportUnityProjectDir);
+
+                // Write a summary that repeats warnings and errors
+                Console.WriteLine("----------------------------------------");
+                Console.WriteLine("Export completed");
+                foreach (string msg in successes)
+                {
+                    Console.WriteLine(msg);
+                }
+
+                Console.WriteLine("Warnings: {0}", warnings.Count);
+                foreach (string warning in warnings)
+                {
+                    Console.WriteLine(warning);
+                }
+            
+                Console.Error.WriteLine("Errors: {0}\n", errors.Count);
+                foreach (string error in errors)
+                {
+                    Console.WriteLine(error);
+                }
+                Console.WriteLine("----------------------------------------");
             }
         }
 #else
@@ -804,11 +849,6 @@ namespace Tiled2Unity
         [STAThread]
         static void Main(string[] args)
         {
-            if (PrintVersionOnly(args))
-            {
-                return;
-            }
-
             SetCulture();
 
             // Default options
@@ -1114,23 +1154,6 @@ namespace Tiled2Unity
             System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
         }
 
-#if !TILED_2_UNITY_LITE
-        static private bool PrintVersionOnly(string[] args)
-        {
-            if (args != null && args.Count() == 1)
-            {
-                // This is so stupid
-                if (args[0] == "--write-version-file")
-                {
-                    File.WriteAllText("t2u-version.txt", Program.GetVersion());
-                    return true;
-                }
-            }
-
-            return false;
-        }
-#endif
-
         static private float ParseFloatDefault(string str, float defaultValue)
         {
             float resultValue = 0;
@@ -1208,7 +1231,6 @@ namespace Tiled2Unity
 // using System;
 // using System.Collections.Generic;
 // using System.Drawing;
-// using System.Drawing.Drawing2D;
 // using System.Linq;
 // using System.Text;
 // using System.Xml.Linq;
@@ -1220,6 +1242,9 @@ namespace Tiled2Unity
 
     partial class TiledMapExporter
     {
+        // After a certain number of paths in a polygon collider Unity will start to slow down considerably
+        private static readonly int MaxNumberOfSafePaths = 16 * 16;
+
         private XElement CreateCollisionElementForLayer(TmxLayer layer)
         {
             // Collision elements look like this
@@ -1247,6 +1272,18 @@ namespace Tiled2Unity
                 };
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
+
+            var paths = ClipperLib.Clipper.ClosedPathsFromPolyTree(solution);
+            if (paths.Count >= MaxNumberOfSafePaths)
+            {
+                StringBuilder warning = new StringBuilder();
+                warning.AppendFormat("Layer '{0}' has a large number of polygon paths ({1}).", layer.Name, paths.Count);
+                warning.AppendLine("  Importing this layer may be slow in Unity.");
+                warning.AppendLine("  Check polygon/rectangle objects in Tile Collision Editor in Tiled and use 'Snap to Grid' or 'Snap to Fine Grid'.");
+                warning.AppendLine("  You want colliders to be set up so they can be merged with colliders on neighboring tiles, reducing path count considerably.");
+                warning.AppendLine("  In some cases, the size of the map may need to be reduced.");
+                Program.WriteWarning(warning.ToString());
+            }
 
             // Add our polygon and edge colliders
             List<XElement> polyColliderElements = new List<XElement>();
@@ -1354,7 +1391,6 @@ namespace Tiled2Unity
 // using System;
 // using System.Collections.Generic;
 // using System.Diagnostics;
-// using System.Drawing.Drawing2D;
 // using System.Drawing;
 // using System.IO;
 // using System.IO.Compression;
@@ -1448,15 +1484,13 @@ namespace Tiled2Unity
                     if (Program.GetVersion() != group.ToString())
                     {
                         StringBuilder builder = new StringBuilder();
-                        builder.AppendFormat("Warning exporting '{0}'\n", fileToSave);
-                        builder.AppendFormat("Version mismatch\n");
-                        builder.AppendFormat("  Tiled2Unity version: {0}\n", Program.GetVersion());
-                        builder.AppendFormat("  Project version    : {0}\n", group.ToString());
+                        builder.AppendFormat("Export/Import Version mismatch\n");
+                        builder.AppendFormat("  Tiled2Unity version   : {0}\n", Program.GetVersion());
+                        builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
                         Program.WriteWarning(builder.ToString());
                     }
                 }
             }
-
 
             // Save the file (which is importing it into Unity)
             string pathToSave = Path.Combine(exportDir, fileToSave);
@@ -2765,7 +2799,10 @@ namespace Tiled2Unity
         public string AbsolutePath { get; private set; }
         public Size Size { get; private set; }
         public String TransparentColor { get; set; }
+
+#if !TILED_2_UNITY_LITE
         public Bitmap ImageBitmap { get; private set; }
+#endif
     }
 }
 
@@ -2790,6 +2827,12 @@ namespace Tiled2Unity
             TmxImage tmxImage = new TmxImage();
             tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
 
+#if TILED_2_UNITY_LITE
+            // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
+            int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+            int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+            tmxImage.Size = new System.Drawing.Size(width, height);
+#else
             try
             {
                 tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
@@ -2816,6 +2859,7 @@ namespace Tiled2Unity
             }
 
             tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
+#endif
 
             // Some images use a transparency color key instead of alpha (blerg)
             tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
@@ -2827,8 +2871,10 @@ namespace Tiled2Unity
                     tmxImage.TransparentColor = "#" + tmxImage.TransparentColor;
                 }
 
+#if !TILED_2_UNITY_LITE
                 System.Drawing.Color transColor = System.Drawing.ColorTranslator.FromHtml(tmxImage.TransparentColor);
                 tmxImage.ImageBitmap.MakeTransparent(transColor);
+#endif
             }
 
             return tmxImage;
@@ -3559,7 +3605,13 @@ namespace Tiled2Unity
 
             TmxImage tmxImage = TmxImage.FromXml(xmlImage);
 
-            uint firstId = this.Tiles.Max(t => t.Key) + 1;
+            // The "firstId" is is always one more than all the tiles that we've already parsed (which may be zero)
+            uint firstId = 1;
+            if (this.Tiles.Count > 0)
+            {
+                firstId = this.Tiles.Max(t => t.Key) + 1;
+            }
+            
             uint localId = 1;
             uint globalId = firstId + localId;
 
@@ -3634,7 +3686,6 @@ namespace Tiled2Unity
 // using System;
 // using System.Collections.Generic;
 // using System.Drawing;
-// using System.Drawing.Drawing2D;
 // using System.Linq;
 // using System.Text;
 
@@ -3669,78 +3720,80 @@ namespace Tiled2Unity
 
         static public void RotatePoints(PointF[] points, TmxObject tmxObject)
         {
-            Matrix rotate = new Matrix();
-            rotate.RotateAt(tmxObject.Rotation, tmxObject.Position);
+            TranslatePoints(points, -tmxObject.Position.X, -tmxObject.Position.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix(-tmxObject.Rotation);
             rotate.TransformPoints(points);
+
+            TranslatePoints(points, tmxObject.Position.X, tmxObject.Position.Y);
         }
 
         static public void TransformPoints(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
         {
-            Matrix translate = new Matrix();
-            Matrix rotate = new Matrix();
-
             // Put the points into origin/local space
-            translate.Translate(-origin.X, -origin.Y);
-            translate.TransformPoints(points);
+            TranslatePoints(points, -origin.X, -origin.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix();
 
             // Apply the flips/rotations (order matters)
             if (horizontal)
             {
-                Matrix h = new Matrix(-1, 0, 0, 1, 0, 0);
-                rotate.Multiply(h);
+                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
+                rotate = TmxRotationMatrix.Multiply(h, rotate);
             }
             if (vertical)
             {
-                Matrix v = new Matrix(1, 0, 0, -1, 0, 0);
-                rotate.Multiply(v);
+                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
+                rotate = TmxRotationMatrix.Multiply(v, rotate);
             }
             if (diagonal)
             {
-                Matrix d = new Matrix(0, 1, 1, 0, 0, 0);
-                rotate.Multiply(d);
+                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
+                rotate = TmxRotationMatrix.Multiply(d, rotate);
             }
 
             // Apply the combined flip/rotate transformation
             rotate.TransformPoints(points);
 
             // Put points back into world space
-            translate.Invert();
-            translate.TransformPoints(points);
+            TranslatePoints(points, origin.X, origin.Y);
         }
 
-        // Hack function to to diaonal flip first in transformations first
+        // Hack function to do diaonal flip first in transformations
         static public void TransformPoints_DiagFirst(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
         {
-            Matrix translate = new Matrix();
-            Matrix rotate = new Matrix();
-
             // Put the points into origin/local space
-            translate.Translate(-origin.X, -origin.Y);
-            translate.TransformPoints(points);
+            TranslatePoints(points, -origin.X, -origin.Y);
 
-            // Apply the flips/rotations
+            TmxRotationMatrix rotate = new TmxRotationMatrix();
+
+            // Apply the flips/rotations (order matters)
             if (diagonal)
             {
-                Matrix d = new Matrix(0, 1, 1, 0, 0, 0);
-                rotate.Multiply(d);
+                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
+                rotate = TmxRotationMatrix.Multiply(d, rotate);
             }
             if (horizontal)
             {
-                Matrix h = new Matrix(-1, 0, 0, 1, 0, 0);
-                rotate.Multiply(h);
+                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
+                rotate = TmxRotationMatrix.Multiply(h, rotate);
             }
             if (vertical)
             {
-                Matrix v = new Matrix(1, 0, 0, -1, 0, 0);
-                rotate.Multiply(v);
+                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
+                rotate = TmxRotationMatrix.Multiply(v, rotate);
             }
 
             // Apply the combined flip/rotate transformation
             rotate.TransformPoints(points);
 
             // Put points back into world space
-            translate.Invert();
-            translate.TransformPoints(points);
+            TranslatePoints(points, origin.X, origin.Y);
+        }
+
+        static public void TranslatePoints(PointF[] points, float tx, float ty)
+        {
+            TranslatePoints(points, new PointF(tx, ty));
         }
 
         static public void TranslatePoints(PointF[] points, PointF translate)
@@ -4789,6 +4842,82 @@ namespace Tiled2Unity
 
             return tmxProps;
         }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxRotationMatrix.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+// This is a working man's rotation matrix
+// This keeps us from invoking the .NET GDI+ Matrix which causes issues on Mac builds
+namespace Tiled2Unity
+{
+    class TmxRotationMatrix
+    {
+        private float[,] m = new float[2,2] { { 1, 0 },
+                                              { 0, 1 } };
+
+        public TmxRotationMatrix()
+        {
+        }
+
+        public TmxRotationMatrix(float degrees)
+        {
+            double rads = degrees * Math.PI / 180.0f;
+            float cos = (float)Math.Cos(rads);
+            float sin = (float)Math.Sin(rads);
+
+            m[0, 0] = cos;
+            m[0, 1] = -sin;
+            m[1, 0] = sin;
+            m[1, 1] = cos;
+        }
+
+        public TmxRotationMatrix(float m00, float m01, float m10, float m11)
+        {
+            m[0, 0] = m00;
+            m[0, 1] = m01;
+            m[1, 0] = m10;
+            m[1, 1] = m11;
+        }
+
+        public float this[int i, int j]
+        {
+            get { return m[i, j]; }
+            set { m[i, j] = value; }
+        }
+
+        static public TmxRotationMatrix Multiply(TmxRotationMatrix M1, TmxRotationMatrix M2)
+        {
+            float m00 = M1[0, 0] * M2[0, 0] + M1[0, 1] * M2[1, 0];
+            float m01 = M1[0, 0] * M2[0, 1] + M1[0, 1] * M2[1, 1];
+            float m10 = M1[1, 0] * M2[0, 0] + M1[1, 1] * M2[1, 0];
+            float m11 = M1[1, 0] * M2[0, 1] + M1[1, 1] * M2[1, 1];
+            return new TmxRotationMatrix(m00, m01, m10, m11);
+        }
+
+        public void TransformPoint(ref PointF pt)
+        {
+            float x = pt.X * m[0, 0] + pt.Y * m[1, 0];
+            float y = pt.X * m[0, 1] + pt.Y * m[1, 1];
+            pt.X = x;
+            pt.Y = y;
+        }
+
+        public void TransformPoints(PointF[] points)
+        {
+            for (int i = 0; i < points.Length; ++i)
+            {
+                TransformPoint(ref points[i]);
+            }
+        }
+
     }
 }
 

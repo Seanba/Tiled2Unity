@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Text;
 
@@ -36,78 +35,80 @@ namespace Tiled2Unity
 
         static public void RotatePoints(PointF[] points, TmxObject tmxObject)
         {
-            Matrix rotate = new Matrix();
-            rotate.RotateAt(tmxObject.Rotation, tmxObject.Position);
+            TranslatePoints(points, -tmxObject.Position.X, -tmxObject.Position.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix(-tmxObject.Rotation);
             rotate.TransformPoints(points);
+
+            TranslatePoints(points, tmxObject.Position.X, tmxObject.Position.Y);
         }
 
         static public void TransformPoints(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
         {
-            Matrix translate = new Matrix();
-            Matrix rotate = new Matrix();
-
             // Put the points into origin/local space
-            translate.Translate(-origin.X, -origin.Y);
-            translate.TransformPoints(points);
+            TranslatePoints(points, -origin.X, -origin.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix();
 
             // Apply the flips/rotations (order matters)
             if (horizontal)
             {
-                Matrix h = new Matrix(-1, 0, 0, 1, 0, 0);
-                rotate.Multiply(h);
+                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
+                rotate = TmxRotationMatrix.Multiply(h, rotate);
             }
             if (vertical)
             {
-                Matrix v = new Matrix(1, 0, 0, -1, 0, 0);
-                rotate.Multiply(v);
+                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
+                rotate = TmxRotationMatrix.Multiply(v, rotate);
             }
             if (diagonal)
             {
-                Matrix d = new Matrix(0, 1, 1, 0, 0, 0);
-                rotate.Multiply(d);
+                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
+                rotate = TmxRotationMatrix.Multiply(d, rotate);
             }
 
             // Apply the combined flip/rotate transformation
             rotate.TransformPoints(points);
 
             // Put points back into world space
-            translate.Invert();
-            translate.TransformPoints(points);
+            TranslatePoints(points, origin.X, origin.Y);
         }
 
-        // Hack function to to diaonal flip first in transformations first
+        // Hack function to do diaonal flip first in transformations
         static public void TransformPoints_DiagFirst(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
         {
-            Matrix translate = new Matrix();
-            Matrix rotate = new Matrix();
-
             // Put the points into origin/local space
-            translate.Translate(-origin.X, -origin.Y);
-            translate.TransformPoints(points);
+            TranslatePoints(points, -origin.X, -origin.Y);
 
-            // Apply the flips/rotations
+            TmxRotationMatrix rotate = new TmxRotationMatrix();
+
+            // Apply the flips/rotations (order matters)
             if (diagonal)
             {
-                Matrix d = new Matrix(0, 1, 1, 0, 0, 0);
-                rotate.Multiply(d);
+                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
+                rotate = TmxRotationMatrix.Multiply(d, rotate);
             }
             if (horizontal)
             {
-                Matrix h = new Matrix(-1, 0, 0, 1, 0, 0);
-                rotate.Multiply(h);
+                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
+                rotate = TmxRotationMatrix.Multiply(h, rotate);
             }
             if (vertical)
             {
-                Matrix v = new Matrix(1, 0, 0, -1, 0, 0);
-                rotate.Multiply(v);
+                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
+                rotate = TmxRotationMatrix.Multiply(v, rotate);
             }
 
             // Apply the combined flip/rotate transformation
             rotate.TransformPoints(points);
 
             // Put points back into world space
-            translate.Invert();
-            translate.TransformPoints(points);
+            TranslatePoints(points, origin.X, origin.Y);
+        }
+
+        static public void TranslatePoints(PointF[] points, float tx, float ty)
+        {
+            TranslatePoints(points, new PointF(tx, ty));
         }
 
         static public void TranslatePoints(PointF[] points, PointF translate)

@@ -22,7 +22,7 @@ namespace Tiled2Unity
 
             // Discover the root of the Tiled2Unity scripts and assets
             this.pathToTiled2UnityRoot = Path.GetDirectoryName(this.fullPathToFile);
-            int index = this.pathToTiled2UnityRoot.LastIndexOf("Tiled2Unity");
+            int index = this.pathToTiled2UnityRoot.LastIndexOf("Tiled2Unity", StringComparison.InvariantCultureIgnoreCase);
             if (index == -1)
             {
                 Debug.LogError(String.Format("There is an error with your Tiled2Unity install. Could not find Tiled2Unity folder in {0}", file));

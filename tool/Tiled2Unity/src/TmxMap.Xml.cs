@@ -253,7 +253,13 @@ namespace Tiled2Unity
 
             TmxImage tmxImage = TmxImage.FromXml(xmlImage);
 
-            uint firstId = this.Tiles.Max(t => t.Key) + 1;
+            // The "firstId" is is always one more than all the tiles that we've already parsed (which may be zero)
+            uint firstId = 1;
+            if (this.Tiles.Count > 0)
+            {
+                firstId = this.Tiles.Max(t => t.Key) + 1;
+            }
+            
             uint localId = 1;
             uint globalId = firstId + localId;
 

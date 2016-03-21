@@ -106,7 +106,7 @@
             this.buttonExport.TabIndex = 7;
             this.buttonExport.Text = "Big Ass Export Button";
             this.buttonExport.UseVisualStyleBackColor = true;
-            this.buttonExport.Click += new System.EventHandler(this.buttonExport_Click_1);
+            this.buttonExport.Click += new System.EventHandler(this.buttonExport_Click);
             // 
             // buttonViewer
             // 

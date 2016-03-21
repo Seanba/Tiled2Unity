@@ -56,10 +56,35 @@ namespace Tiled2Unity
             };
 
 #if TILED_2_UNITY_LITE
+
         // Scripting main
         static void Main(string[] args)
         {
             SetCulture();
+
+            // Listen to any success, warning, and error messages. Give a report when finished.
+            List<string> errors = new List<string>();
+            Action<string> funcError = delegate(string line)
+            {
+                errors.Add(line);
+            };
+
+            List<string> warnings = new List<string>();
+            Action<string> funcWaring = delegate(string line)
+            {
+                warnings.Add(line);
+            };
+
+            List<string> successes = new List<string>();
+            Action<string> funcSuccess = delegate(string line)
+            {
+                successes.Add(line);
+            };
+
+            // Temporarily capture output while exporting
+            Program.OnWriteError += new Program.WriteErrorDelegate(funcError);
+            Program.OnWriteWarning += new Program.WriteWarningDelegate(funcWaring);
+            Program.OnWriteSuccess += new Program.WriteSuccessDelegate(funcSuccess);
 
             // Default options
             Program.Scale = 1.0f;
@@ -85,6 +110,27 @@ namespace Tiled2Unity
                 TmxMap tmxMap = TmxMap.LoadFromFile(Program.TmxPath);
                 TiledMapExporter tiledMapExporter = new TiledMapExporter(tmxMap);
                 tiledMapExporter.Export(Program.ExportUnityProjectDir);
+
+                // Write a summary that repeats warnings and errors
+                Console.WriteLine("----------------------------------------");
+                Console.WriteLine("Export completed");
+                foreach (string msg in successes)
+                {
+                    Console.WriteLine(msg);
+                }
+
+                Console.WriteLine("Warnings: {0}", warnings.Count);
+                foreach (string warning in warnings)
+                {
+                    Console.WriteLine(warning);
+                }
+            
+                Console.Error.WriteLine("Errors: {0}\n", errors.Count);
+                foreach (string error in errors)
+                {
+                    Console.WriteLine(error);
+                }
+                Console.WriteLine("----------------------------------------");
             }
         }
 #else
@@ -92,11 +138,6 @@ namespace Tiled2Unity
         [STAThread]
         static void Main(string[] args)
         {
-            if (PrintVersionOnly(args))
-            {
-                return;
-            }
-
             SetCulture();
 
             // Default options
@@ -401,23 +442,6 @@ namespace Tiled2Unity
             customCulture.NumberFormat.NumberDecimalSeparator = ".";
             System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
         }
-
-#if !TILED_2_UNITY_LITE
-        static private bool PrintVersionOnly(string[] args)
-        {
-            if (args != null && args.Count() == 1)
-            {
-                // This is so stupid
-                if (args[0] == "--write-version-file")
-                {
-                    File.WriteAllText("t2u-version.txt", Program.GetVersion());
-                    return true;
-                }
-            }
-
-            return false;
-        }
-#endif
 
         static private float ParseFloatDefault(string str, float defaultValue)
         {

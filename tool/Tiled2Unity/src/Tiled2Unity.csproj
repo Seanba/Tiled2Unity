@@ -193,6 +193,7 @@
     <Compile Include="TmxObjectTile.cs" />
     <Compile Include="TmxProperties.cs" />
     <Compile Include="TmxProperties.Xml.cs" />
+    <Compile Include="TmxRotationMatrix.cs" />
     <Compile Include="TmxTile.cs" />
     <Compile Include="TmxTile.Xml.cs" />
     <EmbeddedResource Include="PreviewPreferencesForm.resx">
@@ -222,6 +223,7 @@
       <DependentUpon>Tiled2UnityViewer.cs</DependentUpon>
     </EmbeddedResource>
     <None Include="app.config" />
+    <None Include="License.rtf" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -256,9 +258,9 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="License.txt" />
     <Content Include="ThirdParty\Clipper\License.txt" />
     <Content Include="ThirdParty\NDesk\License.txt" />
+    <Content Include="ThirdParty\Poly2Tri\License.txt" />
     <EmbeddedResource Include="Resources\About.rtf" />
     <None Include="Resources\mega-dad-stand.png" />
     <Content Include="t2u-icon-bw.ico" />

@@ -16,6 +16,12 @@ namespace Tiled2Unity
             TmxImage tmxImage = new TmxImage();
             tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
 
+#if TILED_2_UNITY_LITE
+            // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
+            int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+            int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+            tmxImage.Size = new System.Drawing.Size(width, height);
+#else
             try
             {
                 tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
@@ -42,6 +48,7 @@ namespace Tiled2Unity
             }
 
             tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
+#endif
 
             // Some images use a transparency color key instead of alpha (blerg)
             tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
@@ -53,8 +60,10 @@ namespace Tiled2Unity
                     tmxImage.TransparentColor = "#" + tmxImage.TransparentColor;
                 }
 
+#if !TILED_2_UNITY_LITE
                 System.Drawing.Color transColor = System.Drawing.ColorTranslator.FromHtml(tmxImage.TransparentColor);
                 tmxImage.ImageBitmap.MakeTransparent(transColor);
+#endif
             }
 
             return tmxImage;

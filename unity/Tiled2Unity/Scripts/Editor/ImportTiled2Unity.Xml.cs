@@ -18,7 +18,7 @@ namespace Tiled2Unity
     // Concentrates on the Xml file being imported
     partial class ImportTiled2Unity
     {
-        public static readonly string ThisVersion = "1.0.4.2";
+        public static readonly string ThisVersion = "1.0.4.4";
 
         // Called when Unity detects the *.tiled2unity.xml file needs to be (re)imported
         public void ImportBegin(string xmlPath)
@@ -28,7 +28,7 @@ namespace Tiled2Unity
             XDocument xml = importBehaviour.XmlDocument;
             if (xml == null)
             {
-                Debug.LogErrorFormat("GameObject {0} not successfully initialized. Is it left over from a previous import. Try removing from scene are re-importing {1}.", importBehaviour.gameObject.name, xmlPath);
+                Debug.LogError(String.Format("GameObject {0} not successfully initialized. Is it left over from a previous import. Try removing from scene are re-importing {1}.", importBehaviour.gameObject.name, xmlPath));
                 return;
             }
 

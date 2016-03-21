@@ -1,4 +1,10 @@
-﻿using System.Collections;
+﻿#if UNITY_4_0 || UNITY_4_0_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_5 || UNITY_4_6 || UNITY_4_7 || UNITY_5_0 || UNITY_5_1 || UNITY_5_2
+#define T2U_USE_LEGACY_IMPORTER
+#else
+#undef T2U_USE_LEGACY_IMPORTER
+#endif
+
+using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Xml;
@@ -15,7 +21,8 @@ namespace Tiled2Unity
         private static bool UseThisImporter(string assetPath)
         {
             // Certain file types are ignored by this asset post processor (i.e. scripts)
-            string[] ignoreThese = { ".cs", ".txt", };
+            // (Note that an empty string as the extension is a folder)
+            string[] ignoreThese = { ".cs", ".txt", "", };
             if (ignoreThese.Any(ext => String.Compare(ext, Path.GetExtension(assetPath), true) == 0))
             {
                 return false;
@@ -109,20 +116,17 @@ namespace Tiled2Unity
 
             // Keep normals otherwise Unity will complain about needing them.
             // Normals may not be a bad idea anyhow
-#if UNITY_5_0 || UNITY_5_1 || UNITY_5_2
+#if T2U_USE_LEGACY_IMPORTER
             modelImporter.normalImportMode = ModelImporterTangentSpaceMode.Import;
+            modelImporter.tangentImportMode = ModelImporterTangentSpaceMode.None;
 #else
             modelImporter.importNormals = ModelImporterNormals.Import;
+            modelImporter.importTangents = ModelImporterTangents.None;
 #endif
 
             // Don't need animations or tangents.
             modelImporter.generateAnimations = ModelImporterGenerateAnimations.None;
             modelImporter.animationType = ModelImporterAnimationType.None;
-#if UNITY_5_0 || UNITY_5_1 || UNITY_5_2
-            modelImporter.tangentImportMode = ModelImporterTangentSpaceMode.None;
-#else
-            modelImporter.importTangents = ModelImporterTangents.None;
-#endif
 
             // Do not need mesh colliders on import.
             modelImporter.addCollider = false;
@@ -144,11 +148,17 @@ namespace Tiled2Unity
 
                 // No shadows
                 mr.receiveShadows = false;
+#if T2U_USE_LEGACY_IMPORTER
+                mr.castShadows = false;
+#else
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+#endif
 
                 // No probes
                 mr.useLightProbes = false;
+#if !T2U_USE_LEGACY_IMPORTER
                 mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+#endif
             }
         }
 
