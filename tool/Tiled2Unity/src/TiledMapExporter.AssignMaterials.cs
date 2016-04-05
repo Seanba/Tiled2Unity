@@ -27,12 +27,6 @@ namespace Tiled2Unity
                             new XAttribute("mesh", mesh.UniqueMeshName),
                             new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
 
-                    // Is there a transparent color key?
-                    if (!String.IsNullOrEmpty(mesh.TmxImage.TransparentColor))
-                    {
-                        assignment.SetAttributeValue("alphaColorKey", mesh.TmxImage.TransparentColor);
-                    }
-
                     elements.Add(assignment);
                 }
             }

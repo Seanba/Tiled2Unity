@@ -13,10 +13,17 @@ namespace Tiled2Unity
     {
         public void TextureImported(string texturePath)
         {
-            // This is fixup method due to materials and textures, under some conditions, being imported out of order
+            // This is a fixup method due to materials and textures, under some conditions, being imported out of order
             Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texturePath, typeof(Texture2D)) as Texture2D;
             Material material = AssetDatabase.LoadAssetAtPath(GetMaterialAssetPath(texturePath), typeof(Material)) as Material;
-            material.SetTexture("_MainTex", texture2d);
+            if (material == null)
+            {
+                Debug.LogError(String.Format("Error importing texture '{0}'. Could not find material. Try re-importing Tiled2Unity/Imported/[MapName].tiled2unity.xml file", texturePath));
+            }
+            else
+            {
+                material.SetTexture("_MainTex", texture2d);
+            }
         }
     }
 }

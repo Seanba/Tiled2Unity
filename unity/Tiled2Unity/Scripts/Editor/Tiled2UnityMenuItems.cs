@@ -18,7 +18,7 @@ namespace Tiled2Unity
         static void ExportLibrary()
         {
             string name = String.Format("Tiled2Unity.{0}.unitypackage", ImportTiled2Unity.ThisVersion);
-            var path = EditorUtility.SaveFilePanel("Save texture as PNG", "", name, "unitypackage");
+            var path = EditorUtility.SaveFilePanel("Save Tiled2Unity library as unity package.", "", name, "unitypackage");
             if (path.Length != 0)
             {
                 List<string> packageFiles = new List<string>();

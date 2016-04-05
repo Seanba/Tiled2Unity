@@ -44,7 +44,7 @@ namespace Tiled2Unity
                         foreach (int x in horizontalRange)
                         {
                             int tileIndex = layer.GetTileIndex(x, y);
-                            uint tileId = mesh.TileIds[tileIndex];
+                            uint tileId = mesh.GetTileIdAt(tileIndex);
 
                             // Skip blank tiles
                             if (tileId == 0)

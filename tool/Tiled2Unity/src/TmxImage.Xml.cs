@@ -24,7 +24,17 @@ namespace Tiled2Unity
 #else
             try
             {
-                tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+                // We use pre-muliplied alpha pixel format (it is 2x faster)
+                Bitmap bitmapRaw = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+                Bitmap bitmapPArgb = new Bitmap(bitmapRaw.Width, bitmapRaw.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+
+                using (Graphics g = Graphics.FromImage(bitmapPArgb))
+                {
+                    g.DrawImage(bitmapRaw, 0, 0, bitmapPArgb.Width, bitmapPArgb.Height);
+                    tmxImage.ImageBitmap = bitmapPArgb;
+                }
+
+                tmxImage.ImageBitmap = bitmapPArgb;
             }
             catch (FileNotFoundException fnf)
             {

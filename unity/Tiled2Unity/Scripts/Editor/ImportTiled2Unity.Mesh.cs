@@ -25,10 +25,14 @@ namespace Tiled2Unity
         // By the time this is called, our assets should be ready to create the map prefab
         public void MeshImported(string objPath)
         {
-            string xmlPath = GetXmlImportAssetPath(objPath);
+            // String the mesh type (.obj) from the path
+            string objName = Path.GetFileNameWithoutExtension(objPath);
+
+            // Get the XML file that this mesh came from
+            string xmlPath = GetXmlImportAssetPath(objName);
 
             ImportBehaviour importBehaviour = ImportBehaviour.FindOrCreateImportBehaviour(xmlPath);
-            importBehaviour.IncrementProgressBar(String.Format("Create prefab: {0}", Path.GetFileNameWithoutExtension(GetPrefabAssetPath(objPath, false, null))));
+            importBehaviour.IncrementProgressBar(String.Format("Create prefab: {0}", Path.GetFileNameWithoutExtension(GetPrefabAssetPath(objName, false, null))));
 
             foreach (var xmlPrefab in importBehaviour.XmlDocument.Root.Elements("Prefab"))
             {

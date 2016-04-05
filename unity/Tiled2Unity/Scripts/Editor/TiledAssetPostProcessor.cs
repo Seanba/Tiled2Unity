@@ -22,7 +22,7 @@ namespace Tiled2Unity
         {
             // Certain file types are ignored by this asset post processor (i.e. scripts)
             // (Note that an empty string as the extension is a folder)
-            string[] ignoreThese = { ".cs", ".txt", "", };
+            string[] ignoreThese = { ".cs", ".txt",  ".shader", "", };
             if (ignoreThese.Any(ext => String.Compare(ext, Path.GetExtension(assetPath), true) == 0))
             {
                 return false;
@@ -49,7 +49,7 @@ namespace Tiled2Unity
             if (useThisImporter == true)
             {
 #if UNITY_WEBPLAYER
-                String warning = String.Format("Importing '{0}' but Tiled2Unity files cannot be imported with the WebPlayer[deprecated] platform.\nHowever, You can use Tiled2Unity prefabs imported by another platform.", assetPath);
+                String warning = String.Format("Can not import '{0}' through Tiled2Unity using the WebPlayer platform. This is depecrated by Unity Technologies and is no longer supported. Go to File -> Build Settings... and switch to another platform. (You can switch back to Web Player after importing.)", assetPath);
                 Debug.LogWarning(warning);
                 return false;
 #else

@@ -27,6 +27,7 @@ namespace Tiled2Unity
         {
             this.args = args;
             InitializeComponent();
+            this.Text = String.Format("Tiled2Unity, {0} ({1})", Program.GetVersion(), Program.GetPlatform());
 
             Program.OnWriteLine += new Program.WriteLineDelegate(Program_OnWriteLine);
             Program.OnWriteWarning += new Program.WriteWarningDelegate(Program_OnWriteWarning);

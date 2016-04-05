@@ -48,10 +48,10 @@ namespace Tiled2Unity
             {
                 StringBuilder warning = new StringBuilder();
                 warning.AppendFormat("Layer '{0}' has a large number of polygon paths ({1}).", layer.Name, paths.Count);
-                warning.AppendLine("  Importing this layer may be slow in Unity.");
+                warning.AppendLine("  Importing this layer may be slow in Unity. (Can take an hour or more for +1000 paths.)");
                 warning.AppendLine("  Check polygon/rectangle objects in Tile Collision Editor in Tiled and use 'Snap to Grid' or 'Snap to Fine Grid'.");
                 warning.AppendLine("  You want colliders to be set up so they can be merged with colliders on neighboring tiles, reducing path count considerably.");
-                warning.AppendLine("  In some cases, the size of the map may need to be reduced.");
+                warning.AppendLine("  In some cases the size of the map may need to be reduced.");
                 Program.WriteWarning(warning.ToString());
             }
 

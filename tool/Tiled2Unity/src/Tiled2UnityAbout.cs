@@ -17,7 +17,7 @@ namespace Tiled2Unity
         public Tiled2UnityAbout()
         {
             InitializeComponent();
-            this.labelVersion.Text = String.Format("Tiled2Unity, {0}", Program.GetVersion());
+            this.labelVersion.Text = String.Format("Tiled2Unity, {0} ({1})", Program.GetVersion(), Program.GetPlatform());
             LoadAboutText();
         }
 

@@ -391,6 +391,15 @@ namespace Tiled2Unity
             AssemblyName name = new AssemblyName(thisApp.FullName);
             return name.Version.ToString();
         }
+
+        public static string GetPlatform()
+        {
+#if T2U_64BIT
+            return "Win64";
+#else
+            return "Win32";
+#endif
+        }
 #endif
 
 #if TILED_2_UNITY_LITE

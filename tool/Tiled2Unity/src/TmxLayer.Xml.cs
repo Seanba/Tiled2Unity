@@ -86,6 +86,18 @@ namespace Tiled2Unity
                 tmxLayer.Offset = translated;
             }
 
+            // Sometimes TMX files have "dead" tiles in them (tiles that were removed but are still referenced)
+            // Remove these tiles from the layer by replacing them with zero
+            for (int t = 0; t < tmxLayer.TileIds.Length; ++t)
+            {
+                uint tileId = tmxLayer.TileIds[t];
+                tileId = TmxMath.GetTileIdWithoutFlags(tileId);
+                if (!tmxMap.Tiles.ContainsKey(tileId))
+                {
+                    tmxLayer.TileIds[t] = 0;
+                }
+            }
+
             // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
             tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
 
@@ -136,9 +148,26 @@ namespace Tiled2Unity
         private void ParseTileDataAsCsv(XElement elem)
         {
             Program.WriteLine("Parsing layer data as CSV ...");
-            var datum = from val in elem.Value.Split(',')
-                        select Convert.ToUInt32(val);
-            this.TileIds = datum.ToArray();
+            List<uint> tileIds = new List<uint>();
+
+            // Splitting line-by-line reducues out-of-memory exceptions in x86 builds
+            string value = elem.Value;
+            StringReader reader = new StringReader(value);
+            string line = string.Empty;
+            do
+            {
+                line = reader.ReadLine();
+                if (!String.IsNullOrEmpty(line))
+                {
+                    var datum = from val in line.Split(',')
+                                where !String.IsNullOrEmpty(val)
+                                select Convert.ToUInt32(val);
+                    tileIds.AddRange(datum);
+                }
+
+            } while (line != null);
+
+            this.TileIds = tileIds.ToArray();
         }
 
         private void ParseTileDataAsBase64(XElement elem)

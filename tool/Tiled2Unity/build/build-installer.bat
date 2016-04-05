@@ -3,35 +3,33 @@ pushd %~dp0
 setlocal
 
 rem Build Tiled2Unity
-rem Note we're hardcoding Visual Studio 2010 here
+rem Note we're hardcoding Visual Studio 2015 here
  
-call "%VS100COMNTOOLS%vsvars32.bat"
-devenv /rebuild Release ../Tiled2Unity.sln
+call "%VS140COMNTOOLS%vsvars32.bat"
+
+rem Build Win32/x86
+echo -- Building Tiled2Unity x86
+devenv /rebuild "Release|x86" ..\Tiled2Unity.sln
 if ERRORLEVEL 1 goto BuildFailed
+echo -- Successfully built Tiled2Unity x86
+
+rem Build Win64/x64
+echo -- Building Tiled2Unity x64
+devenv /rebuild "Release|x64" ..\Tiled2Unity.sln
+if ERRORLEVEL 1 goto BuildFailed
+echo -- Successfully built Tiled2Unity x64
 
 rem Use CS-Script to build Tiled2UnityLite
 %CSSCRIPT_DIR%\cscs build-tiled2unitylite.cs
 
-rem Call our CSharp build script. This will create the auto-gen-builder.bat file we call next.
-%CSSCRIPT_DIR%\cscs build-msi-installer.cs
+rem Call our CSharp build script. This will install and zip as well.
+echo -- Building installer for Tiled2Unity x86
+%CSSCRIPT_DIR%\cscs build-msi-installer.cs x86
+if ERRORLEVEL 1 goto MSIFailed
 
-rem Get the Tiled2Unity version
-set /P T2U_VERSION=< t2u-version.txt
-echo Tiled2Unity version is %T2U_VERSION%
-
-rem Rename the MSI file to include our version
-echo renaming Tiled2Unity.msi to Tiled2Unity-%T2U_VERSION%-win32-setup.msi
-ren Tiled2Unity.msi Tiled2Unity-%T2U_VERSION%-win32-setup.msi
-
-rem Install this version of Tiled2Unity waiting until it is complete
-rem This is so we can zip up the install later
-echo Installing Tiled2Unity ...
-start /WAIT Tiled2Unity-%T2U_VERSION%-win32-setup.msi
-if ERRORLEVEL 1 goto InstallFailed
-echo Installation completed!
-
-rem Zip up the installation for users that prefer it
-ruby zip-tiled2unity.rb %T2U_VERSION%
+echo -- Building installer for Tiled2Unity x64
+%CSSCRIPT_DIR%\cscs build-msi-installer.cs x64
+if ERRORLEVEL 1 goto MSIFailed
 
 goto :Done
 
@@ -41,6 +39,10 @@ popd
 rem Exit conditions
 :BuildFailed
 echo Tiled2Unity failed to build in Dev Studio
+exit /B 1
+
+:MSIFailed
+echo Failed to build MSI installer
 exit /B 1
 
 :InstallFailed

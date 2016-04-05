@@ -17,6 +17,8 @@ namespace Tiled2Unity
     public partial class Tiled2UnityViewer : Form
     {
         private static readonly float GridSize = 3.0f;
+        private static readonly int MaxPreviewTilesWide = 256;
+        private static readonly int MaxPreviewTilesHigh = 256;
 
         private TmxMap tmxMap = null;
         private float scale = 1.0f;
@@ -44,6 +46,25 @@ namespace Tiled2Unity
             CreateAndShowBitmap();
         }
 
+        private int GetMaxTilesWide(TmxMap tmxMap)
+        {
+            return Math.Min(tmxMap.Width, MaxPreviewTilesWide);
+        }
+
+        private int GetMaxTilesHigh(TmxMap tmxMap)
+        {
+            return Math.Min(tmxMap.Height, MaxPreviewTilesHigh);
+        }
+
+        private int GetMaxTilesWide(TmxLayer layer)
+        {
+            return Math.Min(layer.Width, MaxPreviewTilesWide);
+        }
+
+        private int GetMaxTilesHigh(TmxLayer layer)
+        {
+            return Math.Min(layer.Height, MaxPreviewTilesHigh);
+        }
 
         private void CreateAndShowBitmap()
         {
@@ -56,10 +77,10 @@ namespace Tiled2Unity
             this.view400ToolStripMenuItem.Checked = this.scale == 4.0f;
             this.view800ToolStripMenuItem.Checked = this.scale == 8.0f;
 
-            this.Text = String.Format("Tiled2Unity Previewer (Scale = {0})", this.scale);
-
             Properties.Settings.Default.LastPreviewScale = this.scale;
             Properties.Settings.Default.Save();
+
+            this.Text = String.Format("Tiled2Unity Previewer (Scale = {0})", this.scale);
 
             RectangleF boundary = CalculateBoundary();
             this.pictureBoxViewer.Image = CreateBitmap(boundary);
@@ -104,14 +125,36 @@ namespace Tiled2Unity
         {
             Bitmap bitmap = null;
 
+            StringBuilder builderMessage = new StringBuilder();
+            StringBuilder builderError = new StringBuilder();
+
+            builderMessage.AppendLine("Previewing may take a while due to the size and complexity of your map.");
+            builderMessage.AppendLine("Note that map previewing is limited to 256x256 tiles.");
+
             try
             {
-                bitmap = new Bitmap((int)Math.Ceiling(bounds.Width * this.scale) + 1, (int)Math.Ceiling(bounds.Height * this.scale) + 1);
+                bitmap = new Bitmap((int)Math.Ceiling(bounds.Width * this.scale) + 1, (int)Math.Ceiling(bounds.Height * this.scale) + 1, PixelFormat.Format32bppPArgb);
             }
             catch (System.ArgumentException)
             {
-                MessageBox.Show("Cannot preview at these scale. Try a lower scale.", "Too Big!");
+                builderMessage.AppendFormat("Map cannot be previewed at {0} scale. Try a smaller scale.\n", this.scale);
+                builderMessage.AppendLine("Image will be constructed on a 1024x1024 canvas. Parts of your map may be cropped.");
+                builderError.AppendLine("Map can not be previewed at this scale and complexity in full.\n");
+
                 bitmap = new Bitmap(1024, 1024);
+            }
+
+            // Put up a quick message before we construct the real bitmap (which can take some time)
+            {
+                Bitmap bmpMessage = new Bitmap(512, 256);
+                using (Graphics g = Graphics.FromImage(bmpMessage))
+                {
+                    g.FillRectangle(Brushes.LavenderBlush, 0, 0, bmpMessage.Width, bmpMessage.Height);
+                    g.DrawRectangle(Pens.Black, 0, 0, bmpMessage.Width - 1, bmpMessage.Height -1);
+                    DrawString(g, builderMessage.ToString(), 10, 10);
+                }
+                this.pictureBoxViewer.Image = bmpMessage;
+                Refresh();
             }
 
             using (Pen pen = new Pen(Color.Black, 1.0f))
@@ -125,7 +168,7 @@ namespace Tiled2Unity
                 g.ScaleTransform(this.scale, this.scale);
 
                 g.FillRectangle(Brushes.WhiteSmoke, 0, 0, bounds.Width, bounds.Height);
-                g.DrawRectangle(pen, 1, 1, bounds.Width-1, bounds.Height-1);
+                g.DrawRectangle(pen, 1, 1, bounds.Width - 1, bounds.Height - 1);
 
                 g.TranslateTransform(-bounds.X, -bounds.Y);
                 DrawBackground(g);
@@ -133,6 +176,10 @@ namespace Tiled2Unity
                 DrawTiles(g);
                 DrawColliders(g);
                 DrawObjectColliders(g);
+
+                // Were there any errors?
+                g.ResetTransform();
+                DrawError(g, builderError.ToString(), 10, 10);
             }
 
             return bitmap;
@@ -162,9 +209,9 @@ namespace Tiled2Unity
         private void DrawGridQuad(Graphics g)
         {
             HashSet<Point> points = new HashSet<Point>();
-            for (int x = 0; x < this.tmxMap.Width; ++x)
+            for (int x = 0; x < GetMaxTilesWide(this.tmxMap); ++x)
             {
-                for (int y = 0; y < this.tmxMap.Height; ++y)
+                for (int y = 0; y < GetMaxTilesHigh(this.tmxMap); ++y)
                 {
                     // Add the "top-left" corner of a tile
                     points.Add(TmxMath.TileCornerInGridCoordinates(this.tmxMap, x, y));
@@ -268,7 +315,7 @@ namespace Tiled2Unity
                     startPos.Y -= rowHeight;
                 }
 
-                for (; startTile.X < this.tmxMap.Width; startTile.X++)
+                for (; startTile.X < GetMaxTilesWide(this.tmxMap); startTile.X++)
                 {
                     Point rowTile = startTile;
                     Point rowPos = startPos;
@@ -278,7 +325,7 @@ namespace Tiled2Unity
                         rowPos.Y += rowHeight;
                     }
 
-                    for (; rowTile.Y < this.tmxMap.Height; rowTile.Y++)
+                    for (; rowTile.Y < GetMaxTilesHigh(this.tmxMap); rowTile.Y++)
                     {
                         points.Add(TmxMath.AddPoints(rowPos, oct[1]));
                         points.Add(TmxMath.AddPoints(rowPos, oct[2]));
@@ -405,8 +452,8 @@ namespace Tiled2Unity
 
                 // The range of x and y depends on the render order of the tiles
                 // By default we draw right and down but may reverse the tiles we visit
-                var range_x = Enumerable.Range(0, layer.Width);
-                var range_y = Enumerable.Range(0, layer.Height);
+                var range_x = Enumerable.Range(0, GetMaxTilesWide(layer));
+                var range_y = Enumerable.Range(0, GetMaxTilesHigh(layer));
 
                 if (this.tmxMap.DrawOrderHorizontal == -1)
                     range_x = range_x.Reverse();
@@ -711,6 +758,20 @@ namespace Tiled2Unity
             g.DrawString(text, SystemFonts.DefaultFont, Brushes.Black, x - 1, y + 1);
             g.DrawString(text, SystemFonts.DefaultFont, Brushes.Black, x - 1, y);
          
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.White, x, y);
+        }
+
+        private void DrawError(Graphics g, string text, float x, float y)
+        {
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x - 1, y - 1);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x, y - 1);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x + 1, y - 1);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x + 1, y);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x + 1, y + 1);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x, y + 1);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x - 1, y + 1);
+            g.DrawString(text, SystemFonts.DefaultFont, Brushes.Red, x - 1, y);
+
             g.DrawString(text, SystemFonts.DefaultFont, Brushes.White, x, y);
         }
 

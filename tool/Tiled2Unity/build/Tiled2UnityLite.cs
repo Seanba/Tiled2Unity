@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.4.4
+// version 1.0.4.7
 
 //css_reference System;
 //css_reference System.Core;
@@ -38,7 +38,7 @@ namespace Tiled2Unity
     {
         public static string GetVersion()
         {
-            return "1.0.4.4";
+            return "1.0.4.7";
         }
     }
 }
@@ -1102,6 +1102,15 @@ namespace Tiled2Unity
             AssemblyName name = new AssemblyName(thisApp.FullName);
             return name.Version.ToString();
         }
+
+        public static string GetPlatform()
+        {
+#if T2U_64BIT
+            return "Win64";
+#else
+            return "Win32";
+#endif
+        }
 #endif
 
 #if TILED_2_UNITY_LITE
@@ -1199,12 +1208,6 @@ namespace Tiled2Unity
                             new XAttribute("mesh", mesh.UniqueMeshName),
                             new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
 
-                    // Is there a transparent color key?
-                    if (!String.IsNullOrEmpty(mesh.TmxImage.TransparentColor))
-                    {
-                        assignment.SetAttributeValue("alphaColorKey", mesh.TmxImage.TransparentColor);
-                    }
-
                     elements.Add(assignment);
                 }
             }
@@ -1278,10 +1281,10 @@ namespace Tiled2Unity
             {
                 StringBuilder warning = new StringBuilder();
                 warning.AppendFormat("Layer '{0}' has a large number of polygon paths ({1}).", layer.Name, paths.Count);
-                warning.AppendLine("  Importing this layer may be slow in Unity.");
+                warning.AppendLine("  Importing this layer may be slow in Unity. (Can take an hour or more for +1000 paths.)");
                 warning.AppendLine("  Check polygon/rectangle objects in Tile Collision Editor in Tiled and use 'Snap to Grid' or 'Snap to Fine Grid'.");
                 warning.AppendLine("  You want colliders to be set up so they can be merged with colliders on neighboring tiles, reducing path count considerably.");
-                warning.AppendLine("  In some cases, the size of the map may need to be reduced.");
+                warning.AppendLine("  In some cases the size of the map may need to be reduced.");
                 Program.WriteWarning(warning.ToString());
             }
 
@@ -1586,6 +1589,19 @@ namespace Tiled2Unity
 {
     partial class TiledMapExporter
     {
+        private class TmxImageComparer : IEqualityComparer<TmxImage>
+        {
+            public bool Equals(TmxImage lhs, TmxImage rhs)
+            {
+                return lhs.AbsolutePath.ToLower() == rhs.AbsolutePath.ToLower();
+            }
+
+            public int GetHashCode(TmxImage tmxImage)
+            {
+                return tmxImage.AbsolutePath.GetHashCode();
+            }
+        }
+
         private List<XElement> CreateImportFilesElements(string exportToUnityProjectPath)
         {
             List<XElement> elements = new List<XElement>();
@@ -1604,62 +1620,81 @@ namespace Tiled2Unity
 
             {
                 // Add all image files as compressed base64 strings
-                var layerImagePaths = from layer in this.tmxMap.Layers
-                                      where layer.Visible == true
-                                      from rawTileId in layer.TileIds
-                                      where rawTileId != 0
-                                      let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                                      let tile = this.tmxMap.Tiles[tileId]
-                                      select tile.TmxImage.AbsolutePath;
-                layerImagePaths = layerImagePaths.Distinct();
+                var layerImages = from layer in this.tmxMap.Layers
+                                  where layer.Visible == true
+                                  from rawTileId in layer.TileIds
+                                  where rawTileId != 0
+                                  let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
+                                  let tile = this.tmxMap.Tiles[tileId]
+                                  select tile.TmxImage;
 
                 // Tile Objects may have images not yet references by a layer
-                var objectImagePaths = from objectGroup in this.tmxMap.ObjectGroups
-                                       where objectGroup.Visible == true
-                                       from tmxObject in objectGroup.Objects
-                                       where tmxObject.Visible == true
-                                       where tmxObject is TmxObjectTile
-                                       let tmxTileObject = tmxObject as TmxObjectTile
-                                       from mesh in tmxTileObject.Tile.Meshes
-                                       select mesh.TmxImage.AbsolutePath;
-                objectImagePaths = objectImagePaths.Distinct();
+                var objectImages = from objectGroup in this.tmxMap.ObjectGroups
+                                   where objectGroup.Visible == true
+                                   from tmxObject in objectGroup.Objects
+                                   where tmxObject.Visible == true
+                                   where tmxObject is TmxObjectTile
+                                   let tmxTileObject = tmxObject as TmxObjectTile
+                                   from mesh in tmxTileObject.Tile.Meshes
+                                   select mesh.TmxImage;
 
-                List<string> imagePaths = new List<string>();
-                imagePaths.AddRange(layerImagePaths);
-                imagePaths.AddRange(objectImagePaths);
-                imagePaths = imagePaths.Distinct().ToList();
+                // Combine image paths from tile layers and object layers
+                List<TmxImage> images = new List<TmxImage>();
+                images.AddRange(layerImages);
+                images.AddRange(objectImages);
+
+                // Get rid of duplicate images
+                TmxImageComparer imageComparer = new TmxImageComparer();
+                images = images.Distinct(imageComparer).ToList();
 
                 // Do not import files if they are already in the project (in the /Assets/ directory of where we're exporting too)
                 string unityAssetsDir = Path.Combine(exportToUnityProjectPath, "Assets");
 
-                foreach (string path in imagePaths)
+                foreach (TmxImage image in images)
                 {
                     // If the copy from location comes from within the project we want to copy to, then don't do it.
                     // This allows us to have tileset images that are alreday in use by the Unity project
                     string saveToAssetsDir = unityAssetsDir.ToLower();
-                    string copyFromDir = path.ToLower();
+                    string copyFromDir = image.AbsolutePath.ToLower();
+
                     if (copyFromDir.StartsWith(saveToAssetsDir))
                     {
+                        XElement xmlInternalTexture = new XElement("InternalTexture");
+
                         // The path to the texture will be WRT to the Unity project root
-                        string assetPath = path.Remove(0, exportToUnityProjectPath.Length);
+                        string assetPath = image.AbsolutePath.Remove(0, exportToUnityProjectPath.Length);
                         assetPath = assetPath.TrimStart('\\');
                         assetPath = assetPath.TrimStart('/');
                         Program.WriteLine("InternalTexture : {0}", assetPath);
 
-                        XElement texture = new XElement("InternalTexture", new XAttribute("assetPath", assetPath));
-                        elements.Add(texture);
+                        // Path to texture in the asset directory
+                        xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
+
+                        // Transparent color key?
+                        if (!String.IsNullOrEmpty(image.TransparentColor))
+                        {
+                            xmlInternalTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
+                        }
+
+                        elements.Add(xmlInternalTexture);
                     }
                     else
                     {
-                        // Note that compression is not available in Unity. Go with Base64 string. Blerg.
-                        Program.WriteLine("ImportTexture : will import '{0}' to {1}", path, Path.Combine(unityAssetsDir, "Tiled2Unity\\Textures\\"));
-                        XElement texture =
-                            new XElement("ImportTexture",
-                                new XAttribute("filename", Path.GetFileName(path)),
-                                FileToBase64String(path));
-                        //FileToCompressedBase64String(path));
+                        XElement xmlImportTexture = new XElement("ImportTexture");
 
-                        elements.Add(texture);
+                        // Note that compression is not available in Unity. Go with Base64 string. Blerg.
+                        Program.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(unityAssetsDir, "Tiled2Unity\\Textures\\"));
+
+                        // Is there a color key for transparency?
+                        if (!String.IsNullOrEmpty(image.TransparentColor))
+                        {
+                            xmlImportTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
+                        }
+
+                        // Bake the image file into the xml
+                        xmlImportTexture.Add(new XAttribute("filename", Path.GetFileName(image.AbsolutePath)), FileToBase64String(image.AbsolutePath));
+
+                        elements.Add(xmlImportTexture);
                     }
                 }
             }
@@ -1719,7 +1754,7 @@ namespace Tiled2Unity
                         foreach (int x in horizontalRange)
                         {
                             int tileIndex = layer.GetTileIndex(x, y);
-                            uint tileId = mesh.TileIds[tileIndex];
+                            uint tileId = mesh.GetTileIdAt(tileIndex);
 
                             // Skip blank tiles
                             if (tileId == 0)
@@ -2835,7 +2870,17 @@ namespace Tiled2Unity
 #else
             try
             {
-                tmxImage.ImageBitmap = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+                // We use pre-muliplied alpha pixel format (it is 2x faster)
+                Bitmap bitmapRaw = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
+                Bitmap bitmapPArgb = new Bitmap(bitmapRaw.Width, bitmapRaw.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+
+                using (Graphics g = Graphics.FromImage(bitmapPArgb))
+                {
+                    g.DrawImage(bitmapRaw, 0, 0, bitmapPArgb.Width, bitmapPArgb.Height);
+                    tmxImage.ImageBitmap = bitmapPArgb;
+                }
+
+                tmxImage.ImageBitmap = bitmapPArgb;
             }
             catch (FileNotFoundException fnf)
             {
@@ -3051,6 +3096,18 @@ namespace Tiled2Unity
                 tmxLayer.Offset = translated;
             }
 
+            // Sometimes TMX files have "dead" tiles in them (tiles that were removed but are still referenced)
+            // Remove these tiles from the layer by replacing them with zero
+            for (int t = 0; t < tmxLayer.TileIds.Length; ++t)
+            {
+                uint tileId = tmxLayer.TileIds[t];
+                tileId = TmxMath.GetTileIdWithoutFlags(tileId);
+                if (!tmxMap.Tiles.ContainsKey(tileId))
+                {
+                    tmxLayer.TileIds[t] = 0;
+                }
+            }
+
             // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
             tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
 
@@ -3101,9 +3158,26 @@ namespace Tiled2Unity
         private void ParseTileDataAsCsv(XElement elem)
         {
             Program.WriteLine("Parsing layer data as CSV ...");
-            var datum = from val in elem.Value.Split(',')
-                        select Convert.ToUInt32(val);
-            this.TileIds = datum.ToArray();
+            List<uint> tileIds = new List<uint>();
+
+            // Splitting line-by-line reducues out-of-memory exceptions in x86 builds
+            string value = elem.Value;
+            StringReader reader = new StringReader(value);
+            string line = string.Empty;
+            do
+            {
+                line = reader.ReadLine();
+                if (!String.IsNullOrEmpty(line))
+                {
+                    var datum = from val in line.Split(',')
+                                where !String.IsNullOrEmpty(val)
+                                select Convert.ToUInt32(val);
+                    tileIds.AddRange(datum);
+                }
+
+            } while (line != null);
+
+            this.TileIds = tileIds.ToArray();
         }
 
         private void ParseTileDataAsBase64(XElement elem)
@@ -3979,6 +4053,8 @@ namespace Tiled2Unity
         public string ObjectName { get; private set; }
         public TmxImage TmxImage { get; private set; }
         public uint[] TileIds { get; private set; }
+
+        public int StartingTileIndex { get; private set; }
         public int NumberOfTiles { get; private set; }
 
         // Animation properties
@@ -3991,11 +4067,49 @@ namespace Tiled2Unity
             return this.NumberOfTiles >= TmxMesh.MaxNumberOfTiles;
         }
 
+        public uint GetTileIdAt(int tileIndex)
+        {
+            int fauxIndex = tileIndex - this.StartingTileIndex;
+            if (fauxIndex < 0 || fauxIndex >= this.TileIds.Length)
+            {
+                return 0;
+            }
+
+            return this.TileIds[fauxIndex];
+        }
+
         private void AddTile(int index, uint tileId)
         {
-            // Assumes non-zero tileIdss
+            // Assumes non-zero tileIds
             this.TileIds[index] = tileId;
             this.NumberOfTiles++;
+
+            // Is the mesh "full" now
+            if (IsMeshFull())
+            {
+                List<uint> tiles = this.TileIds.ToList();
+
+                // Remove leading batch of zero tiles
+                int firstNonZero = tiles.FindIndex(t => t != 0);
+                if (firstNonZero > 0)
+                {
+                    this.StartingTileIndex = firstNonZero;
+                    tiles.RemoveRange(0, firstNonZero);
+                }
+                
+                // Remove the trailing batch of zero tiles
+                tiles.Reverse();
+                firstNonZero = tiles.FindIndex(t => t != 0);
+                if (firstNonZero > 0)
+                {
+                    tiles.RemoveRange(0, firstNonZero);
+                }
+
+                // Reverse the tiles back
+                tiles.Reverse();
+
+                this.TileIds = tiles.ToArray();
+            }
         }
 
         // Splits a layer into TmxMesh instances

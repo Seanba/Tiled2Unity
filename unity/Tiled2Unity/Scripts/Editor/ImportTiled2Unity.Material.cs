@@ -59,20 +59,9 @@ namespace Tiled2Unity
                 Debug.LogError(String.Format("Could not find material: {0}", materialName));
             }
 
-            // Do we have an alpha color key?
-            string htmlColor = ImportUtils.GetAttributeAsString(match, "alphaColorKey", "");
-            if (!String.IsNullOrEmpty(htmlColor))
-            {
-                // Take for granted color is in the form '#RRGGBB'
-                byte r = byte.Parse(htmlColor.Substring(1, 2), System.Globalization.NumberStyles.HexNumber);
-                byte g = byte.Parse(htmlColor.Substring(3, 2), System.Globalization.NumberStyles.HexNumber);
-                byte b = byte.Parse(htmlColor.Substring(5, 2), System.Globalization.NumberStyles.HexNumber);
-                Color color = new Color32(r, g, b, 255);
-                material.SetColor("_AlphaColorKey", color);
-            }
-
             return material;
         }
+
     }
 }
 #endif

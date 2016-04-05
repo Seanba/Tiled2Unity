@@ -28,11 +28,24 @@ namespace Tiled2Unity
         private int importCounter = 0;
         private int numberOfElements = 0;
 
+        public static string GetFilenameWithoutTiled2UnityExtension(string filename)
+        {
+            // Chomp ".tiled2unity.xml" from the end of the file (if it exists) so that we get the proper of the file
+            // (Note that Path.GetFileNameWithoutExtension will not work because file name can have extra '.' characters)
+            string extension = ".tiled2unity.xml";
+            if (filename.EndsWith(extension, StringComparison.InvariantCultureIgnoreCase))
+            {
+                filename = filename.Substring(0, filename.Length - extension.Length);
+            }
+
+            return Path.GetFileName(filename);
+        }
+
         // We have many independent requests on the ImportBehaviour so we can't take for granted it has been created yet.
         // However, if it has been created then use it.
         public static ImportBehaviour FindOrCreateImportBehaviour(string xmlPath)
         {
-            string importName = Path.GetFileNameWithoutExtension(xmlPath);
+            string importName = ImportBehaviour.GetFilenameWithoutTiled2UnityExtension(xmlPath);
 
             // Try to find
             foreach (var status in UnityEngine.Object.FindObjectsOfType<ImportBehaviour>())
@@ -48,7 +61,7 @@ namespace Tiled2Unity
             gameObject.transform.SetAsFirstSibling();
 
             var importStatus = gameObject.AddComponent<ImportBehaviour>();
-            importStatus.ImportName = Path.GetFileNameWithoutExtension(xmlPath);
+            importStatus.ImportName = importName;
 
             // Opening the XDocument itself can be expensive so start the progress bar just before we start
             importStatus.StartProgressBar(xmlPath);

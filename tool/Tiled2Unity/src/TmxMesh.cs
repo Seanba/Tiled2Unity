@@ -18,6 +18,8 @@ namespace Tiled2Unity
         public string ObjectName { get; private set; }
         public TmxImage TmxImage { get; private set; }
         public uint[] TileIds { get; private set; }
+
+        public int StartingTileIndex { get; private set; }
         public int NumberOfTiles { get; private set; }
 
         // Animation properties
@@ -30,11 +32,49 @@ namespace Tiled2Unity
             return this.NumberOfTiles >= TmxMesh.MaxNumberOfTiles;
         }
 
+        public uint GetTileIdAt(int tileIndex)
+        {
+            int fauxIndex = tileIndex - this.StartingTileIndex;
+            if (fauxIndex < 0 || fauxIndex >= this.TileIds.Length)
+            {
+                return 0;
+            }
+
+            return this.TileIds[fauxIndex];
+        }
+
         private void AddTile(int index, uint tileId)
         {
-            // Assumes non-zero tileIdss
+            // Assumes non-zero tileIds
             this.TileIds[index] = tileId;
             this.NumberOfTiles++;
+
+            // Is the mesh "full" now
+            if (IsMeshFull())
+            {
+                List<uint> tiles = this.TileIds.ToList();
+
+                // Remove leading batch of zero tiles
+                int firstNonZero = tiles.FindIndex(t => t != 0);
+                if (firstNonZero > 0)
+                {
+                    this.StartingTileIndex = firstNonZero;
+                    tiles.RemoveRange(0, firstNonZero);
+                }
+                
+                // Remove the trailing batch of zero tiles
+                tiles.Reverse();
+                firstNonZero = tiles.FindIndex(t => t != 0);
+                if (firstNonZero > 0)
+                {
+                    tiles.RemoveRange(0, firstNonZero);
+                }
+
+                // Reverse the tiles back
+                tiles.Reverse();
+
+                this.TileIds = tiles.ToArray();
+            }
         }
 
         // Splits a layer into TmxMesh instances
