@@ -18,7 +18,10 @@ namespace Tiled2Unity
                         select new
                         {
                             Name = TmxHelper.GetAttributeAsString(elem2, "name"),
-                            Value = TmxHelper.GetAttributeAsString(elem2, "value"),
+                            Type = TmxHelper.GetAttributeAsEnum(elem2, "type", TmxPropertyType.String),
+
+                            // Value may be attribute or inner text
+                            Value = TmxHelper.GetAttributeAsString(elem2, "value", null) ?? elem2.Value,
                         };
 
             if (props.Count() > 0)
@@ -29,10 +32,11 @@ namespace Tiled2Unity
 
             foreach (var p in props)
             {
-                tmxProps.PropertyMap[p.Name] = p.Value;
+                tmxProps.PropertyMap[p.Name] = new TmxProperty { Name = p.Name, Type = p.Type, Value = p.Value };
             }
 
             return tmxProps;
         }
+
     }
 }

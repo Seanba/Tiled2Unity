@@ -49,7 +49,7 @@ namespace Tiled2Unity
             if (useThisImporter == true)
             {
 #if UNITY_WEBPLAYER
-                String warning = String.Format("Can not import '{0}' through Tiled2Unity using the WebPlayer platform. This is depecrated by Unity Technologies and is no longer supported. Go to File -> Build Settings... and switch to another platform. (You can switch back to Web Player after importing.)", assetPath);
+                String warning = String.Format("Can not import through Tiled2Unity using the WebPlayer platform. This is depecrated by Unity Technologies and is no longer supported. Go to File -> Build Settings... and switch to another platform. (You can switch back to Web Player after importing.). File: {0}", assetPath);
                 Debug.LogWarning(warning);
                 return false;
 #else

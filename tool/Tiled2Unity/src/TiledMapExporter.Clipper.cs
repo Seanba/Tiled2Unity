@@ -80,6 +80,14 @@ namespace Tiled2Unity
                     new XAttribute("name", "Collision"),
                     polyColliderElements);
 
+            // Collision layer may have a name and "unity physics layer" to go with it
+            // (But not if we're using unity:layer override)
+            if (String.IsNullOrEmpty(layer.UnityLayerOverrideName) && !String.IsNullOrEmpty(layer.Name))
+            {
+                gameObjectCollision.SetAttributeValue("name", "Collision_" + layer.Name);
+                gameObjectCollision.SetAttributeValue("layer", layer.Name);
+            }
+
             return gameObjectCollision;
         }
 

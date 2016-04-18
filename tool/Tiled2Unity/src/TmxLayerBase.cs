@@ -15,5 +15,7 @@ namespace Tiled2Unity
 
         public string SortingLayerName { get; set; }
         public int SortingOrder { get; set; }
+
+        public string UnityLayerOverrideName { get; protected set; }
     }
 }

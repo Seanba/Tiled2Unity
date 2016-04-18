@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.4.7
+// version 1.0.5.0
 
 //css_reference System;
 //css_reference System.Core;
@@ -38,7 +38,7 @@ namespace Tiled2Unity
     {
         public static string GetVersion()
         {
-            return "1.0.4.7";
+            return "1.0.5.0";
         }
     }
 }
@@ -442,17 +442,21 @@ namespace Tiled2Unity
             // The "fullClipper" combines the clipper results from the smaller pieces
             ClipperLib.Clipper fullClipper = new ClipperLib.Clipper();
 
+            // Limit to polygon "type" that matches the collision layer name (unless we are overriding the whole layer to a specific Unity Layer Name)
+            bool usingUnityLayerOverride = !String.IsNullOrEmpty(tmxLayer.UnityLayerOverrideName);
+
             // From the perspective of Clipper lines are polygons too
             // Closed paths == polygons
             // Open paths == lines
             var polygonGroups = from y in Enumerable.Range(0, tmxLayer.Height)
                                 from x in Enumerable.Range(0, tmxLayer.Width)
                                 let rawTileId = tmxLayer.GetRawTileIdAt(x, y)
+                                where rawTileId != 0
                                 let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                                where tileId != 0
                                 let tile = tmxMap.Tiles[tileId]
                                 from polygon in tile.ObjectGroup.Objects
                                 where (polygon as TmxHasPoints) != null
+                                where  usingUnityLayerOverride || String.Compare(polygon.Type, tmxLayer.Name, true) == 0
                                 let groupX = x / LayerClipper.GroupBySize
                                 let groupY = y / LayerClipper.GroupBySize
                                 group new
@@ -754,11 +758,14 @@ namespace Tiled2Unity
 
         static public string LogFilePath { get; private set; }
 
+        static public string ObjectTypeXml { get; set; }
+
         static private NDesk.Options.OptionSet Options = new NDesk.Options.OptionSet()
             {
 #if !TILED_2_UNITY_LITE
                 { "a|auto-export", "Automatically export to UNITYDIR and close.", ae => Program.AutoExport = true },
 #endif
+                { "o|object-type-xml=", "Supply an Object Type XML file for types and their properties", o => Program.ObjectTypeXml = !String.IsNullOrEmpty(o) ? Path.GetFullPath(o) : "" },
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
                 { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Program.PreferConvexPolygons = true },
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
@@ -819,6 +826,7 @@ namespace Tiled2Unity
 
                 // We should have everyting we need to export a TMX file to a Unity project
                 TmxMap tmxMap = TmxMap.LoadFromFile(Program.TmxPath);
+                tmxMap.LoadObjectTypeXml(Program.ObjectTypeXml);
                 TiledMapExporter tiledMapExporter = new TiledMapExporter(tmxMap);
                 tiledMapExporter.Export(Program.ExportUnityProjectDir);
 
@@ -860,6 +868,7 @@ namespace Tiled2Unity
             Program.Help = false;
             Program.TmxPath = "";
             Program.ExportUnityProjectDir = "";
+            Program.ObjectTypeXml = "";
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -911,6 +920,16 @@ namespace Tiled2Unity
                 Program.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
             }
             Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
+            Properties.Settings.Default.Save();
+#endif
+
+            // If we didn't override ObjectTypeXml then use old value stored in settings
+#if !TILED_2_UNITY_LITE
+            if (String.IsNullOrEmpty(Program.ObjectTypeXml))
+            {
+                Program.ObjectTypeXml = Properties.Settings.Default.LastObjectTypeXmlFile;
+            }
+            Properties.Settings.Default.LastObjectTypeXmlFile = Program.ObjectTypeXml;
             Properties.Settings.Default.Save();
 #endif
 
@@ -1313,6 +1332,14 @@ namespace Tiled2Unity
                     new XAttribute("name", "Collision"),
                     polyColliderElements);
 
+            // Collision layer may have a name and "unity physics layer" to go with it
+            // (But not if we're using unity:layer override)
+            if (String.IsNullOrEmpty(layer.UnityLayerOverrideName) && !String.IsNullOrEmpty(layer.Name))
+            {
+                gameObjectCollision.SetAttributeValue("name", "Collision_" + layer.Name);
+                gameObjectCollision.SetAttributeValue("layer", layer.Name);
+            }
+
             return gameObjectCollision;
         }
 
@@ -1490,6 +1517,7 @@ namespace Tiled2Unity
                         builder.AppendFormat("Export/Import Version mismatch\n");
                         builder.AppendFormat("  Tiled2Unity version   : {0}\n", Program.GetVersion());
                         builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
+                        builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
                         Program.WriteWarning(builder.ToString());
                     }
                 }
@@ -1499,7 +1527,10 @@ namespace Tiled2Unity
             string pathToSave = Path.Combine(exportDir, fileToSave);
             Program.WriteLine("Exporting to: {0}", pathToSave);
             doc.Save(pathToSave);
-            Program.WriteSuccess("Succesfully exported: {0}\n  vertex scale = {1}", pathToSave, Program.Scale);
+            Program.WriteSuccess("Succesfully exported: {0}\n  Vertex Scale = {1}\n  Object Type Xml = {2}",
+                pathToSave,
+                Program.Scale,
+                String.IsNullOrEmpty(Program.ObjectTypeXml) ? "<none>" : Program.ObjectTypeXml);
         }
 
         public static PointF PointFToUnityVector_NoScale(PointF pt)
@@ -2049,8 +2080,11 @@ namespace Tiled2Unity
                     // Collision data for the layer
                     if (layer.Ignore != TmxLayer.IgnoreSettings.Collision)
                     {
-                        var collisionElements = CreateCollisionElementForLayer(layer);
-                        layerElement.Add(collisionElements);
+                        foreach (var collisionLayer in layer.CollisionLayers)
+                        {
+                            var collisionElements = CreateCollisionElementForLayer(collisionLayer);
+                            layerElement.Add(collisionElements);
+                        }
                     }
 
                     AssignUnityProperties(layer, layerElement, PrefabContext.TiledLayer);
@@ -2118,6 +2152,12 @@ namespace Tiled2Unity
 
                 AssignUnityProperties(tmxObject, xmlObject, PrefabContext.Object);
                 AssignTiledProperties(tmxObject, xmlObject);
+
+                // If we're not using a unity:layer override and there is an Object Type to go with this object then use it
+                if (String.IsNullOrEmpty(objectGroup.UnityLayerOverrideName))
+                {
+                    xmlObject.SetAttributeValue("layer", tmxObject.Type);
+                }
 
                 XElement objElement = null;
 
@@ -2192,11 +2232,13 @@ namespace Tiled2Unity
             return xmlMeshes;
         }
 
-        private void AssignUnityProperties<T>(T tmx, XElement xml, PrefabContext context) where T : TmxHasProperties
+        private void AssignUnityProperties(TmxHasProperties tmxHasProperties, XElement xml, PrefabContext context)
         {
+            var properties = TmxHelper.GetPropertiesWithTypeDefaults(tmxHasProperties, this.tmxMap.ObjectTypes);
+
             // Only the root of the prefab can have a scale
             {
-                string unityScale = tmx.Properties.GetPropertyValueAsString("unity:scale", "");
+                string unityScale = properties.GetPropertyValueAsString("unity:scale", "");
                 if (!String.IsNullOrEmpty(unityScale))
                 {
                     float scale = 1.0f;
@@ -2217,7 +2259,7 @@ namespace Tiled2Unity
 
             // Only the root of the prefab can be marked a resource
             {
-                string unityResource = tmx.Properties.GetPropertyValueAsString("unity:resource", "");
+                string unityResource = properties.GetPropertyValueAsString("unity:resource", "");
                 if (!String.IsNullOrEmpty(unityResource))
                 {
                     bool resource = false;
@@ -2238,7 +2280,7 @@ namespace Tiled2Unity
 
             // Some users may want resource prefabs to be saved to a particular path
             {
-                string unityResourcePath = tmx.Properties.GetPropertyValueAsString("unity:resourcePath", "");
+                string unityResourcePath = properties.GetPropertyValueAsString("unity:resourcePath", "");
                 if (!String.IsNullOrEmpty(unityResourcePath))
                 {
                     if (context != PrefabContext.Root)
@@ -2262,7 +2304,7 @@ namespace Tiled2Unity
 
             // Any object can carry the 'isTrigger' setting and we assume any children to inherit the setting
             {
-                string unityIsTrigger = tmx.Properties.GetPropertyValueAsString("unity:isTrigger", "");
+                string unityIsTrigger = properties.GetPropertyValueAsString("unity:isTrigger", "");
                 if (!String.IsNullOrEmpty(unityIsTrigger))
                 {
                     bool isTrigger = false;
@@ -2279,7 +2321,7 @@ namespace Tiled2Unity
 
             // Any part of the prefab can be assigned a 'layer'
             {
-                string unityLayer = tmx.Properties.GetPropertyValueAsString("unity:layer", "");
+                string unityLayer = properties.GetPropertyValueAsString("unity:layer", "");
                 if (!String.IsNullOrEmpty(unityLayer))
                 {
                     xml.SetAttributeValue("layer", unityLayer);
@@ -2288,7 +2330,7 @@ namespace Tiled2Unity
 
             // Any part of the prefab can be assigned a 'tag'
             {
-                string unityTag = tmx.Properties.GetPropertyValueAsString("unity:tag", "");
+                string unityTag = properties.GetPropertyValueAsString("unity:tag", "");
                 if (!String.IsNullOrEmpty(unityTag))
                 {
                     xml.SetAttributeValue("tag", unityTag);
@@ -2307,21 +2349,23 @@ namespace Tiled2Unity
             knownProperties.Add("unity:resource");
             knownProperties.Add("unity:resourcePath");
 
-            var unknown = from p in tmx.Properties.PropertyMap
+            var unknown = from p in properties.PropertyMap
                           where p.Key.StartsWith("unity:")
                           where knownProperties.Contains(p.Key) == false
                           select p.Key;
             foreach (var p in unknown)
             {
-                Program.WriteWarning("Unknown unity property '{0}' in GameObject '{1}'", p, tmx.ToString());
+                Program.WriteWarning("Unknown unity property '{0}' in GameObject '{1}'", p, tmxHasProperties.ToString());
             }
         }
 
-        private void AssignTiledProperties<T>(T tmx, XElement xml) where T : TmxHasProperties
+        private void AssignTiledProperties(TmxHasProperties tmxHasProperties, XElement xml)
         {
+            var properties = TmxHelper.GetPropertiesWithTypeDefaults(tmxHasProperties, this.tmxMap.ObjectTypes);
+
             List<XElement> xmlProperties = new List<XElement>();
 
-            foreach (var prop in tmx.Properties.PropertyMap)
+            foreach (var prop in properties.PropertyMap)
             {
                 // Ignore properties that start with "unity:"
                 if (prop.Key.StartsWith("unity:"))
@@ -2338,7 +2382,7 @@ namespace Tiled2Unity
                 }
 
 
-                XElement xmlProp = new XElement("Property", new XAttribute("name", prop.Key), new XAttribute("value", prop.Value));
+                XElement xmlProp = new XElement("Property", new XAttribute("name", prop.Key), new XAttribute("value", prop.Value.Value));
                 xmlProperties.Add(xmlProp);
             }
 
@@ -2813,6 +2857,37 @@ namespace Tiled2Unity
             return GetAttributeAsEnum<T>(elem, attrName);
         }
 
+        public static TmxProperties GetPropertiesWithTypeDefaults(TmxHasProperties hasProperties, TmxObjectTypes objectTypes)
+        {
+            TmxProperties tmxProperties = new TmxProperties();
+
+            // Fill in all the default properties first
+            // (Note: At the moment, only TmxObject has default properties it inherits from TmxObjectType)
+            string objectTypeName = null;
+            if (hasProperties is TmxObject)
+            {
+                TmxObject tmxObject = hasProperties as TmxObject;
+                objectTypeName = tmxObject.Type;
+            }
+
+            // If an object type has been found then copy over all the default values for properties
+            TmxObjectType tmxObjectType = objectTypes.GetValueOrNull(objectTypeName);
+            if (tmxObjectType != null)
+            {
+                foreach (TmxObjectTypeProperty tmxTypeProp in tmxObjectType.Properties.Values)
+                {
+                    tmxProperties.PropertyMap[tmxTypeProp.Name] = new TmxProperty() { Name = tmxTypeProp.Name, Type = tmxTypeProp.Type, Value = tmxTypeProp.Default };
+                }
+            }
+
+            // Now add all the object properties (which may override some of the default properties)
+            foreach (TmxProperty tmxProp in hasProperties.Properties.PropertyMap.Values)
+            {
+                tmxProperties.PropertyMap[tmxProp.Name] = tmxProp;
+            }
+
+            return tmxProperties;
+        }
 
 
     }
@@ -2959,10 +3034,14 @@ namespace Tiled2Unity
         public IgnoreSettings Ignore { get; private set; }
         public uint[] TileIds { get; private set; }
         public List<TmxMesh> Meshes { get; private set; }
+        public List<TmxLayer> CollisionLayers { get; private set; }
 
         public TmxLayer(TmxMap map)
         {
             this.TmxMap = map;
+            this.Visible = true;
+            this.Opacity = 1.0f;
+            this.CollisionLayers = new List<TmxLayer>();
         }
 
         public uint GetTileIdAt(int x, int y)
@@ -3111,6 +3190,10 @@ namespace Tiled2Unity
             // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
             tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
 
+            // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
+            tmxLayer.UnityLayerOverrideName = tmxLayer.Properties.GetPropertyValueAsString("unity:layer", "");
+            tmxLayer.BuildCollisionLayers();
+
             return tmxLayer;
         }
 
@@ -3234,6 +3317,85 @@ namespace Tiled2Unity
             }
         }
 
+        private void BuildCollisionLayers()
+        {
+            this.CollisionLayers.Clear();
+
+            // Don't build collision layers if we're invisible
+            if (this.Visible == false)
+                return;
+
+            // Don't build collision layers if we're ignored
+            if (this.Ignore == IgnoreSettings.True)
+                return;
+
+            // Don't build collision layers if collision is ignored
+            if (this.Ignore == IgnoreSettings.Collision)
+                return;
+
+            // Are we using a unity-layer override? If so we have to put everything from this layer into it.
+            if (String.IsNullOrEmpty(this.UnityLayerOverrideName))
+            {
+                BuildBuildCollisionLayers_ByObjectType();
+            }
+            else
+            {
+                BuildBuildCollisionLayers_Override();
+            }
+        }
+
+        private void BuildBuildCollisionLayers_Override()
+        {
+            // Just make the layer the collision layer
+            this.CollisionLayers.Clear();
+            this.CollisionLayers.Add(this);
+        }
+
+        private void BuildBuildCollisionLayers_ByObjectType()
+        {
+            // Find all tiles with collisions on them and put them into a "Collision Layer" of the same type
+            for (int t = 0; t < this.TileIds.Length; ++t)
+            {
+                uint rawTileId = this.TileIds[t];
+                if (rawTileId == 0)
+                    continue;
+
+                uint tileId = TmxMath.GetTileIdWithoutFlags(rawTileId);
+                TmxTile tmxTile = this.TmxMap.Tiles[tileId];
+
+                foreach (TmxObject colliderObject in tmxTile.ObjectGroup.Objects)
+                {
+                    if ((colliderObject is TmxHasPoints) == false)
+                        continue;
+
+                    // We have a collider object on the tile
+                    // Add the tile to the Collision Layer of the matching type
+                    // Or, create a new Collision Layer of this type to add this tile to
+                    TmxLayer collisionLayer = this.CollisionLayers.Find(l => String.Compare(l.Name, colliderObject.Type, true) == 0);
+                    if (collisionLayer == null)
+                    {
+                        // Create a new Collision Layer
+                        collisionLayer = new TmxLayer(this.TmxMap);
+                        this.CollisionLayers.Add(collisionLayer);
+
+                        // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)
+                        collisionLayer.Name = colliderObject.Type;
+                        collisionLayer.TileIds = new uint[this.TileIds.Length];
+
+                        // Copy over some stuff from parent layer that we need for creating collisions
+                        collisionLayer.Offset = this.Offset;
+                        collisionLayer.Width = this.Width;
+                        collisionLayer.Height = this.Height;
+                        collisionLayer.Ignore = this.Ignore;
+                        collisionLayer.Properties = this.Properties;
+                    }
+
+                    // Add the tile to this collision layer
+                    collisionLayer.TileIds[t] = rawTileId;
+                }
+            }
+        }
+
     }
 }
 
@@ -3257,6 +3419,8 @@ namespace Tiled2Unity
 
         public string SortingLayerName { get; set; }
         public int SortingOrder { get; set; }
+
+        public string UnityLayerOverrideName { get; protected set; }
     }
 }
 
@@ -3316,6 +3480,9 @@ namespace Tiled2Unity
 
         public IList<TmxLayer> Layers = new List<TmxLayer>();
         public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
+
+        // The map may load object type data from another file
+        public TmxObjectTypes ObjectTypes = new TmxObjectTypes();
 
         private uint nextUniqueId = 0;
 
@@ -3416,6 +3583,35 @@ namespace Tiled2Unity
 
             // Make list unique based on mesh name
             return tiles.GroupBy(m => m.UniqueMeshName).Select(g => g.First()).ToList();
+        }
+
+        // Load an Object Type Xml file for this map's objects to reference
+        public void LoadObjectTypeXml(string xmlPath)
+        {
+            if (String.IsNullOrEmpty(xmlPath))
+            {
+                Program.WriteLine("No Object Type Xml file loaded.");
+                this.ObjectTypes = new TmxObjectTypes();
+            }
+            else
+            {
+                Program.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
+
+                try
+                {
+                    this.ObjectTypes = TmxObjectTypes.FromXmlFile(xmlPath);
+                }
+                catch (FileNotFoundException)
+                {
+                    Program.WriteError("Object Type Xml file was not found: {0}", xmlPath);
+                }
+                catch (Exception e)
+                {
+                    Program.WriteError("Error parsing Object Type Xml file: {0}\n{1}", xmlPath, e.Message);
+                }
+            }
+
+            Program.WriteLine("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
         }
 
     }
@@ -4520,6 +4716,9 @@ namespace Tiled2Unity
 
             tmxObjectGroup.Objects = objects.ToList();
 
+            // Are we using a unity:layer override?
+            tmxObjectGroup.UnityLayerOverrideName = tmxObjectGroup.Properties.GetPropertyValueAsString("unity:layer", "");
+
             return tmxObjectGroup;
         }
 
@@ -4830,6 +5029,143 @@ namespace Tiled2Unity
 }
 
 // ----------------------------------------------------------------------
+// TmxObjectType.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // Has data for a single object type
+    public class TmxObjectType
+    {
+        public string Name { get; private set; }
+        public Color Color { get; private set; }
+        public Dictionary<string, TmxObjectTypeProperty> Properties { get; private set; }
+
+        public TmxObjectType()
+        {
+            this.Name = "";
+            this.Color = Color.Gray;
+            this.Properties = new Dictionary<string, TmxObjectTypeProperty>();
+        }
+
+        public static TmxObjectType FromXml(XElement xml)
+        {
+            TmxObjectType tmxObjectType = new TmxObjectType();
+
+            tmxObjectType.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
+            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.Gray);
+            tmxObjectType.Properties = TmxObjectTypeProperty.FromObjectTypeXml(xml);
+
+            return tmxObjectType;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectTypeProperty.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectTypeProperty
+    {
+        public string Name { get; private set; }
+        public TmxPropertyType Type { get; private set; }
+        public string Default { get; set; }
+
+        // Create a dictionary collection of Object Type Property instances from the parent xml element
+        public static Dictionary<string, TmxObjectTypeProperty> FromObjectTypeXml(XElement xmlObjectType)
+        {
+            Dictionary<string, TmxObjectTypeProperty> tmxObjectTypeProperties = new Dictionary<string, TmxObjectTypeProperty>();
+
+            foreach (var xmlProperty in xmlObjectType.Elements("property"))
+            {
+                TmxObjectTypeProperty tmxObjectTypeProperty = new TmxObjectTypeProperty();
+
+                tmxObjectTypeProperty.Name = TmxHelper.GetAttributeAsString(xmlProperty, "name", "");
+                tmxObjectTypeProperty.Type = TmxHelper.GetAttributeAsEnum(xmlProperty, "type", TmxPropertyType.String);
+                tmxObjectTypeProperty.Default = TmxHelper.GetAttributeAsString(xmlProperty, "default", "");
+
+                tmxObjectTypeProperties.Add(tmxObjectTypeProperty.Name, tmxObjectTypeProperty);
+            }
+
+            return tmxObjectTypeProperties;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectTypes.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // The "objecttypes.xml" file has project-specific data to be used with the TmxObject instances
+    public class TmxObjectTypes
+    {
+        public Dictionary<string, TmxObjectType> TmxObjectTypeMapping { get; private set; }
+
+        public TmxObjectTypes()
+        {
+            this.TmxObjectTypeMapping = new Dictionary<string, TmxObjectType>(StringComparer.InvariantCultureIgnoreCase);
+        }
+
+        public TmxObjectType GetValueOrDefault(string key)
+        {
+            if (this.TmxObjectTypeMapping.ContainsKey(key))
+            {
+                return this.TmxObjectTypeMapping[key];
+            }
+
+            return new TmxObjectType();
+        }
+
+        public TmxObjectType GetValueOrNull(string key)
+        {
+            if (key != null && this.TmxObjectTypeMapping.ContainsKey(key))
+            {
+                return this.TmxObjectTypeMapping[key];
+            }
+
+            return null;
+        }
+
+
+        public static TmxObjectTypes FromXmlFile(string xmlPath)
+        {
+            TmxObjectTypes xmlObjectTypes = new TmxObjectTypes();
+
+            XDocument doc = XDocument.Load(xmlPath);
+
+            foreach (var xml in doc.Element("objecttypes").Elements("objecttype"))
+            {
+                TmxObjectType tmxObjectType = TmxObjectType.FromXml(xml);
+                xmlObjectTypes.TmxObjectTypeMapping[tmxObjectType.Name] = tmxObjectType;
+            }
+
+            return xmlObjectTypes;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
 // TmxProperties.cs
 
 // using System;
@@ -4841,22 +5177,22 @@ namespace Tiled2Unity
 {
     public partial class TmxProperties
     {
-        public IDictionary<string, string> PropertyMap { get; private set; }
+        public IDictionary<string, TmxProperty> PropertyMap { get; private set; }
 
         public TmxProperties()
         {
-            this.PropertyMap = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
+            this.PropertyMap = new Dictionary<string, TmxProperty>(StringComparer.InvariantCultureIgnoreCase);
         }
 
         public string GetPropertyValueAsString(string name)
         {
-            return this.PropertyMap[name];
+            return this.PropertyMap[name].Value;
         }
 
         public string GetPropertyValueAsString(string name, string defaultValue)
         {
             if (this.PropertyMap.ContainsKey(name))
-                return this.PropertyMap[name];
+                return this.PropertyMap[name].Value;
             return defaultValue;
         }
 
@@ -4904,7 +5240,7 @@ namespace Tiled2Unity
 
         public T GetPropertyValueAsEnum<T>(string name)
         {
-            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name]);
+            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name].Value);
         }
 
         public T GetPropertyValueAsEnum<T>(string name, T defaultValue)
@@ -4940,7 +5276,10 @@ namespace Tiled2Unity
                         select new
                         {
                             Name = TmxHelper.GetAttributeAsString(elem2, "name"),
-                            Value = TmxHelper.GetAttributeAsString(elem2, "value"),
+                            Type = TmxHelper.GetAttributeAsEnum(elem2, "type", TmxPropertyType.String),
+
+                            // Value may be attribute or inner text
+                            Value = TmxHelper.GetAttributeAsString(elem2, "value", null) ?? elem2.Value,
                         };
 
             if (props.Count() > 0)
@@ -4951,11 +5290,49 @@ namespace Tiled2Unity
 
             foreach (var p in props)
             {
-                tmxProps.PropertyMap[p.Name] = p.Value;
+                tmxProps.PropertyMap[p.Name] = new TmxProperty { Name = p.Name, Type = p.Type, Value = p.Value };
             }
 
             return tmxProps;
         }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxProperty.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxProperty
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+        public TmxPropertyType Type { get; set; }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxPropertyType.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public enum TmxPropertyType
+    {
+        String,
+        Int,
+        Float,
+        Bool,
     }
 }
 

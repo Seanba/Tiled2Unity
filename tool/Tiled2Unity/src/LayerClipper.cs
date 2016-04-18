@@ -28,17 +28,21 @@ namespace Tiled2Unity
             // The "fullClipper" combines the clipper results from the smaller pieces
             ClipperLib.Clipper fullClipper = new ClipperLib.Clipper();
 
+            // Limit to polygon "type" that matches the collision layer name (unless we are overriding the whole layer to a specific Unity Layer Name)
+            bool usingUnityLayerOverride = !String.IsNullOrEmpty(tmxLayer.UnityLayerOverrideName);
+
             // From the perspective of Clipper lines are polygons too
             // Closed paths == polygons
             // Open paths == lines
             var polygonGroups = from y in Enumerable.Range(0, tmxLayer.Height)
                                 from x in Enumerable.Range(0, tmxLayer.Width)
                                 let rawTileId = tmxLayer.GetRawTileIdAt(x, y)
+                                where rawTileId != 0
                                 let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                                where tileId != 0
                                 let tile = tmxMap.Tiles[tileId]
                                 from polygon in tile.ObjectGroup.Objects
                                 where (polygon as TmxHasPoints) != null
+                                where  usingUnityLayerOverride || String.Compare(polygon.Type, tmxLayer.Name, true) == 0
                                 let groupX = x / LayerClipper.GroupBySize
                                 let groupY = y / LayerClipper.GroupBySize
                                 group new

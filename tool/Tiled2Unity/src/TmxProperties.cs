@@ -7,22 +7,22 @@ namespace Tiled2Unity
 {
     public partial class TmxProperties
     {
-        public IDictionary<string, string> PropertyMap { get; private set; }
+        public IDictionary<string, TmxProperty> PropertyMap { get; private set; }
 
         public TmxProperties()
         {
-            this.PropertyMap = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
+            this.PropertyMap = new Dictionary<string, TmxProperty>(StringComparer.InvariantCultureIgnoreCase);
         }
 
         public string GetPropertyValueAsString(string name)
         {
-            return this.PropertyMap[name];
+            return this.PropertyMap[name].Value;
         }
 
         public string GetPropertyValueAsString(string name, string defaultValue)
         {
             if (this.PropertyMap.ContainsKey(name))
-                return this.PropertyMap[name];
+                return this.PropertyMap[name].Value;
             return defaultValue;
         }
 
@@ -70,7 +70,7 @@ namespace Tiled2Unity
 
         public T GetPropertyValueAsEnum<T>(string name)
         {
-            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name]);
+            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name].Value);
         }
 
         public T GetPropertyValueAsEnum<T>(string name, T defaultValue)

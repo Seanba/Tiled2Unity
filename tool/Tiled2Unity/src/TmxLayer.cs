@@ -27,10 +27,14 @@ namespace Tiled2Unity
         public IgnoreSettings Ignore { get; private set; }
         public uint[] TileIds { get; private set; }
         public List<TmxMesh> Meshes { get; private set; }
+        public List<TmxLayer> CollisionLayers { get; private set; }
 
         public TmxLayer(TmxMap map)
         {
             this.TmxMap = map;
+            this.Visible = true;
+            this.Opacity = 1.0f;
+            this.CollisionLayers = new List<TmxLayer>();
         }
 
         public uint GetTileIdAt(int x, int y)

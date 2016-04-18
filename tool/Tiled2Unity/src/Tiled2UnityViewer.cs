@@ -22,14 +22,10 @@ namespace Tiled2Unity
 
         private TmxMap tmxMap = null;
         private float scale = 1.0f;
-        private PreviewPreferencesForm preferencesForm;
 
         public Tiled2UnityViewer(TmxMap tmxMap)
         {
             this.tmxMap = tmxMap;
-            this.preferencesForm = new PreviewPreferencesForm();
-            this.preferencesForm.ApplyChanges += new PreviewPreferencesForm.OnApplyChanges(preferencesForm_ApplyChanges);
-            this.preferencesForm.InitializePrefernces(tmxMap);
             InitializeComponent();
         }
 
@@ -94,13 +90,11 @@ namespace Tiled2Unity
             var objBounds = from g in this.tmxMap.ObjectGroups
                             from o in g.Objects
                             where o.Visible == true
-                            where IsLayerEnabled(g.Name)
                             select o.GetWorldBounds();
 
             // Take boundaries from objects embedded in tiles
             var tileBounds = from layer in tmxMap.Layers
                              where layer.Visible == true
-                             where IsLayerEnabled(layer.Name)
                              from y in Enumerable.Range(0, layer.Height)
                              from x in Enumerable.Range(0, layer.Width)
                              let tileId = layer.GetTileIdAt(x, y)
@@ -433,9 +427,6 @@ namespace Tiled2Unity
                 if (layer.Visible == false)
                     continue;
 
-                if (IsLayerEnabled(layer.Name) == false)
-                    continue;
-
                 if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
                     continue;
 
@@ -528,11 +519,18 @@ namespace Tiled2Unity
             for (int l = 0; l < this.tmxMap.Layers.Count; ++l)
             {
                 TmxLayer layer = this.tmxMap.Layers[l];
-                if (layer.Visible == true && IsLayerEnabled(layer.Name) && layer.Ignore != TmxLayer.IgnoreSettings.Collision)
+
+                if (layer.Visible == true && layer.Ignore != TmxLayer.IgnoreSettings.Collision)
                 {
-                    Color lineColor = this.preferencesForm.GetLayerColor(layer.Name);
-                    Color polyColor = Color.FromArgb(128, lineColor);
-                    DrawLayerColliders(g, layer, polyColor, lineColor);
+                    foreach (TmxLayer collisionLayer in layer.CollisionLayers)
+                    {
+                        TmxObjectType type = this.tmxMap.ObjectTypes.GetValueOrDefault(collisionLayer.Name);
+
+                        Color lineColor = type.Color;
+                        Color polyColor = Color.FromArgb(128, lineColor);
+
+                        DrawLayerColliders(g, collisionLayer, polyColor, lineColor);
+                    }
                 }
             }
         }
@@ -589,7 +587,6 @@ namespace Tiled2Unity
         {
             var collidersObjectGroup = from item in this.tmxMap.ObjectGroups
                                        where item.Visible == true
-                                       where IsLayerEnabled(item.Name)
                                        select item;
 
             foreach (var objGroup in collidersObjectGroup)
@@ -601,7 +598,21 @@ namespace Tiled2Unity
                 {
                     if (obj.Visible)
                     {
-                        DrawObjectCollider(g, obj, objGroup.Color);
+                        // Either type color or object color or unity:layer color
+                        Color objColor = objGroup.Color;
+                        string collisionType = objGroup.UnityLayerOverrideName;
+
+                        if (String.IsNullOrEmpty(collisionType))
+                        {
+                            collisionType = obj.Type;
+                        }
+
+                        if (this.tmxMap.ObjectTypes.TmxObjectTypeMapping.ContainsKey(collisionType))
+                        {
+                            objColor = this.tmxMap.ObjectTypes.TmxObjectTypeMapping[collisionType].Color;
+                        }
+
+                        DrawObjectCollider(g, obj, objColor);
                     }
                 }
 
@@ -848,30 +859,9 @@ namespace Tiled2Unity
             CreateAndShowBitmap();
         }
 
-        private bool IsLayerEnabled(string name)
-        {
-            return this.preferencesForm.GetLayerPreviewing(name);
-        }
-
-        private void previewOptionsToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            OpenPreferencesForm();
-        }
-
-        private void OpenPreferencesForm()
-        {
-            this.preferencesForm.Show(this);
-        }
-
         void preferencesForm_ApplyChanges()
         {
             CreateAndShowBitmap();
-        }
-
-        private void Tiled2UnityViewer_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            this.preferencesForm.ApplyChanges -= preferencesForm_ApplyChanges;
-            this.preferencesForm.Close();
         }
 
     } // end class

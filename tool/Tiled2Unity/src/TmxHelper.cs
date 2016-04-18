@@ -150,6 +150,37 @@ namespace Tiled2Unity
             return GetAttributeAsEnum<T>(elem, attrName);
         }
 
+        public static TmxProperties GetPropertiesWithTypeDefaults(TmxHasProperties hasProperties, TmxObjectTypes objectTypes)
+        {
+            TmxProperties tmxProperties = new TmxProperties();
+
+            // Fill in all the default properties first
+            // (Note: At the moment, only TmxObject has default properties it inherits from TmxObjectType)
+            string objectTypeName = null;
+            if (hasProperties is TmxObject)
+            {
+                TmxObject tmxObject = hasProperties as TmxObject;
+                objectTypeName = tmxObject.Type;
+            }
+
+            // If an object type has been found then copy over all the default values for properties
+            TmxObjectType tmxObjectType = objectTypes.GetValueOrNull(objectTypeName);
+            if (tmxObjectType != null)
+            {
+                foreach (TmxObjectTypeProperty tmxTypeProp in tmxObjectType.Properties.Values)
+                {
+                    tmxProperties.PropertyMap[tmxTypeProp.Name] = new TmxProperty() { Name = tmxTypeProp.Name, Type = tmxTypeProp.Type, Value = tmxTypeProp.Default };
+                }
+            }
+
+            // Now add all the object properties (which may override some of the default properties)
+            foreach (TmxProperty tmxProp in hasProperties.Properties.PropertyMap.Values)
+            {
+                tmxProperties.PropertyMap[tmxProp.Name] = tmxProp;
+            }
+
+            return tmxProperties;
+        }
 
 
     }

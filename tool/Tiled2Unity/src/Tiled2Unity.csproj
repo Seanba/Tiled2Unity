@@ -118,18 +118,9 @@
   <ItemGroup>
     <Compile Include="ChDir.cs" />
     <Compile Include="ConvexPolygonSet.cs" />
-    <Compile Include="DataGridViewButtonCell_ColorPicker.cs" />
-    <Compile Include="DataGridViewColumn_ColorPicker.cs" />
     <Compile Include="HashIndexOf.cs" />
     <Compile Include="LayerClipper.cs" />
-    <Compile Include="PerLayerColorData.cs" />
     <Compile Include="PolylineReduction.cs" />
-    <Compile Include="PreviewPreferencesForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="PreviewPreferencesForm.Designer.cs">
-      <DependentUpon>PreviewPreferencesForm.cs</DependentUpon>
-    </Compile>
     <Compile Include="SupportTiledForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -225,14 +216,16 @@
     <Compile Include="TmxObjectPolyline.cs" />
     <Compile Include="TmxObjectRectangle.cs" />
     <Compile Include="TmxObjectTile.cs" />
+    <Compile Include="TmxObjectTypeProperty.cs" />
     <Compile Include="TmxProperties.cs" />
     <Compile Include="TmxProperties.Xml.cs" />
+    <Compile Include="TmxProperty.cs" />
+    <Compile Include="TmxPropertyType.cs" />
     <Compile Include="TmxRotationMatrix.cs" />
     <Compile Include="TmxTile.cs" />
     <Compile Include="TmxTile.Xml.cs" />
-    <EmbeddedResource Include="PreviewPreferencesForm.resx">
-      <DependentUpon>PreviewPreferencesForm.cs</DependentUpon>
-    </EmbeddedResource>
+    <Compile Include="TmxObjectType.cs" />
+    <Compile Include="TmxObjectTypes.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -298,12 +291,6 @@
     <EmbeddedResource Include="Resources\About.rtf" />
     <None Include="Resources\mega-dad-stand.png" />
     <Content Include="t2u-icon-bw.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="ThirdParty\ThemeColorPicker\ThemeColorPicker.csproj">
-      <Project>{A4D1EDB0-61E7-4943-AA8D-E545456BC392}</Project>
-      <Name>ThemeColorPicker</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

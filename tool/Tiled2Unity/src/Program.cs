@@ -43,11 +43,14 @@ namespace Tiled2Unity
 
         static public string LogFilePath { get; private set; }
 
+        static public string ObjectTypeXml { get; set; }
+
         static private NDesk.Options.OptionSet Options = new NDesk.Options.OptionSet()
             {
 #if !TILED_2_UNITY_LITE
                 { "a|auto-export", "Automatically export to UNITYDIR and close.", ae => Program.AutoExport = true },
 #endif
+                { "o|object-type-xml=", "Supply an Object Type XML file for types and their properties", o => Program.ObjectTypeXml = !String.IsNullOrEmpty(o) ? Path.GetFullPath(o) : "" },
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
                 { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Program.PreferConvexPolygons = true },
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
@@ -108,6 +111,7 @@ namespace Tiled2Unity
 
                 // We should have everyting we need to export a TMX file to a Unity project
                 TmxMap tmxMap = TmxMap.LoadFromFile(Program.TmxPath);
+                tmxMap.LoadObjectTypeXml(Program.ObjectTypeXml);
                 TiledMapExporter tiledMapExporter = new TiledMapExporter(tmxMap);
                 tiledMapExporter.Export(Program.ExportUnityProjectDir);
 
@@ -149,6 +153,7 @@ namespace Tiled2Unity
             Program.Help = false;
             Program.TmxPath = "";
             Program.ExportUnityProjectDir = "";
+            Program.ObjectTypeXml = "";
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -200,6 +205,16 @@ namespace Tiled2Unity
                 Program.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
             }
             Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
+            Properties.Settings.Default.Save();
+#endif
+
+            // If we didn't override ObjectTypeXml then use old value stored in settings
+#if !TILED_2_UNITY_LITE
+            if (String.IsNullOrEmpty(Program.ObjectTypeXml))
+            {
+                Program.ObjectTypeXml = Properties.Settings.Default.LastObjectTypeXmlFile;
+            }
+            Properties.Settings.Default.LastObjectTypeXmlFile = Program.ObjectTypeXml;
             Properties.Settings.Default.Save();
 #endif
 

@@ -37,6 +37,9 @@ namespace Tiled2Unity
 
             tmxObjectGroup.Objects = objects.ToList();
 
+            // Are we using a unity:layer override?
+            tmxObjectGroup.UnityLayerOverrideName = tmxObjectGroup.Properties.GetPropertyValueAsString("unity:layer", "");
+
             return tmxObjectGroup;
         }
 

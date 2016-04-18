@@ -97,6 +97,7 @@ namespace Tiled2Unity
                         builder.AppendFormat("Export/Import Version mismatch\n");
                         builder.AppendFormat("  Tiled2Unity version   : {0}\n", Program.GetVersion());
                         builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
+                        builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
                         Program.WriteWarning(builder.ToString());
                     }
                 }
@@ -106,7 +107,10 @@ namespace Tiled2Unity
             string pathToSave = Path.Combine(exportDir, fileToSave);
             Program.WriteLine("Exporting to: {0}", pathToSave);
             doc.Save(pathToSave);
-            Program.WriteSuccess("Succesfully exported: {0}\n  vertex scale = {1}", pathToSave, Program.Scale);
+            Program.WriteSuccess("Succesfully exported: {0}\n  Vertex Scale = {1}\n  Object Type Xml = {2}",
+                pathToSave,
+                Program.Scale,
+                String.IsNullOrEmpty(Program.ObjectTypeXml) ? "<none>" : Program.ObjectTypeXml);
         }
 
         public static PointF PointFToUnityVector_NoScale(PointF pt)

@@ -101,6 +101,10 @@ namespace Tiled2Unity
             // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
             tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
 
+            // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
+            tmxLayer.UnityLayerOverrideName = tmxLayer.Properties.GetPropertyValueAsString("unity:layer", "");
+            tmxLayer.BuildCollisionLayers();
+
             return tmxLayer;
         }
 
@@ -221,6 +225,85 @@ namespace Tiled2Unity
             for (int i = 0; i < this.TileIds.Count(); ++i)
             {
                 this.TileIds[i] = BitConverter.ToUInt32(bytes, i * 4);
+            }
+        }
+
+        private void BuildCollisionLayers()
+        {
+            this.CollisionLayers.Clear();
+
+            // Don't build collision layers if we're invisible
+            if (this.Visible == false)
+                return;
+
+            // Don't build collision layers if we're ignored
+            if (this.Ignore == IgnoreSettings.True)
+                return;
+
+            // Don't build collision layers if collision is ignored
+            if (this.Ignore == IgnoreSettings.Collision)
+                return;
+
+            // Are we using a unity-layer override? If so we have to put everything from this layer into it.
+            if (String.IsNullOrEmpty(this.UnityLayerOverrideName))
+            {
+                BuildBuildCollisionLayers_ByObjectType();
+            }
+            else
+            {
+                BuildBuildCollisionLayers_Override();
+            }
+        }
+
+        private void BuildBuildCollisionLayers_Override()
+        {
+            // Just make the layer the collision layer
+            this.CollisionLayers.Clear();
+            this.CollisionLayers.Add(this);
+        }
+
+        private void BuildBuildCollisionLayers_ByObjectType()
+        {
+            // Find all tiles with collisions on them and put them into a "Collision Layer" of the same type
+            for (int t = 0; t < this.TileIds.Length; ++t)
+            {
+                uint rawTileId = this.TileIds[t];
+                if (rawTileId == 0)
+                    continue;
+
+                uint tileId = TmxMath.GetTileIdWithoutFlags(rawTileId);
+                TmxTile tmxTile = this.TmxMap.Tiles[tileId];
+
+                foreach (TmxObject colliderObject in tmxTile.ObjectGroup.Objects)
+                {
+                    if ((colliderObject is TmxHasPoints) == false)
+                        continue;
+
+                    // We have a collider object on the tile
+                    // Add the tile to the Collision Layer of the matching type
+                    // Or, create a new Collision Layer of this type to add this tile to
+                    TmxLayer collisionLayer = this.CollisionLayers.Find(l => String.Compare(l.Name, colliderObject.Type, true) == 0);
+                    if (collisionLayer == null)
+                    {
+                        // Create a new Collision Layer
+                        collisionLayer = new TmxLayer(this.TmxMap);
+                        this.CollisionLayers.Add(collisionLayer);
+
+                        // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)
+                        collisionLayer.Name = colliderObject.Type;
+                        collisionLayer.TileIds = new uint[this.TileIds.Length];
+
+                        // Copy over some stuff from parent layer that we need for creating collisions
+                        collisionLayer.Offset = this.Offset;
+                        collisionLayer.Width = this.Width;
+                        collisionLayer.Height = this.Height;
+                        collisionLayer.Ignore = this.Ignore;
+                        collisionLayer.Properties = this.Properties;
+                    }
+
+                    // Add the tile to this collision layer
+                    collisionLayer.TileIds[t] = rawTileId;
+                }
             }
         }
 

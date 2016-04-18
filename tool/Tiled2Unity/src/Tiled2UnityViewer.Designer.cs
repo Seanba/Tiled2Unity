@@ -43,7 +43,6 @@
             this.view200ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.view400ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.view800ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.previewOptionsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.panelViewer.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBoxViewer)).BeginInit();
             this.previewContextMenuStrip.SuspendLayout();
@@ -76,8 +75,7 @@
             this.previewContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.saveImageAsToolStripMenuItem,
             this.copyToClipboardToolStripMenuItem,
-            this.previewScaleToolStripMenuItem,
-            this.previewOptionsToolStripMenuItem});
+            this.previewScaleToolStripMenuItem});
             this.previewContextMenuStrip.Name = "contextMenuStrip1";
             this.previewContextMenuStrip.Size = new System.Drawing.Size(172, 92);
             // 
@@ -165,13 +163,6 @@
             this.view800ToolStripMenuItem.Text = "View 800%";
             this.view800ToolStripMenuItem.Click += new System.EventHandler(this.view800ToolStripMenuItem_Click);
             // 
-            // previewOptionsToolStripMenuItem
-            // 
-            this.previewOptionsToolStripMenuItem.Name = "previewOptionsToolStripMenuItem";
-            this.previewOptionsToolStripMenuItem.Size = new System.Drawing.Size(171, 22);
-            this.previewOptionsToolStripMenuItem.Text = "Preview Options";
-            this.previewOptionsToolStripMenuItem.Click += new System.EventHandler(this.previewOptionsToolStripMenuItem_Click);
-            // 
             // Tiled2UnityViewer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -181,7 +172,6 @@
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "Tiled2UnityViewer";
             this.Text = "Tiled2Unity Previewer";
-            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Tiled2UnityViewer_FormClosing);
             this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.Tiled2UnityViewer_KeyDown);
             this.panelViewer.ResumeLayout(false);
             this.panelViewer.PerformLayout();
@@ -206,6 +196,5 @@
         private System.Windows.Forms.ToolStripMenuItem view200ToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem view400ToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem view800ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem previewOptionsToolStripMenuItem;
     }
 }

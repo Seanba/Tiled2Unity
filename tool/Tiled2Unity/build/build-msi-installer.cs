@@ -84,7 +84,6 @@ class Script
         var project = new WixSharp.Project(projectName,
                             new WixSharp.Dir(@"%ProgramFiles%\Tiled2Unity",
                                 new WixSharp.File(PATH_BUILD   + @"\ReadMe.txt"),
-                                new WixSharp.File(PATH_RELEASE + @"\ThemeColorPicker.dll"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2Unity.exe"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2Unity.exe.config"),
                                 new WixSharp.File(PATH_BUILD   + @"\Tiled2UnityLite.cs"),

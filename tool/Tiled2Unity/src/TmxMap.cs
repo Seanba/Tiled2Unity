@@ -52,6 +52,9 @@ namespace Tiled2Unity
         public IList<TmxLayer> Layers = new List<TmxLayer>();
         public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
 
+        // The map may load object type data from another file
+        public TmxObjectTypes ObjectTypes = new TmxObjectTypes();
+
         private uint nextUniqueId = 0;
 
         public override string ToString()
@@ -151,6 +154,35 @@ namespace Tiled2Unity
 
             // Make list unique based on mesh name
             return tiles.GroupBy(m => m.UniqueMeshName).Select(g => g.First()).ToList();
+        }
+
+        // Load an Object Type Xml file for this map's objects to reference
+        public void LoadObjectTypeXml(string xmlPath)
+        {
+            if (String.IsNullOrEmpty(xmlPath))
+            {
+                Program.WriteLine("No Object Type Xml file loaded.");
+                this.ObjectTypes = new TmxObjectTypes();
+            }
+            else
+            {
+                Program.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
+
+                try
+                {
+                    this.ObjectTypes = TmxObjectTypes.FromXmlFile(xmlPath);
+                }
+                catch (FileNotFoundException)
+                {
+                    Program.WriteError("Object Type Xml file was not found: {0}", xmlPath);
+                }
+                catch (Exception e)
+                {
+                    Program.WriteError("Error parsing Object Type Xml file: {0}\n{1}", xmlPath, e.Message);
+                }
+            }
+
+            Program.WriteLine("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
         }
 
     }
