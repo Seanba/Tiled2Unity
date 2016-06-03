@@ -29,10 +29,10 @@ namespace Tiled2Unity
 
 		private MeshRenderer renderer;
 
-		private void Awake() 
-		{
-			renderer = this.GetComponent<MeshRenderer>();
-		}
+        private void Awake() 
+        {
+            renderer = this.GetComponent<MeshRenderer>();
+        }
 
         private void Start()
         {
@@ -54,7 +54,7 @@ namespace Tiled2Unity
                 this.timer -= this.TotalAnimationTime;
             }
 
-			renderer.enabled = timer >= this.StartTime && timer < (this.StartTime + this.Duration);
+            renderer.enabled = timer >= this.StartTime && timer < (this.StartTime + this.Duration);
         }
 
     }
