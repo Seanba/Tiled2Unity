@@ -27,7 +27,7 @@ namespace Tiled2Unity
 
         private float timer = 0;
 
-		private MeshRenderer renderer;
+        private MeshRenderer renderer;
 
         private void Awake() 
         {
