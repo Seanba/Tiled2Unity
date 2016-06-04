@@ -10,11 +10,52 @@ namespace Tiled2Unity
     // Partial class that concentrates on creating the Wavefront Mesh (.obj) string
     partial class TiledMapExporter
     {
+        // Working man's vertex
+        public struct Vertex3
+        {
+            public float X { get; set; }
+            public float Y { get; set; }
+            public float Z { get; set; }
+
+            public static Vertex3 FromPointF(PointF point, float depth)
+            {
+                return new Vertex3 { X = point.X, Y = point.Y, Z = depth };
+            }
+        }
+
+        public struct FaceVertices
+        {
+            public PointF[] Vertices { get; set; }
+            public float Depth_z { get; set; }
+
+            public Vertex3 V0
+            {
+                get { return Vertex3.FromPointF(Vertices[0], this.Depth_z); }
+            }
+
+            public Vertex3 V1
+            {
+                get { return Vertex3.FromPointF(Vertices[1], this.Depth_z); }
+            }
+
+            public Vertex3 V2
+            {
+                get { return Vertex3.FromPointF(Vertices[2], this.Depth_z); }
+            }
+
+            public Vertex3 V3
+            {
+                get { return Vertex3.FromPointF(Vertices[3], this.Depth_z); }
+            }
+        }
+
         // Creates the text for a Wavefront OBJ file for the TmxMap
         private StringWriter BuildObjString()
         {
-            HashIndexOf<PointF> vertexDatabase = new HashIndexOf<PointF>();
+            HashIndexOf<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+
+            float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
 
             // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
             int groupCount = 0;
@@ -56,6 +97,15 @@ namespace Tiled2Unity
                             var position = this.tmxMap.GetMapPositionAt(x, y);
                             var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight, tile.Offset);
 
+                            // If we're using depth shaders then we'll need to set a depth value of this face
+                            float depth_z = 0.0f;
+                            if (Program.DepthBufferEnabled)
+                            {
+                                depth_z = position.Y / mapLogicalHeight * -1.0f;
+                            }
+
+                            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
+
                             // Is the tile being flipped or rotated (needed for texture cooridinates)
                             bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
                             bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
@@ -63,10 +113,10 @@ namespace Tiled2Unity
                             var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
 
                             // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[0]) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[1]) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[2]) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[3]) + 1, uvDatabase.Add(uvs[3]) + 1);
+                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                             faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                         }
                     }
@@ -88,11 +138,14 @@ namespace Tiled2Unity
                 var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
                 var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
 
+                // TileObjects have zero depth on their vertices. Their GameObject parent will set depth.
+                FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
+
                 // Adds vertices and uvs to the database as we build the face strings
-                string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[0]) + 1, uvDatabase.Add(uvs[0]) + 1);
-                string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[1]) + 1, uvDatabase.Add(uvs[1]) + 1);
-                string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[2]) + 1, uvDatabase.Add(uvs[2]) + 1);
-                string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[3]) + 1, uvDatabase.Add(uvs[3]) + 1);
+                string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                 faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
             }
 
@@ -106,7 +159,7 @@ namespace Tiled2Unity
             objWriter.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
             foreach (var v in vertexDatabase.List)
             {
-                objWriter.WriteLine("v {0} {1} 0", v.X, v.Y);
+                objWriter.WriteLine("v {0} {1} {2}", v.X, v.Y, v.Z);
             }
             objWriter.WriteLine();
 

@@ -134,7 +134,8 @@ namespace Tiled2Unity
                 // Set the position
                 float x = ImportUtils.GetAttributeAsFloat(goXml, "x", 0);
                 float y = ImportUtils.GetAttributeAsFloat(goXml, "y", 0);
-                child.transform.localPosition = new Vector3(x, y, 0);
+                float z = ImportUtils.GetAttributeAsFloat(goXml, "z", 0);
+                child.transform.localPosition = new Vector3(x, y, z);
 
                 // Add any tile animators
                 AddTileAnimatorsTo(child, goXml);
@@ -411,6 +412,11 @@ namespace Tiled2Unity
             TiledMap map = gameObject.AddComponent<TiledMap>();
             try
             {
+                map.Orientation = ImportUtils.GetAttributeAsEnum<TiledMap.MapOrientation>(goXml, "orientation");
+                map.StaggerAxis = ImportUtils.GetAttributeAsEnum<TiledMap.MapStaggerAxis>(goXml, "staggerAxis");
+                map.StaggerIndex = ImportUtils.GetAttributeAsEnum<TiledMap.MapStaggerIndex>(goXml, "staggerIndex");
+                map.HexSideLength = ImportUtils.GetAttributeAsInt(goXml, "hexSideLength");
+                map.NumLayers = ImportUtils.GetAttributeAsInt(goXml, "numLayers");
                 map.NumTilesWide = ImportUtils.GetAttributeAsInt(goXml, "numTilesWide");
                 map.NumTilesHigh = ImportUtils.GetAttributeAsInt(goXml, "numTilesHigh");
                 map.TileWidth = ImportUtils.GetAttributeAsInt(goXml, "tileWidth");

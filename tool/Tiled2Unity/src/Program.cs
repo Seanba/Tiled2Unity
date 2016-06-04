@@ -35,6 +35,7 @@ namespace Tiled2Unity
         static public float Scale { get; set; }
         static public bool PreferConvexPolygons { get; set; }
         static public float TexelBias { get; private set; }
+        static public bool DepthBufferEnabled { get; set; }
         static public bool Verbose { get; private set; }
         static public bool Help { get; private set; }
 
@@ -54,6 +55,7 @@ namespace Tiled2Unity
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
                 { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Program.PreferConvexPolygons = true },
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
+                { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Program.DepthBufferEnabled = true },
                 { "v|verbose", "Print verbose messages.", v => Program.Verbose = true },
                 { "h|help", "Display this help message.", h => Program.Help = true },
             };
@@ -93,6 +95,7 @@ namespace Tiled2Unity
             Program.Scale = 1.0f;
             Program.PreferConvexPolygons = false;
             Program.TexelBias = DefaultTexelBias;
+            Program.DepthBufferEnabled = false;
             Program.Verbose = false;
             Program.Help = false;
             Program.TmxPath = "";
@@ -149,6 +152,7 @@ namespace Tiled2Unity
             Program.Scale = -1.0f;
             Program.PreferConvexPolygons = false;
             Program.TexelBias = DefaultTexelBias;
+            Program.DepthBufferEnabled = false;
             Program.Verbose = false;
             Program.Help = false;
             Program.TmxPath = "";
@@ -205,6 +209,16 @@ namespace Tiled2Unity
                 Program.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
             }
             Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
+            Properties.Settings.Default.Save();
+#endif
+
+            // If we didn't set depth buffer as default then use old value
+#if !TILED_2_UNITY_LITE
+            if (Program.DepthBufferEnabled == false)
+            {
+                Program.DepthBufferEnabled = Properties.Settings.Default.LastDepthBufferEnabled;
+            }
+            Properties.Settings.Default.LastDepthBufferEnabled = Program.DepthBufferEnabled;
             Properties.Settings.Default.Save();
 #endif
 

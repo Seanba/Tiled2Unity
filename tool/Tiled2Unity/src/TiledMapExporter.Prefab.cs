@@ -63,10 +63,18 @@ namespace Tiled2Unity
 
             XElement prefab = new XElement("Prefab");
             prefab.SetAttributeValue("name", this.tmxMap.Name);
+
+            prefab.SetAttributeValue("orientation", this.tmxMap.Orientation.ToString());
+            prefab.SetAttributeValue("staggerAxis", this.tmxMap.StaggerAxis.ToString());
+            prefab.SetAttributeValue("staggerIndex", this.tmxMap.StaggerIndex.ToString());
+            prefab.SetAttributeValue("hexSideLength", this.tmxMap.HexSideLength);
+
+            prefab.SetAttributeValue("numLayers", this.tmxMap.Layers.Count);
             prefab.SetAttributeValue("numTilesWide", this.tmxMap.Width);
             prefab.SetAttributeValue("numTilesHigh", this.tmxMap.Height);
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
             prefab.SetAttributeValue("tileHeight", this.tmxMap.TileHeight);
+
             prefab.SetAttributeValue("exportScale", Program.Scale);
             prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
@@ -83,11 +91,23 @@ namespace Tiled2Unity
 
                     PointF offset = PointFToUnityVector(layer.Offset);
 
+                    // Is we're using depth shaders for our materials then each layer needs depth assigned to it
+                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
+                    float depth_z = 0;
+                    if (Program.DepthBufferEnabled && layer.SortingOrder != 0)
+                    {
+                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
+                        float tileHeight = this.tmxMap.TileHeight;
+
+                        depth_z = layer.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                    }
+
                     XElement layerElement =
                         new XElement("GameObject",
                             new XAttribute("name", layer.Name),
                             new XAttribute("x", offset.X),
-                            new XAttribute("y", offset.Y));
+                            new XAttribute("y", offset.Y),
+                            new XAttribute("z", depth_z));
 
                     if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
                     {
@@ -132,6 +152,19 @@ namespace Tiled2Unity
                     gameObject.SetAttributeValue("x", offset.X);
                     gameObject.SetAttributeValue("y", offset.Y);
 
+                    // Is we're using depth shaders for our materials then each object group needs depth assigned to it
+                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
+                    float depth_z = 0;
+                    if (Program.DepthBufferEnabled && objGroup.SortingOrder != 0)
+                    {
+                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
+                        float tileHeight = this.tmxMap.TileHeight;
+
+                        depth_z = objGroup.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                    }
+
+                    gameObject.SetAttributeValue("z", depth_z);
+
                     AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
                     AssignTiledProperties(objGroup, gameObject);
 
@@ -162,7 +195,7 @@ namespace Tiled2Unity
                 // All the objects/colliders in our object group need to be separate game objects because they can have unique tags/layers
                 XElement xmlObject = new XElement("GameObject", new XAttribute("name", tmxObject.GetNonEmptyName()));
 
-                // Transform object locaction into map space (needed for isometric and hex modes) 
+                // Transform object locaction into map space (needed for isometric and hex modes)
                 PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
                 PointF pos = PointFToUnityVector(xfPosition);
                 xmlObject.SetAttributeValue("x", pos.X);
@@ -206,6 +239,24 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
+                    // TileObjects are off by a half-width in Isometric mode
+                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                    {
+                        xmlObject.SetAttributeValue("x", pos.X - this.tmxMap.TileWidth * 0.5f * Program.Scale);
+                    }
+
+                    // Apply z-cooridnate for use with the depth buffer
+                    // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
+                    if (Program.DepthBufferEnabled)
+                    {
+                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
+                        float tileLogicalHeight = this.tmxMap.TileHeight;
+                        float logicalPos_y = (-pos.Y / Program.Scale) - tileLogicalHeight;
+
+                        float depth_z = logicalPos_y / mapLogicalHeight * -1.0f;
+                        xmlObject.SetAttributeValue("z", depth_z == -0 ? 0 : depth_z);
+                    }
+
                     AddTileObjectElements(tmxObject as TmxObjectTile, xmlObject);
                 }
                 else
@@ -491,37 +542,43 @@ namespace Tiled2Unity
             }
 
             // Add any colliders that might be on the tile
-            foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
+            // Note: Colliders on a tile object are always treated as if they are in Orthogonal space
+            TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
+            this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
             {
-                XElement objElement = null;
+                foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
+                {
+                    XElement objElement = null;
 
-                if (tmxObject.GetType() == typeof(TmxObjectRectangle))
-                {
-                    // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
-                    objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
-                }
-                else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
-                {
-                    objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
-                }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
-                {
-                    objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
-                }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
-                {
-                    objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
-                }
+                    if (tmxObject.GetType() == typeof(TmxObjectRectangle))
+                    {
+                        // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
+                        objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
+                    }
+                    else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
+                    {
+                        objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
+                    }
+                    else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
+                    {
+                        objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
+                    }
+                    else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
+                    {
+                        objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
+                    }
 
-                if (objElement != null)
-                {
-                    // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
-                    objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Program.Scale);
-                    objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Program.Scale);
+                    if (objElement != null)
+                    {
+                        // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
+                        objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Program.Scale);
+                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Program.Scale);
 
-                    xmlTileObject.Add(objElement);
+                        xmlTileObject.Add(objElement);
+                    }
                 }
             }
+            this.tmxMap.Orientation = restoreOrientation;
 
             // Add a child for each mesh (with animation if needed)
             foreach (var mesh in tmxObjectTile.Tile.Meshes)

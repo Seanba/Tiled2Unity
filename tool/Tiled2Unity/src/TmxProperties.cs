@@ -30,11 +30,11 @@ namespace Tiled2Unity
         {
             try
             {
-                return Convert.ToInt32(this.PropertyMap[name]);
+                return Convert.ToInt32(this.PropertyMap[name].Value);
             }
             catch (System.FormatException inner)
             {
-                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name]);
+                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name].Value);
                 throw new TmxException(message, inner);
             }
         }
@@ -51,11 +51,11 @@ namespace Tiled2Unity
             bool asBoolean = false;
             try
             {
-                asBoolean = Convert.ToBoolean(this.PropertyMap[name]);
+                asBoolean = Convert.ToBoolean(this.PropertyMap[name].Value);
             }
             catch (FormatException)
             {
-                Program.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name]);
+                Program.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name].Value);
             }
 
             return asBoolean;

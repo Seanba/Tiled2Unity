@@ -370,6 +370,7 @@ namespace Tiled2Unity
         private void checkBoxPreferConvexPolygons_CheckedChanged(object sender, EventArgs e)
         {
             Program.PreferConvexPolygons = this.checkBoxPreferConvexPolygons.Checked;
+            Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
             Properties.Settings.Default.Save();
         }
 
@@ -405,6 +406,13 @@ namespace Tiled2Unity
         private void buttonClearObjectTypes_Click(object sender, EventArgs e)
         {
             Properties.Settings.Default.LastObjectTypeXmlFile = "";
+            Properties.Settings.Default.Save();
+        }
+
+        private void checkBoxDepthBuffer_CheckedChanged(object sender, EventArgs e)
+        {
+            Program.DepthBufferEnabled = this.checkBoxDepthBuffer.Checked;
+            Properties.Settings.Default.LastDepthBufferEnabled = Program.DepthBufferEnabled;
             Properties.Settings.Default.Save();
         }
     }

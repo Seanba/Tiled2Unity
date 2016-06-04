@@ -664,6 +664,12 @@ namespace Tiled2Unity
                     GraphicsState tileState = g.Save();
                     TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
 
+                    // Isometric tiles are off by a half-width
+                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                    {
+                        g.TranslateTransform(-this.tmxMap.TileWidth * 0.5f, 0);
+                    }
+
                     // Apply scale
                     SizeF scale = tmxObjectTile.GetTileObjectScale();
                     g.ScaleTransform(scale.Width, scale.Height);
@@ -693,12 +699,18 @@ namespace Tiled2Unity
                     g.DrawRectangle(Pens.Black, destination);
 
                     // Draw the collisions
-                    // Make up for the fact that the bottom-left corner is the origin
-                    g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
-                    foreach (var obj in tmxObjectTile.Tile.ObjectGroup.Objects)
+                    // Temporarily set orienation to Orthogonal for tile colliders
+                    TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
+                    this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
                     {
-                        DrawObjectCollider(g, obj, Color.Gray);
+                        // Make up for the fact that the bottom-left corner is the origin
+                        g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
+                        foreach (var obj in tmxObjectTile.Tile.ObjectGroup.Objects)
+                        {
+                            DrawObjectCollider(g, obj, Color.Gray);
+                        }
                     }
+                    this.tmxMap.Orientation = restoreOrientation;
 
                     g.Restore(tileState);
                 }

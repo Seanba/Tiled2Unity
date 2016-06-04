@@ -18,7 +18,7 @@ namespace Tiled2Unity
     // Concentrates on the Xml file being imported
     partial class ImportTiled2Unity
     {
-        public static readonly string ThisVersion = "1.0.5.0";
+        public static readonly string ThisVersion = "1.0.6.0";
 
         // Called when Unity detects the *.tiled2unity.xml file needs to be (re)imported
         public void ImportBegin(string xmlPath)
@@ -82,18 +82,13 @@ namespace Tiled2Unity
                     AssetDatabase.ImportAsset(pathToSave, ImportAssetOptions.ForceSynchronousImport);
                 }
 
-                // Create a material if needed in prepartion for the texture being successfully imported
+                // Create a material in prepartion for the texture being successfully imported
                 {
+                    // We need to recreate the material every time because the Tiled Map may have changed
                     string materialPath = GetMaterialAssetPath(name);
-                    Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(Material)) as Material;
-                    if (material == null)
-                    {
-                        // We need to create the material afterall
-                        // Use our custom shader
-                        material = CreateMaterialFromXml(tex);
-                        ImportUtils.ReadyToWrite(materialPath);
-                        AssetDatabase.CreateAsset(material, materialPath);
-                    }
+                    Material material = CreateMaterialFromXml(tex);
+                    ImportUtils.ReadyToWrite(materialPath);
+                    AssetDatabase.CreateAsset(material, materialPath);
                 }
             }
         }
@@ -106,46 +101,55 @@ namespace Tiled2Unity
                 string texAssetPath = tex.Attribute("assetPath").Value;
                 string materialPath = GetMaterialAssetPath(texAssetPath);
 
-                Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(Material)) as Material;
-                if (material == null)
-                {
-                    // Create our material
-                    material = CreateMaterialFromXml(tex);
+                // Create our material
+                Material material = CreateMaterialFromXml(tex);
 
-                    // Assign to it the texture that is already internal to our Unity project
-                    Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texAssetPath, typeof(Texture2D)) as Texture2D;
-                    material.SetTexture("_MainTex", texture2d);
+                // Assign to it the texture that is already internal to our Unity project
+                Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texAssetPath, typeof(Texture2D)) as Texture2D;
+                material.SetTexture("_MainTex", texture2d);
 
-                    // Write the material to our asset database
-                    ImportUtils.ReadyToWrite(materialPath);
-                    AssetDatabase.CreateAsset(material, materialPath);
-                }
+                // Write the material to our asset database
+                ImportUtils.ReadyToWrite(materialPath);
+                AssetDatabase.CreateAsset(material, materialPath);
             }
         }
 
         private Material CreateMaterialFromXml(XElement xml)
         {
-            Material material = null;
-
             // Does this material support alpha color key?
             string htmlColor = ImportUtils.GetAttributeAsString(xml, "alphaColorKey", "");
+            bool usesDepthShader = ImportUtils.GetAttributeAsBoolean(xml, "usesDepthShaders", false);
 
-            if (String.IsNullOrEmpty(htmlColor))
+            // Determine which shader we sould be using
+            string shaderName = "Tiled2Unity/";
+
+            // Are we using depth shaders?
+            if (usesDepthShader)
             {
-                // No alpha color key so use a shader with a simplified fragment program
-                material = new Material(Shader.Find("Tiled2Unity/Default"));
+                shaderName += "Depth";
             }
             else
             {
-                // Get the HTML color and set the color key on the material shader
-                material = new Material(Shader.Find("Tiled2Unity/Color Key"));
+                shaderName += "Default";
+            }
 
-                // Take for granted color is in the form '#RRGGBB'
+            // Are we using color key shaders?
+            Color? keyColor = null;
+            if (!String.IsNullOrEmpty(htmlColor))
+            {
+                shaderName += " Color Key";
+
                 byte r = byte.Parse(htmlColor.Substring(1, 2), System.Globalization.NumberStyles.HexNumber);
                 byte g = byte.Parse(htmlColor.Substring(3, 2), System.Globalization.NumberStyles.HexNumber);
                 byte b = byte.Parse(htmlColor.Substring(5, 2), System.Globalization.NumberStyles.HexNumber);
-                Color color = new Color32(r, g, b, 255);
-                material.SetColor("_AlphaColorKey", color);
+                keyColor = new Color32(r, g, b, 255);
+            }
+
+            Material material = new Material(Shader.Find(shaderName));
+
+            if (keyColor.HasValue)
+            {
+                material.SetColor("_AlphaColorKey", keyColor.Value);
             }
 
             return material;

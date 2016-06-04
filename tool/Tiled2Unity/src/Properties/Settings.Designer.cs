@@ -106,5 +106,17 @@ namespace Tiled2Unity.Properties {
                 this["LastObjectTypeXmlFile"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool LastDepthBufferEnabled {
+            get {
+                return ((bool)(this["LastDepthBufferEnabled"]));
+            }
+            set {
+                this["LastDepthBufferEnabled"] = value;
+            }
+        }
     }
 }

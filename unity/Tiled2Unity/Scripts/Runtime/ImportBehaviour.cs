@@ -58,7 +58,9 @@ namespace Tiled2Unity
 
             // Couldn't find, so create.
             GameObject gameObject = new GameObject("__temp_tiled2unity_import");
+#if !UNITY_4_0 && !UNITY_4_0_1 && !UNITY_4_2 && !UNITY_4_3
             gameObject.transform.SetAsFirstSibling();
+#endif
 
             var importStatus = gameObject.AddComponent<ImportBehaviour>();
             importStatus.ImportName = importName;

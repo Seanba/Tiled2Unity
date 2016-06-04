@@ -54,6 +54,7 @@
             this.buttonObjectTypesXml = new System.Windows.Forms.Button();
             this.textBoxObjectTypesXml = new System.Windows.Forms.TextBox();
             this.buttonClearObjectTypes = new System.Windows.Forms.Button();
+            this.checkBoxDepthBuffer = new System.Windows.Forms.CheckBox();
             this.menuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -68,7 +69,7 @@
             this.richTextBoxOutput.Location = new System.Drawing.Point(12, 27);
             this.richTextBoxOutput.Name = "richTextBoxOutput";
             this.richTextBoxOutput.ReadOnly = true;
-            this.richTextBoxOutput.Size = new System.Drawing.Size(953, 346);
+            this.richTextBoxOutput.Size = new System.Drawing.Size(953, 337);
             this.richTextBoxOutput.TabIndex = 0;
             this.richTextBoxOutput.Text = "";
             this.richTextBoxOutput.WordWrap = false;
@@ -78,7 +79,7 @@
             // 
             this.buttonFolderBrowser.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.buttonFolderBrowser.Enabled = false;
-            this.buttonFolderBrowser.Location = new System.Drawing.Point(13, 388);
+            this.buttonFolderBrowser.Location = new System.Drawing.Point(13, 380);
             this.buttonFolderBrowser.Name = "buttonFolderBrowser";
             this.buttonFolderBrowser.Size = new System.Drawing.Size(135, 23);
             this.buttonFolderBrowser.TabIndex = 3;
@@ -90,7 +91,7 @@
             // 
             this.buttonExport.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonExport.Enabled = false;
-            this.buttonExport.Location = new System.Drawing.Point(784, 388);
+            this.buttonExport.Location = new System.Drawing.Point(784, 412);
             this.buttonExport.Name = "buttonExport";
             this.buttonExport.Size = new System.Drawing.Size(180, 107);
             this.buttonExport.TabIndex = 7;
@@ -102,7 +103,7 @@
             // 
             this.buttonViewer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonViewer.Enabled = false;
-            this.buttonViewer.Location = new System.Drawing.Point(658, 471);
+            this.buttonViewer.Location = new System.Drawing.Point(658, 495);
             this.buttonViewer.Name = "buttonViewer";
             this.buttonViewer.Size = new System.Drawing.Size(120, 23);
             this.buttonViewer.TabIndex = 4;
@@ -225,7 +226,7 @@
             this.labelScale.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.labelScale.AutoSize = true;
-            this.labelScale.Location = new System.Drawing.Point(13, 475);
+            this.labelScale.Location = new System.Drawing.Point(13, 499);
             this.labelScale.Name = "labelScale";
             this.labelScale.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.labelScale.Size = new System.Drawing.Size(70, 13);
@@ -236,7 +237,7 @@
             // textBoxScale
             // 
             this.textBoxScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.textBoxScale.Location = new System.Drawing.Point(89, 471);
+            this.textBoxScale.Location = new System.Drawing.Point(89, 495);
             this.textBoxScale.Name = "textBoxScale";
             this.textBoxScale.Size = new System.Drawing.Size(108, 20);
             this.textBoxScale.TabIndex = 6;
@@ -248,7 +249,7 @@
             this.textBoxExportFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBoxExportFolder.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastExportDirectory", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.textBoxExportFolder.Location = new System.Drawing.Point(154, 390);
+            this.textBoxExportFolder.Location = new System.Drawing.Point(154, 382);
             this.textBoxExportFolder.Name = "textBoxExportFolder";
             this.textBoxExportFolder.ReadOnly = true;
             this.textBoxExportFolder.Size = new System.Drawing.Size(625, 20);
@@ -261,7 +262,9 @@
             this.checkBoxPreferConvexPolygons.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.checkBoxPreferConvexPolygons.AutoSize = true;
             this.checkBoxPreferConvexPolygons.BackColor = System.Drawing.SystemColors.ControlLight;
-            this.checkBoxPreferConvexPolygons.Location = new System.Drawing.Point(12, 449);
+            this.checkBoxPreferConvexPolygons.Checked = global::Tiled2Unity.Properties.Settings.Default.LastPreferConvexPolygons;
+            this.checkBoxPreferConvexPolygons.DataBindings.Add(new System.Windows.Forms.Binding("Checked", global::Tiled2Unity.Properties.Settings.Default, "LastPreferConvexPolygons", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.checkBoxPreferConvexPolygons.Location = new System.Drawing.Point(12, 445);
             this.checkBoxPreferConvexPolygons.Name = "checkBoxPreferConvexPolygons";
             this.checkBoxPreferConvexPolygons.Size = new System.Drawing.Size(326, 17);
             this.checkBoxPreferConvexPolygons.TabIndex = 8;
@@ -272,7 +275,7 @@
             // buttonObjectTypesXml
             // 
             this.buttonObjectTypesXml.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.buttonObjectTypesXml.Location = new System.Drawing.Point(12, 421);
+            this.buttonObjectTypesXml.Location = new System.Drawing.Point(12, 413);
             this.buttonObjectTypesXml.Name = "buttonObjectTypesXml";
             this.buttonObjectTypesXml.Size = new System.Drawing.Size(135, 23);
             this.buttonObjectTypesXml.TabIndex = 9;
@@ -285,7 +288,7 @@
             this.textBoxObjectTypesXml.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBoxObjectTypesXml.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastObjectTypeXmlFile", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.textBoxObjectTypesXml.Location = new System.Drawing.Point(154, 423);
+            this.textBoxObjectTypesXml.Location = new System.Drawing.Point(154, 415);
             this.textBoxObjectTypesXml.Name = "textBoxObjectTypesXml";
             this.textBoxObjectTypesXml.ReadOnly = true;
             this.textBoxObjectTypesXml.Size = new System.Drawing.Size(498, 20);
@@ -296,8 +299,8 @@
             // buttonClearObjectTypes
             // 
             this.buttonClearObjectTypes.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.buttonClearObjectTypes.Location = new System.Drawing.Point(658, 421);
-            this.buttonClearObjectTypes.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.buttonClearObjectTypes.Location = new System.Drawing.Point(658, 413);
+            this.buttonClearObjectTypes.Margin = new System.Windows.Forms.Padding(2);
             this.buttonClearObjectTypes.Name = "buttonClearObjectTypes";
             this.buttonClearObjectTypes.Size = new System.Drawing.Size(120, 23);
             this.buttonClearObjectTypes.TabIndex = 11;
@@ -305,12 +308,29 @@
             this.buttonClearObjectTypes.UseVisualStyleBackColor = true;
             this.buttonClearObjectTypes.Click += new System.EventHandler(this.buttonClearObjectTypes_Click);
             // 
+            // checkBoxDepthBuffer
+            // 
+            this.checkBoxDepthBuffer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.checkBoxDepthBuffer.AutoSize = true;
+            this.checkBoxDepthBuffer.BackColor = System.Drawing.SystemColors.ControlLight;
+            this.checkBoxDepthBuffer.Checked = global::Tiled2Unity.Properties.Settings.Default.LastDepthBufferEnabled;
+            this.checkBoxDepthBuffer.DataBindings.Add(new System.Windows.Forms.Binding("Checked", global::Tiled2Unity.Properties.Settings.Default, "LastDepthBufferEnabled", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.checkBoxDepthBuffer.Location = new System.Drawing.Point(13, 469);
+            this.checkBoxDepthBuffer.Name = "checkBoxDepthBuffer";
+            this.checkBoxDepthBuffer.Size = new System.Drawing.Size(589, 17);
+            this.checkBoxDepthBuffer.TabIndex = 12;
+            this.checkBoxDepthBuffer.Text = "Use Depth Buffer (For sprites using SpriteDepthInMap component to draw sprite bel" +
+    "ow/above layers based on position.)";
+            this.checkBoxDepthBuffer.UseVisualStyleBackColor = false;
+            this.checkBoxDepthBuffer.CheckedChanged += new System.EventHandler(this.checkBoxDepthBuffer_CheckedChanged);
+            // 
             // Tiled2UnityForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.ClientSize = new System.Drawing.Size(977, 507);
+            this.ClientSize = new System.Drawing.Size(977, 531);
+            this.Controls.Add(this.checkBoxDepthBuffer);
             this.Controls.Add(this.buttonClearObjectTypes);
             this.Controls.Add(this.textBoxObjectTypesXml);
             this.Controls.Add(this.buttonObjectTypesXml);
@@ -325,7 +345,7 @@
             this.Controls.Add(this.menuStrip);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MainMenuStrip = this.menuStrip;
-            this.MinimumSize = new System.Drawing.Size(600, 479);
+            this.MinimumSize = new System.Drawing.Size(840, 480);
             this.Name = "Tiled2UnityForm";
             this.Text = "Tiled2Unity";
             this.menuStrip.ResumeLayout(false);
@@ -362,6 +382,7 @@
         private System.Windows.Forms.Button buttonObjectTypesXml;
         private System.Windows.Forms.TextBox textBoxObjectTypesXml;
         private System.Windows.Forms.Button buttonClearObjectTypes;
+        private System.Windows.Forms.CheckBox checkBoxDepthBuffer;
     }
 }
 

@@ -34,7 +34,7 @@ namespace Tiled2Unity
         }
 
         public string Name { get; private set; }
-        public MapOrientation Orientation { get; private set; }
+        public MapOrientation Orientation { get; set; }
         public MapStaggerAxis StaggerAxis { get; private set; }
         public MapStaggerIndex StaggerIndex { get; private set; }
         public int HexSideLength { get; set; }

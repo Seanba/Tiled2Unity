@@ -97,6 +97,12 @@ namespace Tiled2Unity
                             xmlInternalTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
                         }
 
+                        // Are we using depth shaders on our materials?
+                        if (Program.DepthBufferEnabled)
+                        {
+                            xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
+                        }
+
                         elements.Add(xmlInternalTexture);
                     }
                     else
@@ -110,6 +116,12 @@ namespace Tiled2Unity
                         if (!String.IsNullOrEmpty(image.TransparentColor))
                         {
                             xmlImportTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
+                        }
+
+                        // Are we using depth shaders on our materials?
+                        if (Program.DepthBufferEnabled)
+                        {
+                            xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
                         }
 
                         // Bake the image file into the xml

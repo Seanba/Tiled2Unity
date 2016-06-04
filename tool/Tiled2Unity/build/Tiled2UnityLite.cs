@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.5.0
+// version 1.0.6.0
 
 //css_reference System;
 //css_reference System.Core;
@@ -38,7 +38,7 @@ namespace Tiled2Unity
     {
         public static string GetVersion()
         {
-            return "1.0.5.0";
+            return "1.0.6.0";
         }
     }
 }
@@ -750,6 +750,7 @@ namespace Tiled2Unity
         static public float Scale { get; set; }
         static public bool PreferConvexPolygons { get; set; }
         static public float TexelBias { get; private set; }
+        static public bool DepthBufferEnabled { get; set; }
         static public bool Verbose { get; private set; }
         static public bool Help { get; private set; }
 
@@ -769,6 +770,7 @@ namespace Tiled2Unity
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
                 { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Program.PreferConvexPolygons = true },
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
+                { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Program.DepthBufferEnabled = true },
                 { "v|verbose", "Print verbose messages.", v => Program.Verbose = true },
                 { "h|help", "Display this help message.", h => Program.Help = true },
             };
@@ -808,6 +810,7 @@ namespace Tiled2Unity
             Program.Scale = 1.0f;
             Program.PreferConvexPolygons = false;
             Program.TexelBias = DefaultTexelBias;
+            Program.DepthBufferEnabled = false;
             Program.Verbose = false;
             Program.Help = false;
             Program.TmxPath = "";
@@ -864,6 +867,7 @@ namespace Tiled2Unity
             Program.Scale = -1.0f;
             Program.PreferConvexPolygons = false;
             Program.TexelBias = DefaultTexelBias;
+            Program.DepthBufferEnabled = false;
             Program.Verbose = false;
             Program.Help = false;
             Program.TmxPath = "";
@@ -920,6 +924,16 @@ namespace Tiled2Unity
                 Program.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
             }
             Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
+            Properties.Settings.Default.Save();
+#endif
+
+            // If we didn't set depth buffer as default then use old value
+#if !TILED_2_UNITY_LITE
+            if (Program.DepthBufferEnabled == false)
+            {
+                Program.DepthBufferEnabled = Properties.Settings.Default.LastDepthBufferEnabled;
+            }
+            Properties.Settings.Default.LastDepthBufferEnabled = Program.DepthBufferEnabled;
             Properties.Settings.Default.Save();
 #endif
 
@@ -1707,6 +1721,12 @@ namespace Tiled2Unity
                             xmlInternalTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
                         }
 
+                        // Are we using depth shaders on our materials?
+                        if (Program.DepthBufferEnabled)
+                        {
+                            xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
+                        }
+
                         elements.Add(xmlInternalTexture);
                     }
                     else
@@ -1720,6 +1740,12 @@ namespace Tiled2Unity
                         if (!String.IsNullOrEmpty(image.TransparentColor))
                         {
                             xmlImportTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
+                        }
+
+                        // Are we using depth shaders on our materials?
+                        if (Program.DepthBufferEnabled)
+                        {
+                            xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
                         }
 
                         // Bake the image file into the xml
@@ -1751,11 +1777,52 @@ namespace Tiled2Unity
     // Partial class that concentrates on creating the Wavefront Mesh (.obj) string
     partial class TiledMapExporter
     {
+        // Working man's vertex
+        public struct Vertex3
+        {
+            public float X { get; set; }
+            public float Y { get; set; }
+            public float Z { get; set; }
+
+            public static Vertex3 FromPointF(PointF point, float depth)
+            {
+                return new Vertex3 { X = point.X, Y = point.Y, Z = depth };
+            }
+        }
+
+        public struct FaceVertices
+        {
+            public PointF[] Vertices { get; set; }
+            public float Depth_z { get; set; }
+
+            public Vertex3 V0
+            {
+                get { return Vertex3.FromPointF(Vertices[0], this.Depth_z); }
+            }
+
+            public Vertex3 V1
+            {
+                get { return Vertex3.FromPointF(Vertices[1], this.Depth_z); }
+            }
+
+            public Vertex3 V2
+            {
+                get { return Vertex3.FromPointF(Vertices[2], this.Depth_z); }
+            }
+
+            public Vertex3 V3
+            {
+                get { return Vertex3.FromPointF(Vertices[3], this.Depth_z); }
+            }
+        }
+
         // Creates the text for a Wavefront OBJ file for the TmxMap
         private StringWriter BuildObjString()
         {
-            HashIndexOf<PointF> vertexDatabase = new HashIndexOf<PointF>();
+            HashIndexOf<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+
+            float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
 
             // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
             int groupCount = 0;
@@ -1797,6 +1864,15 @@ namespace Tiled2Unity
                             var position = this.tmxMap.GetMapPositionAt(x, y);
                             var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight, tile.Offset);
 
+                            // If we're using depth shaders then we'll need to set a depth value of this face
+                            float depth_z = 0.0f;
+                            if (Program.DepthBufferEnabled)
+                            {
+                                depth_z = position.Y / mapLogicalHeight * -1.0f;
+                            }
+
+                            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
+
                             // Is the tile being flipped or rotated (needed for texture cooridinates)
                             bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
                             bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
@@ -1804,10 +1880,10 @@ namespace Tiled2Unity
                             var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
 
                             // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[0]) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[1]) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[2]) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[3]) + 1, uvDatabase.Add(uvs[3]) + 1);
+                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                             faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                         }
                     }
@@ -1829,11 +1905,14 @@ namespace Tiled2Unity
                 var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
                 var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
 
+                // TileObjects have zero depth on their vertices. Their GameObject parent will set depth.
+                FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
+
                 // Adds vertices and uvs to the database as we build the face strings
-                string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[0]) + 1, uvDatabase.Add(uvs[0]) + 1);
-                string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[1]) + 1, uvDatabase.Add(uvs[1]) + 1);
-                string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[2]) + 1, uvDatabase.Add(uvs[2]) + 1);
-                string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(vertices[3]) + 1, uvDatabase.Add(uvs[3]) + 1);
+                string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                 faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
             }
 
@@ -1847,7 +1926,7 @@ namespace Tiled2Unity
             objWriter.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
             foreach (var v in vertexDatabase.List)
             {
-                objWriter.WriteLine("v {0} {1} 0", v.X, v.Y);
+                objWriter.WriteLine("v {0} {1} {2}", v.X, v.Y, v.Z);
             }
             objWriter.WriteLine();
 
@@ -2044,10 +2123,18 @@ namespace Tiled2Unity
 
             XElement prefab = new XElement("Prefab");
             prefab.SetAttributeValue("name", this.tmxMap.Name);
+
+            prefab.SetAttributeValue("orientation", this.tmxMap.Orientation.ToString());
+            prefab.SetAttributeValue("staggerAxis", this.tmxMap.StaggerAxis.ToString());
+            prefab.SetAttributeValue("staggerIndex", this.tmxMap.StaggerIndex.ToString());
+            prefab.SetAttributeValue("hexSideLength", this.tmxMap.HexSideLength);
+
+            prefab.SetAttributeValue("numLayers", this.tmxMap.Layers.Count);
             prefab.SetAttributeValue("numTilesWide", this.tmxMap.Width);
             prefab.SetAttributeValue("numTilesHigh", this.tmxMap.Height);
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
             prefab.SetAttributeValue("tileHeight", this.tmxMap.TileHeight);
+
             prefab.SetAttributeValue("exportScale", Program.Scale);
             prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
@@ -2064,11 +2151,23 @@ namespace Tiled2Unity
 
                     PointF offset = PointFToUnityVector(layer.Offset);
 
+                    // Is we're using depth shaders for our materials then each layer needs depth assigned to it
+                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
+                    float depth_z = 0;
+                    if (Program.DepthBufferEnabled && layer.SortingOrder != 0)
+                    {
+                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
+                        float tileHeight = this.tmxMap.TileHeight;
+
+                        depth_z = layer.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                    }
+
                     XElement layerElement =
                         new XElement("GameObject",
                             new XAttribute("name", layer.Name),
                             new XAttribute("x", offset.X),
-                            new XAttribute("y", offset.Y));
+                            new XAttribute("y", offset.Y),
+                            new XAttribute("z", depth_z));
 
                     if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
                     {
@@ -2113,6 +2212,19 @@ namespace Tiled2Unity
                     gameObject.SetAttributeValue("x", offset.X);
                     gameObject.SetAttributeValue("y", offset.Y);
 
+                    // Is we're using depth shaders for our materials then each object group needs depth assigned to it
+                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
+                    float depth_z = 0;
+                    if (Program.DepthBufferEnabled && objGroup.SortingOrder != 0)
+                    {
+                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
+                        float tileHeight = this.tmxMap.TileHeight;
+
+                        depth_z = objGroup.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                    }
+
+                    gameObject.SetAttributeValue("z", depth_z);
+
                     AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
                     AssignTiledProperties(objGroup, gameObject);
 
@@ -2143,7 +2255,7 @@ namespace Tiled2Unity
                 // All the objects/colliders in our object group need to be separate game objects because they can have unique tags/layers
                 XElement xmlObject = new XElement("GameObject", new XAttribute("name", tmxObject.GetNonEmptyName()));
 
-                // Transform object locaction into map space (needed for isometric and hex modes) 
+                // Transform object locaction into map space (needed for isometric and hex modes)
                 PointF xfPosition = TmxMath.ObjectPointFToMapSpace(this.tmxMap, tmxObject.Position);
                 PointF pos = PointFToUnityVector(xfPosition);
                 xmlObject.SetAttributeValue("x", pos.X);
@@ -2187,6 +2299,24 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
+                    // TileObjects are off by a half-width in Isometric mode
+                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                    {
+                        xmlObject.SetAttributeValue("x", pos.X - this.tmxMap.TileWidth * 0.5f * Program.Scale);
+                    }
+
+                    // Apply z-cooridnate for use with the depth buffer
+                    // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
+                    if (Program.DepthBufferEnabled)
+                    {
+                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
+                        float tileLogicalHeight = this.tmxMap.TileHeight;
+                        float logicalPos_y = (-pos.Y / Program.Scale) - tileLogicalHeight;
+
+                        float depth_z = logicalPos_y / mapLogicalHeight * -1.0f;
+                        xmlObject.SetAttributeValue("z", depth_z == -0 ? 0 : depth_z);
+                    }
+
                     AddTileObjectElements(tmxObject as TmxObjectTile, xmlObject);
                 }
                 else
@@ -2472,37 +2602,43 @@ namespace Tiled2Unity
             }
 
             // Add any colliders that might be on the tile
-            foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
+            // Note: Colliders on a tile object are always treated as if they are in Orthogonal space
+            TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
+            this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
             {
-                XElement objElement = null;
+                foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
+                {
+                    XElement objElement = null;
 
-                if (tmxObject.GetType() == typeof(TmxObjectRectangle))
-                {
-                    // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
-                    objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
-                }
-                else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
-                {
-                    objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
-                }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
-                {
-                    objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
-                }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
-                {
-                    objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
-                }
+                    if (tmxObject.GetType() == typeof(TmxObjectRectangle))
+                    {
+                        // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
+                        objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
+                    }
+                    else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
+                    {
+                        objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
+                    }
+                    else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
+                    {
+                        objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
+                    }
+                    else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
+                    {
+                        objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
+                    }
 
-                if (objElement != null)
-                {
-                    // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
-                    objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Program.Scale);
-                    objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Program.Scale);
+                    if (objElement != null)
+                    {
+                        // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
+                        objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Program.Scale);
+                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Program.Scale);
 
-                    xmlTileObject.Add(objElement);
+                        xmlTileObject.Add(objElement);
+                    }
                 }
             }
+            this.tmxMap.Orientation = restoreOrientation;
 
             // Add a child for each mesh (with animation if needed)
             foreach (var mesh in tmxObjectTile.Tile.Meshes)
@@ -3463,7 +3599,7 @@ namespace Tiled2Unity
         }
 
         public string Name { get; private set; }
-        public MapOrientation Orientation { get; private set; }
+        public MapOrientation Orientation { get; set; }
         public MapStaggerAxis StaggerAxis { get; private set; }
         public MapStaggerIndex StaggerIndex { get; private set; }
         public int HexSideLength { get; set; }
@@ -5200,11 +5336,11 @@ namespace Tiled2Unity
         {
             try
             {
-                return Convert.ToInt32(this.PropertyMap[name]);
+                return Convert.ToInt32(this.PropertyMap[name].Value);
             }
             catch (System.FormatException inner)
             {
-                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name]);
+                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name].Value);
                 throw new TmxException(message, inner);
             }
         }
@@ -5221,11 +5357,11 @@ namespace Tiled2Unity
             bool asBoolean = false;
             try
             {
-                asBoolean = Convert.ToBoolean(this.PropertyMap[name]);
+                asBoolean = Convert.ToBoolean(this.PropertyMap[name].Value);
             }
             catch (FormatException)
             {
-                Program.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name]);
+                Program.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name].Value);
             }
 
             return asBoolean;
