@@ -127,6 +127,24 @@ namespace Tiled2Unity
             }
         }
 
+        // From: http://answers.unity3d.com/questions/24929/assetdatabase-replacing-an-asset-but-leaving-refer.html
+        public static T CreateOrReplaceAsset<T>(T asset, string path) where T : UnityEngine.Object
+        {
+            T existingAsset = (T)AssetDatabase.LoadAssetAtPath(path, typeof(T));
+
+            if (existingAsset == null)
+            {
+                AssetDatabase.CreateAsset(asset, path);
+                existingAsset = asset;
+            }
+            else
+            {
+                EditorUtility.CopySerialized(asset, existingAsset);
+            }
+
+            return existingAsset;
+        }
+
         public static byte[] Base64ToBytes(string base64)
         {
             return Convert.FromBase64String(base64);
