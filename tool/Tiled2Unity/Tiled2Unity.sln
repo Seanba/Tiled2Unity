@@ -1,9 +1,14 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.25123.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tiled2Unity", "src\Tiled2Unity.csproj", "{5100C1BE-DF46-447A-8D7F-0376CABC85B1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{ECC813B3-0A2D-4173-B16A-8C026247302C} = {ECC813B3-0A2D-4173-B16A-8C026247302C}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tiled2UnityLib", "Tiled2UnityLib\Tiled2UnityLib.csproj", "{ECC813B3-0A2D-4173-B16A-8C026247302C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,10 +20,6 @@ Global
 		Release|Mixed Platforms = Release|Mixed Platforms
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
-		Shipping-WithInstaller|Any CPU = Shipping-WithInstaller|Any CPU
-		Shipping-WithInstaller|Mixed Platforms = Shipping-WithInstaller|Mixed Platforms
-		Shipping-WithInstaller|x64 = Shipping-WithInstaller|x64
-		Shipping-WithInstaller|x86 = Shipping-WithInstaller|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Debug|Any CPU.ActiveCfg = Debug|x86
@@ -35,13 +36,22 @@ Global
 		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|x64.Build.0 = Release|x64
 		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|x86.ActiveCfg = Release|x86
 		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Release|x86.Build.0 = Release|x86
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|Any CPU.ActiveCfg = Shipping-WithInstaller|x86
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|Mixed Platforms.ActiveCfg = Shipping-WithInstaller|x86
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|Mixed Platforms.Build.0 = Shipping-WithInstaller|x86
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|x64.ActiveCfg = Shipping-WithInstaller|x64
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|x64.Build.0 = Shipping-WithInstaller|x64
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|x86.ActiveCfg = Shipping-WithInstaller|x86
-		{5100C1BE-DF46-447A-8D7F-0376CABC85B1}.Shipping-WithInstaller|x86.Build.0 = Shipping-WithInstaller|x86
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|x64.ActiveCfg = Debug|x64
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|x64.Build.0 = Debug|x64
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|x86.ActiveCfg = Debug|x86
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Debug|x86.Build.0 = Debug|x86
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|x64.ActiveCfg = Release|x64
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|x64.Build.0 = Release|x64
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|x86.ActiveCfg = Release|x86
+		{ECC813B3-0A2D-4173-B16A-8C026247302C}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -40,6 +40,7 @@ class Script
         string PATH_BUILD = PATH_ROOT + @"\build";
         string PATH_DATA = PATH_ROOT + @"\TestData";
         string PATH_SOURCE = PATH_ROOT + @"\src";
+        string PATH_LIB_SOURCE = PATH_ROOT + @"\Tiled2UnityLib";
         string PATH_RELEASE = "";
         string PATH_UNITY_PACKAGE = "";
         string VERSION = "";
@@ -63,7 +64,7 @@ class Script
         }
 
         // Get the version from the exe
-        FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(PATH_RELEASE + @"\Tiled2Unity.exe");
+        FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(PATH_RELEASE + @"\Tiled2UnityLib.dll");
         VERSION = versionInfo.ProductVersion;
         PATH_UNITY_PACKAGE = PATH_BUILD + @"\Tiled2Unity." + VERSION + @".unitypackage";
 
@@ -72,6 +73,7 @@ class Script
         Console.WriteLine("-- PATH_BUILD:         {0}", PATH_BUILD);
         Console.WriteLine("-- PATH_DATA:          {0}", PATH_DATA);
         Console.WriteLine("-- PATH_SOURCE:        {0}", PATH_SOURCE);
+        Console.WriteLine("-- PATH_LIB_SOURCE:    {0}", PATH_LIB_SOURCE);
         Console.WriteLine("-- PATH_RELEASE:       {0}", PATH_RELEASE);
         Console.WriteLine("-- PATH_UNITY_PACKAGE: {0}", PATH_UNITY_PACKAGE);
         Console.WriteLine("-- GUID:               {0}", GUID);
@@ -86,6 +88,8 @@ class Script
                                 new WixSharp.File(PATH_BUILD   + @"\ReadMe.txt"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2Unity.exe"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2Unity.exe.config"),
+                                new WixSharp.File(PATH_RELEASE + @"\Tiled2UnityLib.dll"),
+                                new WixSharp.File(PATH_RELEASE + @"\NDesk.Options.dll"),
                                 new WixSharp.File(PATH_BUILD   + @"\Tiled2UnityLite.cs"),
                                 RenamedFile(PATH_UNITY_PACKAGE, "Tiled2Unity.unitypackage"),
 
@@ -95,9 +99,9 @@ class Script
 
                                 new WixSharp.Dir("License",
                                     RenamedFile(PATH_SOURCE + @"\License.rtf", "License.Tiled2Unity.rtf"),
-                                    RenamedFile(PATH_SOURCE + @"\ThirdParty\Clipper\License.txt", "License.Clipper.txt"),
-                                    RenamedFile(PATH_SOURCE + @"\ThirdParty\NDesk\License.txt", "License.NDesk.txt"),
-                                    RenamedFile(PATH_SOURCE + @"\ThirdParty\Poly2Tri\License.txt", "License.Poly2Tri.txt")
+                                    RenamedFile(PATH_SOURCE + @"\ThirdParty\NDesk\License.txt", "License.NDesk.txt"),                                    
+                                    RenamedFile(PATH_LIB_SOURCE + @"\ThirdParty\Clipper\License.txt", "License.Clipper.txt"),
+                                    RenamedFile(PATH_LIB_SOURCE + @"\ThirdParty\Poly2Tri\License.txt", "License.Poly2Tri.txt")
                                     )
                             ));
 

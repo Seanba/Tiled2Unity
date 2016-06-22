@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tiled2UnityMac", "Tiled2UnityMac\Tiled2UnityMac.csproj", "{5847689A-008D-4933-8524-0C5CAC5B9829}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Debug|x64.Build.0 = Debug|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Debug|x86.Build.0 = Debug|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Release|x64.ActiveCfg = Release|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Release|x64.Build.0 = Release|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Release|x86.ActiveCfg = Release|Any CPU
+		{5847689A-008D-4933-8524-0C5CAC5B9829}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		Policies = $0
+		$0.DotNetNamingPolicy = $1
+		$1.DirectoryNamespaceAssociation = None
+		$1.ResourceNamePolicy = FileFormatDefault
+		description = Mac OSX Version of Tiled2Unity Utility
+		version = 1.0.0.0
+	EndGlobalSection
+EndGlobal

@@ -5,7 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Text;
 using System.Windows.Forms;
 
@@ -17,37 +17,35 @@ namespace Tiled2Unity
         private static readonly string Tiled2UnityExportHelperFile = "Tiled2Unity.export.txt";
         private static readonly string Tiled2UnityObjectTypesXmlFilter = "Tiled Object Types XML|*.xml";
 
-        private string[] args = null;
-        private TmxMap tmxMap = null;
-        private TiledMapExporter tmxExporter = null;
+        private Tiled2Unity.Session tmxSession = new Session();
 
-        private List<string> warnings = new List<string>();
-        private List<string> errors = new List<string>();
-
-        public Tiled2UnityForm(string[] args)
+        public Tiled2UnityForm()
         {
-            this.args = args;
             InitializeComponent();
-            this.Text = String.Format("Tiled2Unity, {0} ({1})", Program.GetVersion(), Program.GetPlatform());
+            this.Text = String.Format("Tiled2Unity, {0} ({1})", Tiled2Unity.Info.GetVersion(), Tiled2Unity.Info.GetPlatform());
 
-            Program.OnWriteLine += new Program.WriteLineDelegate(Program_OnWriteLine);
-            Program.OnWriteWarning += new Program.WriteWarningDelegate(Program_OnWriteWarning);
-            Program.OnWriteError += new Program.WriteErrorDelegate(Program_OnWriteError);
-            Program.OnWriteSuccess += new Program.WriteSuccessDelegate(Program_OnWriteSuccess);
-            Program.OnWriteVerbose += new Program.WriteVerboseDelegate(Program_OnWriteVerbose);
-
-            TmxMap.OnReadTmxFileCompleted += new TmxMap.ReadTmxFileCompleted(TmxMap_OnReadTmxFileCompleted);
+            Logger.OnWriteLine += new Logger.WriteLineDelegate(Tiled2UnityForm_OnWriteLine);
+            Logger.OnWriteWarning += new Logger.WriteWarningDelegate(Tiled2UnityForm_OnWriteWarning);
+            Logger.OnWriteError += new Logger.WriteErrorDelegate(Tiled2UnityForm_OnWriteError);
+            Logger.OnWriteSuccess += new Logger.WriteSuccessDelegate(Tiled2UnityForm_OnWriteSuccess);
         }
 
         ~Tiled2UnityForm()
         {
-            Program.OnWriteLine -= new Program.WriteLineDelegate(Program_OnWriteLine);
-            Program.OnWriteWarning -= new Program.WriteWarningDelegate(Program_OnWriteWarning);
-            Program.OnWriteError -= new Program.WriteErrorDelegate(Program_OnWriteError);
-            Program.OnWriteSuccess -= new Program.WriteSuccessDelegate(Program_OnWriteSuccess);
-            Program.OnWriteVerbose -= new Program.WriteVerboseDelegate(Program_OnWriteVerbose);
+            Logger.OnWriteLine -= new Logger.WriteLineDelegate(Tiled2UnityForm_OnWriteLine);
+            Logger.OnWriteWarning -= new Logger.WriteWarningDelegate(Tiled2UnityForm_OnWriteWarning);
+            Logger.OnWriteError -= new Logger.WriteErrorDelegate(Tiled2UnityForm_OnWriteError);
+            Logger.OnWriteSuccess -= new Logger.WriteSuccessDelegate(Tiled2UnityForm_OnWriteSuccess);
+        }
 
-            TmxMap.OnReadTmxFileCompleted -= new TmxMap.ReadTmxFileCompleted(TmxMap_OnReadTmxFileCompleted);
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Tiled2Unity.Resources.LaunchTip.rtf"))
+            {
+                this.richTextBoxLaunchTip.LoadFile(stream, RichTextBoxStreamType.RichText);
+            }
         }
 
         // Where we do all the work
@@ -56,143 +54,63 @@ namespace Tiled2Unity
         {
             base.OnShown(e);
 
-            this.warnings.Clear();
-            this.errors.Clear();
+            this.tmxSession.SetCulture();
 
-            bool success = Program.ParseOptions(this.args);
-            if (success && !Program.Help)
-            {
-                // Are we updating the last export directory?
-                if (!String.IsNullOrEmpty(Program.ExportUnityProjectDir))
-                {
-                    Properties.Settings.Default.LastExportDirectory = Program.ExportUnityProjectDir;
-                    Properties.Settings.Default.Save();
-                }
+            InitializeSessionFromSettings();
 
-                // Set the vertex scale
-                this.textBoxScale.Text = Program.Scale.ToString();
+            // Ready the TMX file. Command line overrides settings.
+            string[] args = Environment.GetCommandLineArgs().Skip(1).ToArray();
+            this.tmxSession.InitializeWithArgs(args, true);
 
-                // Open the TMX file
-                OpenTmxFile(Program.TmxPath);
+            InitializeUIFromSettings();
 
-                if (Program.AutoExport)
-                {
-                    Program.WriteLine("Automatically exporting: {0}", Program.ExportUnityProjectDir);
-                    this.tmxExporter.Export(Program.ExportUnityProjectDir);
-                    Close();
-                }
-            }
-            else
-            {
-                // Repeat any errors
-                foreach (string error in this.errors)
-                {
-                    WriteText(error, Color.Red);
-                }
-            }
+            // Load the TMX file if it is ready
+            this.tmxSession.LoadInitialTmxFile();
         }
 
-        private void OpenTmxFile(string tmxPath)
+        private void InitializeSessionFromSettings()
         {
-            this.warnings.Clear();
-            this.errors.Clear();
+            this.tmxSession.UnityExportFolderPath = Properties.Settings.Default.LastExportDirectory;
 
-            this.buttonFolderBrowser.Enabled = false;
-            this.buttonViewer.Enabled = false;
-            this.buttonExport.Enabled = false;
-
-            try
-            {
-                // Load the TMX file and its dependencies, including the Object Type Xml file used.
-                this.tmxMap = TmxMap.LoadFromFile(tmxPath);
-                this.tmxMap.LoadObjectTypeXml(Program.ObjectTypeXml);
-
-                this.tmxExporter = new TiledMapExporter(this.tmxMap);
-                CheckExportButton();
-                ReportSummary("Compilation complete");
-            }
-            catch (TmxException tmx)
-            {
-                Program.WriteError(tmx.Message);
-            }
+            Tiled2Unity.Settings.ObjectTypeXml = Properties.Settings.Default.LastObjectTypeXmlFile;
+            Tiled2Unity.Settings.Scale = Properties.Settings.Default.LastVertexScale;
+            Tiled2Unity.Settings.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
+            Tiled2Unity.Settings.DepthBufferEnabled = Properties.Settings.Default.LastDepthBufferEnabled;
         }
 
-        void TmxMap_OnReadTmxFileCompleted(TmxMap tmxMap)
+        private void InitializeUIFromSettings()
         {
-            this.buttonFolderBrowser.Enabled = true;
-            this.buttonViewer.Enabled = true;
-            CheckExportButton();
+            // Set the export path
+            this.textBoxExportFolder.Text = this.tmxSession.UnityExportFolderPath;
+
+            // Set the scale
+            this.textBoxScale.Text = Tiled2Unity.Settings.Scale.ToString();
+            textBoxScale_Validating(null, null);
         }
 
-        void CheckExportButton()
-        {
-            bool exportPathExists = false;
-
-            string exportPath = this.textBoxExportFolder.Text;
-            if (Directory.Exists(exportPath))
-            {
-                exportPathExists = true;
-            }
-
-            this.buttonExport.Enabled = (this.tmxExporter != null) && exportPathExists;
-        }
-
-        private void ReportSummary(string header)
-        {
-            WriteText("----------------------------------------\n");
-            Color complete = Color.Lime;
-            if (this.errors.Count() > 0)
-                complete = Color.Red;
-            else if (this.warnings.Count() > 0)
-                complete = Color.Yellow;
-
-            WriteText(header + "\n", complete);
-
-            WriteText(String.Format("Warnings: {0}\n", this.warnings.Count()));
-            foreach (string warning in this.warnings)
-            {
-                WriteText(warning, Color.Yellow);
-            }
-            
-            WriteText(String.Format("Errors: {0}\n", this.errors.Count()));
-            foreach (string error in this.errors)
-            {
-                WriteText(error, Color.Red);
-            }
-
-            WriteText("----------------------------------------\n");
-        }
-
-        void Program_OnWriteLine(string line)
+        private void Tiled2UnityForm_OnWriteLine(string line)
         {
             WriteText(line);
         }
 
-        void Program_OnWriteWarning(string warning)
+        private void Tiled2UnityForm_OnWriteWarning(string warning)
         {
-            this.warnings.Add(warning);
-            WriteText(warning, Color.Yellow);
+            WriteText(warning, Color.DarkOrange);
         }
 
-        void Program_OnWriteError(string error)
+        private void Tiled2UnityForm_OnWriteError(string error)
         {
-            this.errors.Add(error);
-            WriteText(error, Color.Red);
+            WriteText(error, Color.DarkRed);
         }
 
-        void Program_OnWriteSuccess(string success)
+        private void Tiled2UnityForm_OnWriteSuccess(string success)
         {
-            WriteText(success, Color.Lime);
-        }
-
-        void Program_OnWriteVerbose(string line)
-        {
-            WriteText(line, Color.Gray);
+            WriteText(success, Color.DarkGreen);
         }
 
         private void WriteText(string line)
         {
-            WriteText(line, Color.White);
+            WriteText(line, SystemColors.WindowText);
         }
 
         private void WriteText(string line, Color color)
@@ -224,7 +142,8 @@ namespace Tiled2Unity
 
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                Properties.Settings.Default.LastExportDirectory = Path.GetDirectoryName(Path.GetFullPath(dialog.FileName));
+                this.tmxSession.UnityExportFolderPath = Path.GetDirectoryName(Path.GetFullPath(dialog.FileName));
+                Properties.Settings.Default.LastExportDirectory = this.tmxSession.UnityExportFolderPath;
                 Properties.Settings.Default.Save();
             }
         }
@@ -251,22 +170,20 @@ namespace Tiled2Unity
 
         private void buttonViewer_Click(object sender, EventArgs e)
         {
-            Tiled2UnityViewer viewer = new Tiled2UnityViewer(this.tmxMap);
-            viewer.ShowDialog();
-        }
-
-        private void textBoxExportFolder_TextChanged(object sender, EventArgs e)
-        {
-            CheckExportButton();
+            if (this.tmxSession.TmxMap.IsLoaded)
+            {
+                Tiled2UnityViewer viewer = new Tiled2UnityViewer(this.tmxSession.TmxMap);
+                viewer.ShowDialog();
+            }
+            else
+            {
+                Logger.WriteError("Tiled map is not loaded. Nothing to preview.");
+            }
         }
 
         private void buttonExport_Click(object sender, EventArgs e)
         {
-            this.warnings.Clear();
-            this.errors.Clear();
-            string path = this.textBoxExportFolder.Text;
-            this.tmxExporter.Export(path);
-            ReportSummary("Export complete");
+            this.tmxSession.ExportTmxMap();
         }
 
         private void openTiledFileToolStripMenuItem_Click(object sender, EventArgs e)
@@ -282,7 +199,7 @@ namespace Tiled2Unity
             {
                 Properties.Settings.Default.LastOpenDirectory = Path.GetDirectoryName(dialog.FileName);
                 Properties.Settings.Default.Save();
-                OpenTmxFile(dialog.FileName);
+                this.tmxSession.LoadTmxFile(dialog.FileName);
             }
         }
 
@@ -294,7 +211,7 @@ namespace Tiled2Unity
 
         private void showHelpToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            Program.PrintHelp();
+            this.tmxSession.DisplayHelp();
         }
 
         private void aboutTiled2UnityToolStripMenuItem_Click(object sender, EventArgs e)
@@ -319,7 +236,7 @@ namespace Tiled2Unity
             }
             catch (Exception ex)
             {
-                string msg = String.Format("There was an importing Tiled2Unity.unitypackage with command:\n  {0}\n\nError: {1}", package, ex.Message);
+                string msg = String.Format("There was an error importing Tiled2Unity.unitypackage with command:\n  {0}\n\nError: {1}", package, ex.Message);
                 MessageBox.Show(msg, "Tiled2Unity Error");
             }
         }
@@ -328,7 +245,7 @@ namespace Tiled2Unity
         {
             bool good = false;
 
-            float scale = Program.Scale;
+            float scale = Tiled2Unity.Settings.Scale;
             if (Single.TryParse(this.textBoxScale.Text, out scale))
             {
                 // Is the scale greater than 0?
@@ -340,8 +257,8 @@ namespace Tiled2Unity
 
             if (good)
             {
-                Program.Scale = scale;
-                Properties.Settings.Default.LastVertexScale = Program.Scale;
+                Tiled2Unity.Settings.Scale = scale;
+                Properties.Settings.Default.LastVertexScale = Tiled2Unity.Settings.Scale;
                 Properties.Settings.Default.Save();
             }
             else
@@ -369,8 +286,8 @@ namespace Tiled2Unity
 
         private void checkBoxPreferConvexPolygons_CheckedChanged(object sender, EventArgs e)
         {
-            Program.PreferConvexPolygons = this.checkBoxPreferConvexPolygons.Checked;
-            Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
+            Tiled2Unity.Settings.PreferConvexPolygons = this.checkBoxPreferConvexPolygons.Checked;
+            Properties.Settings.Default.LastPreferConvexPolygons = Tiled2Unity.Settings.PreferConvexPolygons;
             Properties.Settings.Default.Save();
         }
 
@@ -399,22 +316,23 @@ namespace Tiled2Unity
 
         private void textBoxObjectTypesXml_TextChanged(object sender, EventArgs e)
         {
-            Program.ObjectTypeXml = this.textBoxObjectTypesXml.Text;
-            this.tmxMap.LoadObjectTypeXml(this.textBoxObjectTypesXml.Text);
-        }
-
-        private void buttonClearObjectTypes_Click(object sender, EventArgs e)
-        {
-            Properties.Settings.Default.LastObjectTypeXmlFile = "";
-            Properties.Settings.Default.Save();
+            Tiled2Unity.Settings.ObjectTypeXml = this.textBoxObjectTypesXml.Text;
+            this.tmxSession.TmxMap.LoadObjectTypeXml(this.textBoxObjectTypesXml.Text);
         }
 
         private void checkBoxDepthBuffer_CheckedChanged(object sender, EventArgs e)
         {
-            Program.DepthBufferEnabled = this.checkBoxDepthBuffer.Checked;
-            Properties.Settings.Default.LastDepthBufferEnabled = Program.DepthBufferEnabled;
+            Tiled2Unity.Settings.DepthBufferEnabled = this.checkBoxDepthBuffer.Checked;
+            Properties.Settings.Default.LastDepthBufferEnabled = Tiled2Unity.Settings.DepthBufferEnabled;
             Properties.Settings.Default.Save();
         }
+
+        private void buttonClearObjectTypes_Click(object sender, EventArgs e)
+        {
+            this.textBoxObjectTypesXml.Text = "";
+            this.tmxSession.TmxMap.ClearObjectTypeXml();
+        }
+
     }
 }
 
@@ -425,6 +343,10 @@ public static class RichTextBoxExtensions
         box.SelectionStart = box.TextLength;
         box.SelectionLength = 0;
 
+        if (color != SystemColors.WindowText)
+        {
+            box.SelectionBackColor = Color.LightGray;
+        }
         box.SelectionColor = color;
         box.AppendText(text);
         box.SelectionColor = box.ForeColor;

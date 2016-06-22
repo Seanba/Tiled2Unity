@@ -60,18 +60,6 @@
   <PropertyGroup>
     <ApplicationIcon>t2u-icon-bw.ico</ApplicationIcon>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Shipping-WithInstaller|x86'">
-    <OutputPath>bin\x86\Shipping-WithInstaller\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x86</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisIgnoreBuiltInRuleSets>false</CodeAnalysisIgnoreBuiltInRuleSets>
-    <CodeAnalysisIgnoreBuiltInRules>false</CodeAnalysisIgnoreBuiltInRules>
-    <CodeAnalysisFailOnMissingRules>false</CodeAnalysisFailOnMissingRules>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\x64\Debug\</OutputPath>
@@ -91,17 +79,6 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Shipping-WithInstaller|x64'">
-    <OutputPath>bin\x64\Shipping-WithInstaller\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <CodeAnalysisIgnoreBuiltInRuleSets>false</CodeAnalysisIgnoreBuiltInRuleSets>
-    <CodeAnalysisIgnoreBuiltInRules>false</CodeAnalysisIgnoreBuiltInRules>
-  </PropertyGroup>
   <ItemGroup>
     <Reference Include="PresentationCore" />
     <Reference Include="System" />
@@ -116,56 +93,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ChDir.cs" />
-    <Compile Include="ConvexPolygonSet.cs" />
-    <Compile Include="HashIndexOf.cs" />
-    <Compile Include="LayerClipper.cs" />
-    <Compile Include="PolylineReduction.cs" />
     <Compile Include="SupportTiledForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="SupportTiledForm.Designer.cs">
       <DependentUpon>SupportTiledForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="ThirdParty\Algorithmia\MultiValueDictionary.cs" />
-    <Compile Include="ThirdParty\Clipper\clipper.cs" />
     <Compile Include="ThirdParty\NDesk\Options.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\P2T.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Orientation.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\FixedArray3.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\MathUtil.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\Point2D.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\Point2DList.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\Rect2D.cs" />
     <Compile Include="Tiled2UnityAbout.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -178,9 +112,6 @@
     <Compile Include="Tiled2UnityViewer.Designer.cs">
       <DependentUpon>Tiled2UnityViewer.cs</DependentUpon>
     </Compile>
-    <Compile Include="TiledMapExporter.AssignMaterials.cs" />
-    <Compile Include="TiledMapExporter.Clipper.cs" />
-    <Compile Include="TiledMapExporter.cs" />
     <Compile Include="Tiled2UnityForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -189,43 +120,6 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TiledMapExporter.Obj.cs" />
-    <Compile Include="TiledMapExporter.ImportFiles.cs" />
-    <Compile Include="TiledMapExporter.Prefab.cs" />
-    <Compile Include="TmxAnimation.cs" />
-    <Compile Include="TmxException.cs" />
-    <Compile Include="TmxFrame.cs" />
-    <Compile Include="TmxHasPoints.cs" />
-    <Compile Include="TmxHasProperties.cs" />
-    <Compile Include="TmxHelper.cs" />
-    <Compile Include="TmxImage.cs" />
-    <Compile Include="TmxImage.Xml.cs" />
-    <Compile Include="TmxLayer.cs" />
-    <Compile Include="TmxLayer.Xml.cs" />
-    <Compile Include="TmxLayerBase.cs" />
-    <Compile Include="TmxMap.cs" />
-    <Compile Include="TmxMap.Xml.cs" />
-    <Compile Include="TmxMath.cs" />
-    <Compile Include="TmxMesh.cs" />
-    <Compile Include="TmxObject.cs" />
-    <Compile Include="TmxObject.Xml.cs" />
-    <Compile Include="TmxObjectEllipse.cs" />
-    <Compile Include="TmxObjectGroup.cs" />
-    <Compile Include="TmxObjectGroup.Xml.cs" />
-    <Compile Include="TmxObjectPolygon.cs" />
-    <Compile Include="TmxObjectPolyline.cs" />
-    <Compile Include="TmxObjectRectangle.cs" />
-    <Compile Include="TmxObjectTile.cs" />
-    <Compile Include="TmxObjectTypeProperty.cs" />
-    <Compile Include="TmxProperties.cs" />
-    <Compile Include="TmxProperties.Xml.cs" />
-    <Compile Include="TmxProperty.cs" />
-    <Compile Include="TmxPropertyType.cs" />
-    <Compile Include="TmxRotationMatrix.cs" />
-    <Compile Include="TmxTile.cs" />
-    <Compile Include="TmxTile.Xml.cs" />
-    <Compile Include="TmxObjectType.cs" />
-    <Compile Include="TmxObjectTypes.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -261,6 +155,7 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <EmbeddedResource Include="Resources\TiledOnPatreon.rtf" />
+    <EmbeddedResource Include="Resources\LaunchTip.rtf" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.0,Profile=Client">
@@ -285,12 +180,16 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="ThirdParty\Clipper\License.txt" />
     <Content Include="ThirdParty\NDesk\License.txt" />
-    <Content Include="ThirdParty\Poly2Tri\License.txt" />
     <EmbeddedResource Include="Resources\About.rtf" />
-    <None Include="Resources\mega-dad-stand.png" />
+    <EmbeddedResource Include="Resources\mega-dad-stand.png" />
     <Content Include="t2u-icon-bw.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Tiled2UnityLib\Tiled2UnityLib.csproj">
+      <Project>{ecc813b3-0a2d-4173-b16a-8c026247302c}</Project>
+      <Name>Tiled2UnityLib</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

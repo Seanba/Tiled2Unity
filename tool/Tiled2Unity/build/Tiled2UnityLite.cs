@@ -1,12 +1,12 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.6.0
+// version 1.0.7.0
 
 //css_reference System;
 //css_reference System.Core;
+//css_reference System.Drawing;
 //css_reference System.Xml.Linq;
 //css_reference System.Data.DataSetExtensions;
 //css_reference System.Data;
-//css_reference System.Drawing;
 //css_reference System.Xml;
 
 #define TILED_2_UNITY_LITE
@@ -34,11 +34,29 @@ using System.Xml.Linq;
 
 namespace Tiled2Unity
 {
-    static partial class Program
+    static class Program
     {
+        public static int Main(string[] args)
+        {
+            return Tiled2Unity.Tiled2UnityLite.Run(args);
+        }
+    }
+
+    static class Info
+    {
+        public static string GetLibraryName()
+        {
+            return "Tiled2UnityLite";
+        }
+
         public static string GetVersion()
         {
-            return "1.0.6.0";
+            return "1.0.7.0";
+        }
+
+        public static string GetPlatform()
+        {
+            return "CSScript";
         }
     }
 }
@@ -57,18 +75,24 @@ namespace Tiled2Unity
 {
     public class ChDir : IDisposable
     {
-        private string directoryOld;
-        private string directoryNow;
+        private string directoryOld = "";
+        private string directoryNow = "";
 
         public ChDir(string path)
         {
             this.directoryOld = Directory.GetCurrentDirectory();
             if (Directory.Exists(path))
+            {
                 this.directoryNow = path;
+            }
             else if (File.Exists(path))
+            {
                 this.directoryNow = Path.GetDirectoryName(path);
+            }
             else
+            {
                 throw new DirectoryNotFoundException(String.Format("Cannot set current directory. Does not exist: {0}", path));
+            }
 
             Directory.SetCurrentDirectory(this.directoryNow);
         }
@@ -424,7 +448,7 @@ namespace Tiled2Unity
     using ClipperPolygon = List<ClipperLib.IntPoint>;
     using ClipperPolygons = List<List<ClipperLib.IntPoint>>;
 
-    class LayerClipper
+    public class LayerClipper
     {
         // Break the map into smaller pieces to feed to Clipper
         private static readonly int GroupBySize = 10;
@@ -556,6 +580,89 @@ namespace Tiled2Unity
             }
         }
 
+    }
+}
+
+// ----------------------------------------------------------------------
+// Logger.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class Logger
+    {
+        public delegate void WriteLineDelegate(string line);
+        public static event WriteLineDelegate OnWriteLine;
+
+        public delegate void WriteSuccessDelegate(string line);
+        public static event WriteSuccessDelegate OnWriteSuccess;
+
+        public delegate void WriteWarningDelegate(string line);
+        public static event WriteWarningDelegate OnWriteWarning;
+
+        public delegate void WriteErrorDelegate(string line);
+        public static event WriteErrorDelegate OnWriteError;
+
+        public static void WriteLine()
+        {
+            WriteLine("");
+        }
+
+        public static void WriteLine(string line)
+        {
+            line += "\n";
+            if (OnWriteLine != null)
+                OnWriteLine(line);
+            Console.Write(line);
+        }
+
+        public static void WriteLine(string fmt, params object[] args)
+        {
+            WriteLine(String.Format(fmt, args));
+        }
+
+        public static void WriteSuccess(string success)
+        {
+            success += "\n";
+            if (OnWriteSuccess != null)
+                OnWriteSuccess(success);
+            Console.Write(success);
+        }
+
+        public static void WriteSuccess(string fmt, params object[] args)
+        {
+            WriteSuccess(String.Format(fmt, args));
+        }
+
+        public static void WriteWarning(string warning)
+        {
+            warning += "\n";
+            if (OnWriteWarning != null)
+                OnWriteWarning(warning);
+            Console.Write(warning);
+        }
+
+        public static void WriteWarning(string fmt, params object[] args)
+        {
+            WriteWarning(String.Format(fmt, args));
+        }
+
+        public static void WriteError(string error)
+        {
+            error += "\n";
+            if (OnWriteError != null)
+                OnWriteError(error);
+            Console.Write(error);
+        }
+
+        public static void WriteError(string fmt, params object[] args)
+        {
+            WriteError(String.Format(fmt, args));
+        }
     }
 }
 
@@ -711,262 +818,96 @@ namespace Tiled2Unity
 }
 
 // ----------------------------------------------------------------------
-// Program.cs
+// Session.Args.cs
 
 // using System;
 // using System.Collections.Generic;
-// using System.Diagnostics;
 // using System.IO;
 // using System.Linq;
-// using System.Reflection;
-// using System.Windows.Forms;
-
+// using System.Text;
 
 namespace Tiled2Unity
 {
-    static partial class Program
+    partial class Session
     {
-        public delegate void WriteLineDelegate(string line);
-        public static event WriteLineDelegate OnWriteLine;
-
-        public delegate void WriteWarningDelegate(string line);
-        public static event WriteWarningDelegate OnWriteWarning;
-
-        public delegate void WriteErrorDelegate(string line);
-        public static event WriteErrorDelegate OnWriteError;
-
-        public delegate void WriteSuccessDelegate(string line);
-        public static event WriteSuccessDelegate OnWriteSuccess;
-
-        public delegate void WriteVerboseDelegate(string line);
-        public static event WriteVerboseDelegate OnWriteVerbose;
-
-        static private readonly float DefaultTexelBias = 8192.0f;
-
-#if !TILED_2_UNITY_LITE
-        // AutoExport is redundant in Tiled2UnityLite
-        static public bool AutoExport { get; private set; }
-#endif
-        static public float Scale { get; set; }
-        static public bool PreferConvexPolygons { get; set; }
-        static public float TexelBias { get; private set; }
-        static public bool DepthBufferEnabled { get; set; }
-        static public bool Verbose { get; private set; }
-        static public bool Help { get; private set; }
-
-        static public string TmxPath { get; private set; }
-        static public string ExportUnityProjectDir { get; private set; }
-
-        static public string LogFilePath { get; private set; }
-
-        static public string ObjectTypeXml { get; set; }
-
-        static private NDesk.Options.OptionSet Options = new NDesk.Options.OptionSet()
-            {
-#if !TILED_2_UNITY_LITE
-                { "a|auto-export", "Automatically export to UNITYDIR and close.", ae => Program.AutoExport = true },
-#endif
-                { "o|object-type-xml=", "Supply an Object Type XML file for types and their properties", o => Program.ObjectTypeXml = !String.IsNullOrEmpty(o) ? Path.GetFullPath(o) : "" },
-                { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Program.Scale = ParseFloatDefault(s, 1.0f) },
-                { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Program.PreferConvexPolygons = true },
-                { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Program.TexelBias = ParseFloatDefault(t, DefaultTexelBias) },
-                { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Program.DepthBufferEnabled = true },
-                { "v|verbose", "Print verbose messages.", v => Program.Verbose = true },
-                { "h|help", "Display this help message.", h => Program.Help = true },
-            };
-
-#if TILED_2_UNITY_LITE
-
-        // Scripting main
-        static void Main(string[] args)
+        private void ParseEnvironmentVariables()
         {
-            SetCulture();
-
-            // Listen to any success, warning, and error messages. Give a report when finished.
-            List<string> errors = new List<string>();
-            Action<string> funcError = delegate(string line)
+            string tmxPath = Environment.GetEnvironmentVariable("TILED2UNITY_TMXPATH");
+            if (!String.IsNullOrEmpty(tmxPath))
             {
-                errors.Add(line);
-            };
+                Logger.WriteLine("Found TILED2UNITY_TMXPATH environment variable: {0}", tmxPath);
+                this.TmxFilePath = tmxPath;
+            }
 
-            List<string> warnings = new List<string>();
-            Action<string> funcWaring = delegate(string line)
+            string unityDir = Environment.GetEnvironmentVariable("TILED2UNITY_UNITYDIR");
+            if (!String.IsNullOrEmpty(unityDir))
             {
-                warnings.Add(line);
-            };
-
-            List<string> successes = new List<string>();
-            Action<string> funcSuccess = delegate(string line)
-            {
-                successes.Add(line);
-            };
-
-            // Temporarily capture output while exporting
-            Program.OnWriteError += new Program.WriteErrorDelegate(funcError);
-            Program.OnWriteWarning += new Program.WriteWarningDelegate(funcWaring);
-            Program.OnWriteSuccess += new Program.WriteSuccessDelegate(funcSuccess);
-
-            // Default options
-            Program.Scale = 1.0f;
-            Program.PreferConvexPolygons = false;
-            Program.TexelBias = DefaultTexelBias;
-            Program.DepthBufferEnabled = false;
-            Program.Verbose = false;
-            Program.Help = false;
-            Program.TmxPath = "";
-            Program.ExportUnityProjectDir = "";
-
-            bool success = ParseOptions(args);
-
-            if (success && !Program.Help)
-            {
-                if (String.IsNullOrEmpty(Program.ExportUnityProjectDir))
-                {
-                    Console.Error.WriteLine("UNITYDIR is missing!");
-                    PrintHelp();
-                    return;
-                }
-
-                // We should have everyting we need to export a TMX file to a Unity project
-                TmxMap tmxMap = TmxMap.LoadFromFile(Program.TmxPath);
-                tmxMap.LoadObjectTypeXml(Program.ObjectTypeXml);
-                TiledMapExporter tiledMapExporter = new TiledMapExporter(tmxMap);
-                tiledMapExporter.Export(Program.ExportUnityProjectDir);
-
-                // Write a summary that repeats warnings and errors
-                Console.WriteLine("----------------------------------------");
-                Console.WriteLine("Export completed");
-                foreach (string msg in successes)
-                {
-                    Console.WriteLine(msg);
-                }
-
-                Console.WriteLine("Warnings: {0}", warnings.Count);
-                foreach (string warning in warnings)
-                {
-                    Console.WriteLine(warning);
-                }
-            
-                Console.Error.WriteLine("Errors: {0}\n", errors.Count);
-                foreach (string error in errors)
-                {
-                    Console.WriteLine(error);
-                }
-                Console.WriteLine("----------------------------------------");
+                Logger.WriteLine("Found TILED2UNITY_UNITYDIR environment variable: {0}", unityDir);
+                this.TmxFilePath = tmxPath;
             }
         }
-#else
-        // Windows exe main
-        [STAThread]
-        static void Main(string[] args)
+
+        // Returns true if the program is to keep going. Will return false if there is an error parsing options or if we were only interested in help/version information
+        private bool ParseOptions(string[] args)
         {
-            SetCulture();
+            bool displayVersion = false;
+            bool displayHelp = false;
+            bool isAuto = false;
 
-            // Default options
-            Program.AutoExport = false;
-            Program.Scale = -1.0f;
-            Program.PreferConvexPolygons = false;
-            Program.TexelBias = DefaultTexelBias;
-            Program.DepthBufferEnabled = false;
-            Program.Verbose = false;
-            Program.Help = false;
-            Program.TmxPath = "";
-            Program.ExportUnityProjectDir = "";
-            Program.ObjectTypeXml = "";
-
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
-            using (Tiled2UnityForm form = new Tiled2UnityForm(args))
+            NDesk.Options.OptionSet options = new NDesk.Options.OptionSet()
             {
-                StartLogging(args);
-                Application.Run(form);
-            }
-        }
-#endif
+                { "o|object-type-xml=", "Supply an Object Type XML file for types and their properties", o => Tiled2Unity.Settings.ObjectTypeXml = !String.IsNullOrEmpty(o) ? Path.GetFullPath(o) : "" },
+                { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Tiled2Unity.Settings.Scale = ParseFloatDefault(s, 1.0f) },
+                { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Tiled2Unity.Settings.PreferConvexPolygons = true },
+                { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
+                { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
+                { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => isAuto = true },
+                { "v|version", "Display version information.", v => displayVersion = true },
+                { "h|help", "Display this help message.", h => displayHelp = true },
+            };
 
-        public static bool ParseOptions(string[] args)
-        {
             // Parse the options
-            List<string> extra = Program.Options.Parse(args);
+            List<string> extra = options.Parse(args);
 
-            // Did we ask for help?
-            if (Program.Help)
+            // Are we displaying the version?
+            if (displayVersion)
             {
-                Program.PrintHelp();
-                return true;
+                Logger.WriteLine("{0} ({1}) version {2}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetPlatform(), Tiled2Unity.Info.GetVersion());
+                return false;
             }
 
-            // If we didn''t overide scale then use the old value
-#if !TILED_2_UNITY_LITE
-            if (Program.Scale <= 0.0f)
+            // Are we displaying help?
+            if (displayHelp)
             {
-                if (Properties.Settings.Default.LastVertexScale > 0)
-                {
-                    Program.Scale = Properties.Settings.Default.LastVertexScale;
-                }
-                else
-                {
-                    Program.Scale = 1.0f;
-                }
+                PrintHelp(options);
+                return false;
             }
-            else
-            {
-                // Save our new value
-                Properties.Settings.Default.LastVertexScale = Program.Scale;
-                Properties.Settings.Default.Save();
-            }
-#endif
-           // If we didn't set convex polygons as default then use old value
-#if !TILED_2_UNITY_LITE
-            if (Program.PreferConvexPolygons == false)
-            {
-                Program.PreferConvexPolygons = Properties.Settings.Default.LastPreferConvexPolygons;
-            }
-            Properties.Settings.Default.LastPreferConvexPolygons = Program.PreferConvexPolygons;
-            Properties.Settings.Default.Save();
-#endif
 
-            // If we didn't set depth buffer as default then use old value
-#if !TILED_2_UNITY_LITE
-            if (Program.DepthBufferEnabled == false)
+            if (isAuto)
             {
-                Program.DepthBufferEnabled = Properties.Settings.Default.LastDepthBufferEnabled;
+                Logger.WriteLine("Running automatic export.");
             }
-            Properties.Settings.Default.LastDepthBufferEnabled = Program.DepthBufferEnabled;
-            Properties.Settings.Default.Save();
-#endif
 
-            // If we didn't override ObjectTypeXml then use old value stored in settings
-#if !TILED_2_UNITY_LITE
-            if (String.IsNullOrEmpty(Program.ObjectTypeXml))
-            {
-                Program.ObjectTypeXml = Properties.Settings.Default.LastObjectTypeXmlFile;
-            }
-            Properties.Settings.Default.LastObjectTypeXmlFile = Program.ObjectTypeXml;
-            Properties.Settings.Default.Save();
-#endif
+            bool success = true;
 
+            // If we're here then we're 'running' the program
             // First left over option is the TMX file we are exporting
             if (extra.Count() == 0)
             {
-                Program.WriteLine("Missing TMXPATH argument.");
-                Program.WriteLine("  If using the GUI, try opening a TMX file now");
-                Program.WriteLine("  If using the command line, provide a path to a TMX file");
-                Program.WriteLine("  If using from Tiled Map Editor, try adding %mapfile to the command");
-                PrintHelp();
-                return false;
+                Logger.WriteLine("Missing TMXPATH argument.");
+                Logger.WriteLine("  If using the GUI, try opening a TMX file now");
+                Logger.WriteLine("  If using the command line, provide a path to a TMX file");
+                Logger.WriteLine("  If using from Tiled Map Editor, try adding %mapfile to the command");
             }
             else
             {
-                Program.TmxPath = Path.GetFullPath(extra[0]);
+                this.TmxFilePath = Path.GetFullPath(extra[0]);
 
-                if (!File.Exists(Program.TmxPath))
+                if (!File.Exists(this.TmxFilePath))
                 {
-                    Program.WriteError("TMXPATH file '{0}' does not exist.", Program.TmxPath);
-                    Program.TmxPath = null;
-                    PrintHelp();
-                    return false;
+                    Logger.WriteError("TMXPATH file '{0}' does not exist.", this.TmxFilePath);
+                    this.TmxFilePath = null;
+                    success = false;
                 }
 
                 extra.RemoveAt(0);
@@ -975,228 +916,77 @@ namespace Tiled2Unity
             // The next 'left over' option is the Tiled2Unity folder of the Unity project that we are exporting to
             if (extra.Count() > 0)
             {
-                Program.ExportUnityProjectDir = Path.GetFullPath(extra[0]);
+                this.UnityExportFolderPath = Path.GetFullPath(extra[0]);
 
-                if (!Directory.Exists(Program.ExportUnityProjectDir))
+                if (String.IsNullOrEmpty(this.UnityExportFolderPath))
                 {
-                    Program.WriteError("UNITYDIR Unity Tiled2Unity Project Directory '{0}' does not exist", Program.ExportUnityProjectDir);
-                    Program.ExportUnityProjectDir = null;
-                    PrintHelp();
-                    return false;
+                    Logger.WriteError("UNITYDIR argument is not a valid path '{0}'", extra[0]);
+                    this.UnityExportFolderPath = null;
+                    success = false;
                 }
-                if (!File.Exists(Path.Combine(Program.ExportUnityProjectDir, "Tiled2Unity.export.txt")))
+                else if (!Directory.Exists(this.UnityExportFolderPath))
                 {
-                    Program.WriteError("UNITYDIR '{0}' is not a Tiled2Unity Unity Project folder", Program.ExportUnityProjectDir);
-                    Program.ExportUnityProjectDir = null;
-                    PrintHelp();
-                    return false;
+                    Logger.WriteError("UNITYDIR Unity Tiled2Unity Project Directory '{0}' does not exist", this.UnityExportFolderPath);
+                    this.UnityExportFolderPath = null;
+                    success = false;
+                }
+                else if (!File.Exists(Path.Combine(this.UnityExportFolderPath, "Tiled2Unity.export.txt")))
+                {
+                    Logger.WriteError("UNITYDIR '{0}' is not a Tiled2Unity Unity Project folder", this.UnityExportFolderPath);
+                    this.UnityExportFolderPath = null;
+                    success = false;
                 }
 
                 extra.RemoveAt(0);
             }
-#if !TILED_2_UNITY_LITE
-            else if (Program.AutoExport)
-            {
-                // If we are auto-exporting then this arugment *must* be present (and it isn't so bail)
-                Program.WriteError("Auto-exporting is enabled but UNITYDIR is missing");
-                PrintHelp();
-                return false;
-            }
-#endif
 
             // Do we have any other options left over? We shouldn't.
             if (extra.Count() > 0)
             {
-                Program.WriteError("Too many arguments. Can't parse '{0}'", extra[0]);
-                PrintHelp();
+                Logger.WriteError("Too many arguments. Can't parse '{0}'", extra[0]);
+                success = false;
+            }
+
+            if (!success)
+            {
+                Logger.WriteError("Command line arguments: {0}", String.Join(" ", args));
+                PrintHelp(options);
                 return false;
             }
 
-            // Success
             return true;
         }
 
-        public static void PrintHelp()
+        private static void PrintHelp(NDesk.Options.OptionSet options)
         {
-            Program.WriteLine("{0} Utility, Version: {1}", GetProgramName(), GetVersion());
-            Program.WriteLine("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", GetProgramName());
-            Program.WriteLine("Example: {0} --verbose -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", GetProgramName());
-            Program.WriteLine("");
-            Program.WriteLine("Options:");
+            Logger.WriteLine("{0} Utility, Version: {1}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetVersion());
+            Logger.WriteLine("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", Tiled2Unity.Info.GetLibraryName());
+            Logger.WriteLine("Example: {0} -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", Tiled2Unity.Info.GetLibraryName());
+            Logger.WriteLine("");
+            Logger.WriteLine("Options:");
 
             TextWriter writer = new StringWriter();
-            Program.Options.WriteOptionDescriptions(writer);
-            Program.WriteLine(writer.ToString());
+            options.WriteOptionDescriptions(writer);
+            Logger.WriteLine(writer.ToString());
 
-            Program.WriteLine("Prefab object properties (set in TMX file for each layer/object)");
-            Program.WriteLine("  unity:sortingLayerName");
-            Program.WriteLine("  unity:sortingOrder");
-            Program.WriteLine("  unity:layer");
-            Program.WriteLine("  unity:tag");
-            Program.WriteLine("  unity:scale");
-            Program.WriteLine("  unity:isTrigger");
-            Program.WriteLine("  unity:convex");
-            Program.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
-            Program.WriteLine("  unity:resource (value = [false|true])");
-            Program.WriteLine("  unity:resourcePath");
-            Program.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
-            Program.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
-            Program.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
+            Logger.WriteLine("Prefab object properties (set in TMX file for map or Tile/Object layer properties)");
+            Logger.WriteLine("  unity:sortingLayerName");
+            Logger.WriteLine("  unity:sortingOrder");
+            Logger.WriteLine("  unity:layer");
+            Logger.WriteLine("  unity:tag");
+            Logger.WriteLine("  unity:scale");
+            Logger.WriteLine("  unity:isTrigger");
+            Logger.WriteLine("  unity:convex");
+            Logger.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
+            Logger.WriteLine("  unity:resource (value = [false|true])");
+            Logger.WriteLine("  unity:resourcePath");
+            Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
+            Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
+            Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
         }
 
-        public static void WriteLine()
-        {
-            WriteLine("");
-        }
 
-        public static void WriteLine(string line)
-        {
-            line += "\n";
-            if (OnWriteLine != null)
-                OnWriteLine(line);
-            Console.Write(line);
-            Log(line);
-        }
-
-        public static void WriteLine(string fmt, params object[] args)
-        {
-            WriteLine(String.Format(fmt, args));
-        }
-
-        public static void WriteWarning(string warning)
-        {
-            warning += "\n";
-            if (OnWriteWarning != null)
-                OnWriteWarning(warning);
-            Console.Write(warning);
-            Log(warning);
-        }
-
-        public static void WriteWarning(string fmt, params object[] args)
-        {
-            WriteWarning(String.Format(fmt, args));
-        }
-
-        public static void WriteError(string error)
-        {
-            error += "\n";
-            if (OnWriteError != null)
-                OnWriteError(error);
-            Console.Write(error);
-            Log(error);
-        }
-
-        public static void WriteError(string fmt, params object[] args)
-        {
-            WriteError(String.Format(fmt, args));
-        }
-
-        public static void WriteSuccess(string success)
-        {
-            success += "\n";
-            if (OnWriteSuccess != null)
-                OnWriteSuccess(success);
-            Console.Write(success);
-            Log(success);
-        }
-
-        public static void WriteSuccess(string fmt, params object[] args)
-        {
-            WriteSuccess(String.Format(fmt, args));
-        }
-
-        public static void WriteVerbose(string line)
-        {
-            if (!Program.Verbose)
-                return;
-
-            line += "\n";
-            if (OnWriteVerbose != null)
-                OnWriteVerbose(line);
-            Console.Write(line);
-            Log(line);
-        }
-
-        public static void WriteVerbose(string fmt, params object[] args)
-        {
-            WriteVerbose(String.Format(fmt, args));
-        }
-
-        public static string GetExportedFilename(TmxMap tmxMap)
-        {
-            return String.Format("{0}.tiled2unity.xml", tmxMap.Name);
-        }
-
-#if !TILED_2_UNITY_LITE
-        // GetVersion() is automatically generated with Tiled2UnityLite
-        public static string GetVersion()
-        {
-            var thisApp = Assembly.GetExecutingAssembly();
-            AssemblyName name = new AssemblyName(thisApp.FullName);
-            return name.Version.ToString();
-        }
-
-        public static string GetPlatform()
-        {
-#if T2U_64BIT
-            return "Win64";
-#else
-            return "Win32";
-#endif
-        }
-#endif
-
-#if TILED_2_UNITY_LITE
-        public static string GetProgramName()
-        {
-            return "Tiled2UnityLite";
-        }
-#else
-        public static string GetProgramName()
-        {
-            return "Tiled2Unity";
-        }
-#endif
-
-        static private void StartLogging(string[] args)
-        {
-            // Create the directory if need be
-            Program.LogFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tiled2Unity");
-            if (!Directory.Exists(Program.LogFilePath))
-            {
-                Directory.CreateDirectory(Program.LogFilePath);
-            }
-
-            // Start off the log empty
-            Program.LogFilePath = Path.Combine(Program.LogFilePath, "tiled2unity.log");
-            File.WriteAllText(Program.LogFilePath, String.Empty);
-
-            // Write our very first entries into the log
-            Program.WriteLine(DateTime.Now.ToString());
-            Program.WriteLine("Tiled2Unity {0}", String.Join(" ", args));
-            Program.WriteLine("Log path: {0}", Program.LogFilePath);
-        }
-
-        static private void Log(string line)
-        {
-#if !TILED_2_UNITY_LITE
-            // No logging in Tiled2UnityLite
-            using (StreamWriter writer = File.AppendText(Program.LogFilePath))
-            {
-                writer.Write(line);
-            }
-#endif
-        }
-
-        static private void SetCulture()
-        {
-            // Force decimal numbers to use '.' as the decimal separator
-            System.Globalization.CultureInfo customCulture = (System.Globalization.CultureInfo)System.Threading.Thread.CurrentThread.CurrentCulture.Clone();
-            customCulture.NumberFormat.NumberDecimalSeparator = ".";
-            System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
-        }
-
-        static private float ParseFloatDefault(string str, float defaultValue)
+        private static float ParseFloatDefault(string str, float defaultValue)
         {
             float resultValue = 0;
             if (float.TryParse(str, out resultValue))
@@ -1206,8 +996,321 @@ namespace Tiled2Unity
             return defaultValue;
         }
 
-    } // end class
-} // end namespace
+    }
+
+}
+
+// ----------------------------------------------------------------------
+// Session.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    // A Tiled2Unity Session is made up of
+    // a) A TMX file (which results in a TMX object)
+    // b) An export directory
+    public partial class Session
+    {
+        public string TmxFilePath { get; private set; }
+        public string UnityExportFolderPath { get; set; }
+        public TmxMap TmxMap { get; private set; }
+
+        private SummaryReport summaryReport = new SummaryReport();
+
+        public void SetCulture()
+        {
+            // Force decimal numbers to use '.' as the decimal separator
+            System.Globalization.CultureInfo customCulture = (System.Globalization.CultureInfo)System.Threading.Thread.CurrentThread.CurrentCulture.Clone();
+            customCulture.NumberFormat.NumberDecimalSeparator = ".";
+            System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
+        }
+
+        public bool InitializeWithArgs(string[] args, bool summary)
+        {
+            Logger.WriteLine("Command: {0}", String.Join(" ", args));
+
+            // Create our map instance (which is empty/unloaded at first)
+            this.TmxMap = new TmxMap();
+
+            // Parse the arguments and let our listeners know in case any settings changed
+            if (summary)
+            {
+                this.summaryReport.Capture("Arguments");
+            }
+
+            ParseEnvironmentVariables();
+            bool success = ParseOptions(args);
+
+            if (summary)
+            {
+                this.summaryReport.Report();
+            }
+
+            return success;
+        }
+
+        public void LoadInitialTmxFile()
+        {
+            // Only load the inital TMX file if it is set
+            if (!String.IsNullOrEmpty(this.TmxFilePath))
+            {
+                LoadTmxFile(this.TmxFilePath);
+            }
+        }
+
+        public void LoadTmxFile(string tmxFilePath)
+        {
+            this.TmxFilePath = tmxFilePath;
+
+            this.summaryReport.Capture("Loading");
+
+            // Load the TMX map
+            try
+            {
+                this.TmxMap = TmxMap.LoadFromFile(this.TmxFilePath);
+
+                // Load the Object Type Xml file if it exists
+                if (File.Exists(Tiled2Unity.Settings.ObjectTypeXml))
+                {
+                    this.TmxMap.LoadObjectTypeXml(Tiled2Unity.Settings.ObjectTypeXml);
+                }
+            }
+            catch (TmxException tmx)
+            {
+                this.TmxMap = new TmxMap();
+                Logger.WriteError(tmx.Message);
+            }
+            catch (Exception e)
+            {
+                this.TmxMap = new TmxMap();
+                Logger.WriteError(e.Message);
+            }
+
+            this.summaryReport.Report();
+        }
+
+        public void ExportTmxMap()
+        {
+            this.summaryReport.Capture("Exporting");
+            {
+                if (this.TmxMap.IsLoaded == false)
+                {
+                    Logger.WriteError("Tiled map file not loaded!");
+                }
+                else
+                {
+                    try
+                    {
+                        Logger.WriteLine("Exporting '{0}' to '{1}'", this.TmxFilePath, this.UnityExportFolderPath);
+                        TiledMapExporter exporter = new TiledMapExporter(this.TmxMap);
+                        exporter.Export(this.UnityExportFolderPath);
+                    }
+                    catch (TmxException tmx)
+                    {
+                        Logger.WriteError(tmx.Message);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.WriteError(e.Message);
+                    }
+                }
+            }
+            this.summaryReport.Report();
+        }
+
+        public void DisplayHelp()
+        {
+            List<string> args = new List<string>() { "-h" };
+            ParseOptions(args.ToArray());
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// Settings.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    // Setttings for compiling and export Tiled maps into Unity
+    public class Settings
+    {
+        static public string ObjectTypeXml = "";
+
+        public static float Scale = 1.0f;
+        public static bool PreferConvexPolygons = false;
+        public static bool DepthBufferEnabled = false;
+
+        public static readonly float DefaultTexelBias = 8192.0f;
+        public static float TexelBias = DefaultTexelBias;
+    }
+}
+
+// ----------------------------------------------------------------------
+// SummaryReport.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    // Helper class that gathers success, warning and error messages and blasts them back out through logging when requested
+    class SummaryReport
+    {
+        private string name = "";
+        private List<string> successes = new List<string>();
+        private List<string> warnings = new List<string>();
+        private List<string> errors = new List<string>();
+
+        public void Capture(string name)
+        {
+            Listen();
+
+            this.name = name;
+            this.successes.Clear();
+            this.warnings.Clear();
+            this.errors.Clear();
+        }
+
+        private delegate void LoggingDelegate(string message, params object[] args);
+        public void Report()
+        {
+            // Stop listening because we're going to blast back out to the logging system
+            Ignore();
+
+            // Are we going to log as success, warnings, or errors?
+            LoggingDelegate func = Logger.WriteSuccess;
+            if (this.warnings.Count > 0)
+            {
+                func = Logger.WriteWarning;
+            }
+            if (this.errors.Count > 0)
+            {
+                func = Logger.WriteError;
+            }
+
+            // Write out the summary report
+            string separator = new string('-', 80);
+            Logger.WriteLine(separator);
+            func("{0} summary", this.name);
+
+            // Add successes
+            Logger.WriteLine("Succeeded: {0}", this.successes.Count);
+            foreach (var success in this.successes)
+            {
+                Logger.WriteSuccess("  {0}", success);
+            }
+
+            // Add warnings
+            Logger.WriteLine("Warnings: {0}", this.warnings.Count);
+            foreach (var warn in this.warnings)
+            {
+                Logger.WriteWarning("  {0}", warn);
+            }
+
+            // Add errors
+            Logger.WriteLine("Errors: {0}", this.errors.Count);
+            foreach (var error in this.errors)
+            {
+                Logger.WriteError("  {0}", error);
+            }
+
+            Logger.WriteLine(separator);
+        }
+
+        private void Listen()
+        {
+            Logger.OnWriteSuccess += Logger_OnWriteSuccess;
+            Logger.OnWriteWarning += Logger_OnWriteWarning;
+            Logger.OnWriteError += Logger_OnWriteError;
+        }
+
+        private void Ignore()
+        {
+            Logger.OnWriteSuccess -= Logger_OnWriteSuccess;
+            Logger.OnWriteWarning -= Logger_OnWriteWarning;
+            Logger.OnWriteError -= Logger_OnWriteError;
+        }
+
+        private void Logger_OnWriteError(string line)
+        {
+            line = line.TrimEnd('\r', '\n');
+            this.errors.Add(line);
+        }
+
+        private void Logger_OnWriteWarning(string line)
+        {
+            line = line.TrimEnd('\r', '\n');
+            this.warnings.Add(line);
+        }
+
+        private void Logger_OnWriteSuccess(string line)
+        {
+            line = line.TrimEnd('\r', '\n');
+            this.successes.Add(line);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// Tiled2UnityLite.Main.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+// Tiled2UnityLite is the 'automated export' version of Tiled2Unity
+// It is expected to open a TMX file, export, and close on its own as a command-line utility
+namespace Tiled2Unity
+{
+    public class Tiled2UnityLite
+    {
+        public static int Run(string[] args)
+        {
+            int error = 0;
+
+            // If we get an error then that changes our error code
+            Tiled2Unity.Logger.OnWriteError += delegate (string line)
+            {
+                error = 1;
+            };
+
+            // Run the session
+            Tiled2Unity.Session tmxSession = new Session();
+            tmxSession.SetCulture();
+
+            if (tmxSession.InitializeWithArgs(args, false))
+            {
+                // Load the Tiled file (TMX)
+                if (error == 0)
+                {
+                    tmxSession.LoadInitialTmxFile();
+                }
+
+                // Export the Tiled file to Unity
+                if (error == 0)
+                {
+                    tmxSession.ExportTmxMap();
+                }
+            }
+
+            return error;
+        }
+    }
+}
 
 // ----------------------------------------------------------------------
 // TiledMapExporter.AssignMaterials.cs
@@ -1304,7 +1407,7 @@ namespace Tiled2Unity
             LayerClipper.ProgressFunc progFunc =
                 delegate(string prog)
                 {
-                    Program.WriteLine(prog);
+                    Logger.WriteLine(prog);
                 };
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
@@ -1318,7 +1421,7 @@ namespace Tiled2Unity
                 warning.AppendLine("  Check polygon/rectangle objects in Tile Collision Editor in Tiled and use 'Snap to Grid' or 'Snap to Fine Grid'.");
                 warning.AppendLine("  You want colliders to be set up so they can be merged with colliders on neighboring tiles, reducing path count considerably.");
                 warning.AppendLine("  In some cases the size of the map may need to be reduced.");
-                Program.WriteWarning(warning.ToString());
+                Logger.WriteWarning(warning.ToString());
             }
 
             // Add our polygon and edge colliders
@@ -1365,7 +1468,7 @@ namespace Tiled2Unity
             // Each PointF array is a polygon with a single path
             foreach (var pointfArray in polygons)
             {
-                string data = String.Join(" ", pointfArray.Select(pt => String.Format("{0},{1}", pt.X * Program.Scale, pt.Y * Program.Scale)));
+                string data = String.Join(" ", pointfArray.Select(pt => String.Format("{0},{1}", pt.X * Tiled2Unity.Settings.Scale, pt.Y * Tiled2Unity.Settings.Scale)));
                 XElement pathElement = new XElement("Path", data);
 
                 XElement polyColliderElement = new XElement("PolygonCollider2D", pathElement);
@@ -1384,7 +1487,7 @@ namespace Tiled2Unity
             List<XElement> pathElements = new List<XElement>();
             foreach (var path in polygons)
             {
-                string data = String.Join(" ", path.Select(pt => String.Format("{0},{1}", pt.X * Program.Scale, pt.Y * Program.Scale)));
+                string data = String.Join(" ", path.Select(pt => String.Format("{0},{1}", pt.X * Tiled2Unity.Settings.Scale, pt.Y * Tiled2Unity.Settings.Scale)));
                 XElement pathElement = new XElement("Path", data);
                 pathElements.Add(pathElement);
             }
@@ -1403,7 +1506,7 @@ namespace Tiled2Unity
             var combined = CombineLineSegments(lines);
             foreach (var points in combined)
             {
-                string data = String.Join(" ", points.Select(pt => String.Format("{0},{1}", pt.X * Program.Scale, pt.Y * Program.Scale)));
+                string data = String.Join(" ", points.Select(pt => String.Format("{0},{1}", pt.X * Tiled2Unity.Settings.Scale, pt.Y * Tiled2Unity.Settings.Scale)));
                 XElement edgeCollider =
                     new XElement("EdgeCollider2D",
                         new XElement("Points", data));
@@ -1447,7 +1550,7 @@ namespace Tiled2Unity
 
 namespace Tiled2Unity
 {
-    partial class TiledMapExporter
+    public partial class TiledMapExporter
     {
         private TmxMap tmxMap = null;
 
@@ -1458,23 +1561,28 @@ namespace Tiled2Unity
 
         public void Export(string exportToTiled2UnityPath)
         {
+            if (String.IsNullOrEmpty(exportToTiled2UnityPath))
+            {
+                throw new TmxException("Unity project export path is invalid or not set.");
+            }
+
             // Create an Xml file to be imported by a Unity project
             // The unity project will have code that turns the Xml into Unity objects and prefabs
-            string fileToSave = Program.GetExportedFilename(this.tmxMap);
-            Program.WriteLine("Compiling tiled2unity file: {0}", fileToSave);
+            string fileToSave = this.tmxMap.GetExportedFilename();
+            Logger.WriteLine("Compiling tiled2unity file: {0}", fileToSave);
 
             // Need an element for embedded file data that will be imported into Unity
             // These are models and textures
             List<XElement> importFiles = CreateImportFilesElements(exportToTiled2UnityPath);
             List<XElement> assignMaterials = CreateAssignMaterialsElements();
 
-            Program.WriteLine("Gathering prefab data ...");
+            Logger.WriteLine("Gathering prefab data ...");
             XElement prefab = CreatePrefabElement();
 
             // Create the Xml root and populate it
-            Program.WriteLine("Writing as Xml ...");
+            Logger.WriteLine("Writing as Xml ...");
 
-            string version = Program.GetVersion();
+            string version = Tiled2Unity.Info.GetVersion();
             XElement root = new XElement("Tiled2Unity", new XAttribute("version", version));
             root.Add(assignMaterials);
             root.Add(prefab);
@@ -1497,7 +1605,7 @@ namespace Tiled2Unity
                 builder.AppendFormat("Could not export '{0}'\n", fileToSave);
                 builder.AppendFormat("Tiled2Unity.unitypackage is not installed in unity project: {0}\n", exportToTiled2UnityPath);
                 builder.AppendFormat("Select \"Help -> Import Unity Package to Project\" and re-export");
-                Program.WriteError(builder.ToString());
+                Logger.WriteError(builder.ToString());
                 return;
             }
 
@@ -1511,7 +1619,7 @@ namespace Tiled2Unity
                 builder.AppendFormat("Tiled2Unity.unitypackage is not properly installed in unity project: {0}\n", exportToTiled2UnityPath);
                 builder.AppendFormat("Missing file: {0}\n", unityProjectVersionTXT);
                 builder.AppendFormat("Select \"Help -> Import Unity Package to Project\" and re-export");
-                Program.WriteError(builder.ToString());
+                Logger.WriteError(builder.ToString());
                 return;
             }
 
@@ -1525,26 +1633,26 @@ namespace Tiled2Unity
                 Group group = match.Groups["version"];
                 if (group.Success)
                 {
-                    if (Program.GetVersion() != group.ToString())
+                    if (Tiled2Unity.Info.GetVersion() != group.ToString())
                     {
                         StringBuilder builder = new StringBuilder();
                         builder.AppendFormat("Export/Import Version mismatch\n");
-                        builder.AppendFormat("  Tiled2Unity version   : {0}\n", Program.GetVersion());
+                        builder.AppendFormat("  Tiled2Unity version   : {0}\n", Tiled2Unity.Info.GetVersion());
                         builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
                         builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
-                        Program.WriteWarning(builder.ToString());
+                        Logger.WriteWarning(builder.ToString());
                     }
                 }
             }
 
             // Save the file (which is importing it into Unity)
             string pathToSave = Path.Combine(exportDir, fileToSave);
-            Program.WriteLine("Exporting to: {0}", pathToSave);
+            Logger.WriteLine("Exporting to: {0}", pathToSave);
             doc.Save(pathToSave);
-            Program.WriteSuccess("Succesfully exported: {0}\n  Vertex Scale = {1}\n  Object Type Xml = {2}",
+            Logger.WriteSuccess("Succesfully exported: {0}\n  Vertex Scale = {1}\n  Object Type Xml = {2}",
                 pathToSave,
-                Program.Scale,
-                String.IsNullOrEmpty(Program.ObjectTypeXml) ? "<none>" : Program.ObjectTypeXml);
+                Tiled2Unity.Settings.Scale,
+                String.IsNullOrEmpty(Tiled2Unity.Settings.ObjectTypeXml) ? "<none>" : Tiled2Unity.Settings.ObjectTypeXml);
         }
 
         public static PointF PointFToUnityVector_NoScale(PointF pt)
@@ -1564,8 +1672,8 @@ namespace Tiled2Unity
             // Unity's coordinate sytem has y-up positive, y-down negative
             // Apply scaling
             PointF scaled = pt;
-            scaled.X *= Program.Scale;
-            scaled.Y *= Program.Scale;
+            scaled.X *= Tiled2Unity.Settings.Scale;
+            scaled.Y *= Tiled2Unity.Settings.Scale;
 
             // Have to watch for negative zero, ffs
             return new PointF(scaled.X, scaled.Y == 0 ? 0 : -scaled.Y);
@@ -1576,8 +1684,8 @@ namespace Tiled2Unity
             // Note, we negate the x and y due to Wavefront's coordinate system
             // Applying scaling
             PointF scaled = pt;
-            scaled.X *= Program.Scale;
-            scaled.Y *= Program.Scale;
+            scaled.X *= Tiled2Unity.Settings.Scale;
+            scaled.Y *= Tiled2Unity.Settings.Scale;
 
             // Watch for negative zero, ffs
             return new PointF(scaled.X == 0 ? 0 : -scaled.X, scaled.Y == 0 ? 0 : -scaled.Y);
@@ -1710,7 +1818,7 @@ namespace Tiled2Unity
                         string assetPath = image.AbsolutePath.Remove(0, exportToUnityProjectPath.Length);
                         assetPath = assetPath.TrimStart('\\');
                         assetPath = assetPath.TrimStart('/');
-                        Program.WriteLine("InternalTexture : {0}", assetPath);
+                        Logger.WriteLine("InternalTexture : {0}", assetPath);
 
                         // Path to texture in the asset directory
                         xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
@@ -1722,7 +1830,7 @@ namespace Tiled2Unity
                         }
 
                         // Are we using depth shaders on our materials?
-                        if (Program.DepthBufferEnabled)
+                        if (Tiled2Unity.Settings.DepthBufferEnabled)
                         {
                             xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
                         }
@@ -1734,7 +1842,7 @@ namespace Tiled2Unity
                         XElement xmlImportTexture = new XElement("ImportTexture");
 
                         // Note that compression is not available in Unity. Go with Base64 string. Blerg.
-                        Program.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(unityAssetsDir, "Tiled2Unity\\Textures\\"));
+                        Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(unityAssetsDir, "Tiled2Unity\\Textures\\"));
 
                         // Is there a color key for transparency?
                         if (!String.IsNullOrEmpty(image.TransparentColor))
@@ -1743,7 +1851,7 @@ namespace Tiled2Unity
                         }
 
                         // Are we using depth shaders on our materials?
-                        if (Program.DepthBufferEnabled)
+                        if (Tiled2Unity.Settings.DepthBufferEnabled)
                         {
                             xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
                         }
@@ -1844,7 +1952,7 @@ namespace Tiled2Unity
 
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
-                    Program.WriteLine("Writing '{0}' mesh group", mesh.UniqueMeshName);
+                    Logger.WriteLine("Writing '{0}' mesh group", mesh.UniqueMeshName);
                     faceBuilder.AppendFormat("\ng {0}\n", mesh.UniqueMeshName);
 
                     foreach (int y in verticalRange)
@@ -1866,7 +1974,7 @@ namespace Tiled2Unity
 
                             // If we're using depth shaders then we'll need to set a depth value of this face
                             float depth_z = 0.0f;
-                            if (Program.DepthBufferEnabled)
+                            if (Tiled2Unity.Settings.DepthBufferEnabled)
                             {
                                 depth_z = position.Y / mapLogicalHeight * -1.0f;
                             }
@@ -1896,7 +2004,7 @@ namespace Tiled2Unity
                 // We're going to use this tile object
                 groupCount++;
 
-                Program.WriteLine("Writing '{0}' tile group", tmxMesh.UniqueMeshName);
+                Logger.WriteLine("Writing '{0}' tile group", tmxMesh.UniqueMeshName);
                 faceBuilder.AppendFormat("\ng {0}\n", tmxMesh.UniqueMeshName);
 
                 // Get the single tile associated with this mesh
@@ -1922,7 +2030,7 @@ namespace Tiled2Unity
             objWriter.WriteLine("# Wavefront OBJ file automatically generated by Tiled2Unity");
             objWriter.WriteLine();
 
-            Program.WriteLine("Writing face vertices");
+            Logger.WriteLine("Writing face vertices");
             objWriter.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
             foreach (var v in vertexDatabase.List)
             {
@@ -1930,7 +2038,7 @@ namespace Tiled2Unity
             }
             objWriter.WriteLine();
 
-            Program.WriteLine("Writing face uv coordinates");
+            Logger.WriteLine("Writing face uv coordinates");
             objWriter.WriteLine("# Texture cooridinates (Count = {0})", uvDatabase.List.Count());
             foreach (var uv in uvDatabase.List)
             {
@@ -2031,9 +2139,9 @@ namespace Tiled2Unity
             //const float bias = 1.0f / 8192.0f;
             //const float bias = 1.0f / 4096.0f;
             //const float bias = 1.0f / 2048.0f;
-            if (Program.TexelBias > 0)
+            if (Tiled2Unity.Settings.TexelBias > 0)
             {
-                float bias = 1.0f / Program.TexelBias;
+                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
 
                 PointF[] multiply = new PointF[4];
                 multiply[0] = new PointF(1, 1);
@@ -2135,7 +2243,7 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
             prefab.SetAttributeValue("tileHeight", this.tmxMap.TileHeight);
 
-            prefab.SetAttributeValue("exportScale", Program.Scale);
+            prefab.SetAttributeValue("exportScale", Tiled2Unity.Settings.Scale);
             prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
@@ -2154,7 +2262,7 @@ namespace Tiled2Unity
                     // Is we're using depth shaders for our materials then each layer needs depth assigned to it
                     // The "depth" of the layer is negative because the Unity camera is along the negative z axis
                     float depth_z = 0;
-                    if (Program.DepthBufferEnabled && layer.SortingOrder != 0)
+                    if (Tiled2Unity.Settings.DepthBufferEnabled && layer.SortingOrder != 0)
                     {
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileHeight = this.tmxMap.TileHeight;
@@ -2215,7 +2323,7 @@ namespace Tiled2Unity
                     // Is we're using depth shaders for our materials then each object group needs depth assigned to it
                     // The "depth" of the layer is negative because the Unity camera is along the negative z axis
                     float depth_z = 0;
-                    if (Program.DepthBufferEnabled && objGroup.SortingOrder != 0)
+                    if (Tiled2Unity.Settings.DepthBufferEnabled && objGroup.SortingOrder != 0)
                     {
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileHeight = this.tmxMap.TileHeight;
@@ -2302,16 +2410,16 @@ namespace Tiled2Unity
                     // TileObjects are off by a half-width in Isometric mode
                     if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
-                        xmlObject.SetAttributeValue("x", pos.X - this.tmxMap.TileWidth * 0.5f * Program.Scale);
+                        xmlObject.SetAttributeValue("x", pos.X - this.tmxMap.TileWidth * 0.5f * Tiled2Unity.Settings.Scale);
                     }
 
                     // Apply z-cooridnate for use with the depth buffer
                     // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
-                    if (Program.DepthBufferEnabled)
+                    if (Tiled2Unity.Settings.DepthBufferEnabled)
                     {
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileLogicalHeight = this.tmxMap.TileHeight;
-                        float logicalPos_y = (-pos.Y / Program.Scale) - tileLogicalHeight;
+                        float logicalPos_y = (-pos.Y / Tiled2Unity.Settings.Scale) - tileLogicalHeight;
 
                         float depth_z = logicalPos_y / mapLogicalHeight * -1.0f;
                         xmlObject.SetAttributeValue("z", depth_z == -0 ? 0 : depth_z);
@@ -2321,7 +2429,7 @@ namespace Tiled2Unity
                 }
                 else
                 {
-                    Program.WriteLine("Object '{0}' has been added for use with custom importers", tmxObject);
+                    Logger.WriteLine("Object '{0}' has been added for use with custom importers", tmxObject);
                 }
 
                 if (objElement != null)
@@ -2374,11 +2482,11 @@ namespace Tiled2Unity
                     float scale = 1.0f;
                     if (context != PrefabContext.Root)
                     {
-                        Program.WriteWarning("unity:scale only applies to map properties\n{0}", xml.ToString());
+                        Logger.WriteWarning("unity:scale only applies to map properties\n{0}", xml.ToString());
                     }
                     else if (!Single.TryParse(unityScale, out scale))
                     {
-                        Program.WriteError("unity:scale property value '{0}' could not be converted to a float", unityScale);
+                        Logger.WriteError("unity:scale property value '{0}' could not be converted to a float", unityScale);
                     }
                     else
                     {
@@ -2395,11 +2503,11 @@ namespace Tiled2Unity
                     bool resource = false;
                     if (context != PrefabContext.Root)
                     {
-                        Program.WriteWarning("unity:resource only applies to map properties\n{0}", xml.ToString());
+                        Logger.WriteWarning("unity:resource only applies to map properties\n{0}", xml.ToString());
                     }
                     else if (!Boolean.TryParse(unityResource, out resource))
                     {
-                        Program.WriteError("unity:resource property value '{0}' could not be converted to a boolean", unityResource);
+                        Logger.WriteError("unity:resource property value '{0}' could not be converted to a boolean", unityResource);
                     }
                     else
                     {
@@ -2415,14 +2523,14 @@ namespace Tiled2Unity
                 {
                     if (context != PrefabContext.Root)
                     {
-                        Program.WriteWarning("unity:resourcePath only applies to map properties\n{0}", xml.ToString());
+                        Logger.WriteWarning("unity:resourcePath only applies to map properties\n{0}", xml.ToString());
                     }
                     else
                     {
                         bool isInvalid = Path.GetInvalidPathChars().Any(c => unityResourcePath.Contains(c));
                         if (isInvalid)
                         {
-                            Program.WriteError("unity:resourcePath has invalid path characters: {0}", unityResourcePath);
+                            Logger.WriteError("unity:resourcePath has invalid path characters: {0}", unityResourcePath);
                         }
                         else
                         {
@@ -2440,7 +2548,7 @@ namespace Tiled2Unity
                     bool isTrigger = false;
                     if (!Boolean.TryParse(unityIsTrigger, out isTrigger))
                     {
-                        Program.WriteError("unity:isTrigger property value '{0}' cound not be converted to a boolean", unityIsTrigger);
+                        Logger.WriteError("unity:isTrigger property value '{0}' cound not be converted to a boolean", unityIsTrigger);
                     }
                     else
                     {
@@ -2485,7 +2593,7 @@ namespace Tiled2Unity
                           select p.Key;
             foreach (var p in unknown)
             {
-                Program.WriteWarning("Unknown unity property '{0}' in GameObject '{1}'", p, tmxHasProperties.ToString());
+                Logger.WriteWarning("Unknown unity property '{0}' in GameObject '{1}'", p, tmxHasProperties.ToString());
             }
         }
 
@@ -2523,8 +2631,8 @@ namespace Tiled2Unity
         {
             XElement xmlCollider =
                 new XElement("BoxCollider2D",
-                    new XAttribute("width", tmxRectangle.Size.Width * Program.Scale),
-                    new XAttribute("height", tmxRectangle.Size.Height * Program.Scale));
+                    new XAttribute("width", tmxRectangle.Size.Width * Tiled2Unity.Settings.Scale),
+                    new XAttribute("height", tmxRectangle.Size.Height * Tiled2Unity.Settings.Scale));
 
             return xmlCollider;
         }
@@ -2533,19 +2641,19 @@ namespace Tiled2Unity
         {
             if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
             {
-                Program.WriteError("Collision ellipse in Object Layer '{0}' is not supported in Isometric maps: {1}", objGroupName, tmxEllipse);
+                Logger.WriteError("Collision ellipse in Object Layer '{0}' is not supported in Isometric maps: {1}", objGroupName, tmxEllipse);
                 return null;
             }
             else if (!tmxEllipse.IsCircle())
             {
-                Program.WriteError("Collision ellipse in Object Layer '{0}' is not a circle: {1}", objGroupName, tmxEllipse);
+                Logger.WriteError("Collision ellipse in Object Layer '{0}' is not a circle: {1}", objGroupName, tmxEllipse);
                 return null;
             }
             else
             {
                 XElement circleCollider =
                     new XElement("CircleCollider2D",
-                        new XAttribute("radius", tmxEllipse.Radius * Program.Scale));
+                        new XAttribute("radius", tmxEllipse.Radius * Tiled2Unity.Settings.Scale));
 
                 return circleCollider;
             }
@@ -2592,12 +2700,12 @@ namespace Tiled2Unity
 
             if (tmxObjectTile.FlippedHorizontal)
             {
-                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width * Program.Scale);
+                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width * Tiled2Unity.Settings.Scale);
                 xmlTileObject.SetAttributeValue("flipX", true);
             }
             if (tmxObjectTile.FlippedVertical)
             {
-                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Program.Scale);
+                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Tiled2Unity.Settings.Scale);
                 xmlTileObject.SetAttributeValue("flipY", true);
             }
 
@@ -2631,8 +2739,8 @@ namespace Tiled2Unity
                     if (objElement != null)
                     {
                         // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
-                        objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Program.Scale);
-                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Program.Scale);
+                        objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Tiled2Unity.Settings.Scale);
+                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale);
 
                         xmlTileObject.Add(objElement);
                     }
@@ -2653,7 +2761,7 @@ namespace Tiled2Unity
 
                 // This object, that actually displays the tile, has to be bumped up to account for the bottom-left corner problem with Tile Objects in Tiled
                 xmlMeshObject.SetAttributeValue("x", 0);
-                xmlMeshObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Program.Scale);
+                xmlMeshObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Tiled2Unity.Settings.Scale);
 
                 if (mesh.FullAnimationDurationMs > 0)
                 {
@@ -2674,3028 +2782,6 @@ namespace Tiled2Unity
 
     } // end class
 } // end namespace
-
-// ----------------------------------------------------------------------
-// TmxAnimation.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    public partial class TmxAnimation
-    {
-        public List<TmxFrame> Frames { get; private set; }
-        public int TotalTimeMs { get; private set; }
-
-        public TmxAnimation()
-        {
-            this.Frames = new List<TmxFrame>();
-        }
-
-        public static TmxAnimation FromXml(XElement xml, uint globalStartId)
-        {
-            TmxAnimation tmxAnimation = new TmxAnimation();
-
-            foreach (var xmlFrame in xml.Elements("frame"))
-            {
-                TmxFrame tmxFrame = TmxFrame.FromXml(xmlFrame, globalStartId);
-                tmxAnimation.Frames.Add(tmxFrame);
-                tmxAnimation.TotalTimeMs += tmxFrame.DurationMs;
-            }
-
-            return tmxAnimation;
-        }
-
-        // Returns an single frame animation
-        public static TmxAnimation FromTileId(uint globalTileId)
-        {
-            TmxAnimation tmxAnimation = new TmxAnimation();
-
-            TmxFrame tmxFrame = TmxFrame.FromTileId(globalTileId);
-            tmxAnimation.Frames.Add(tmxFrame);
-
-            return tmxAnimation;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxException.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    class TmxException : Exception
-    {
-        public TmxException(string message)
-            : base(message)
-        {
-        }
-
-        public TmxException(string message, Exception inner)
-            : base(message, inner)
-        {
-        }
-
-        public static void ThrowFormat(string fmt, params object[] args)
-        {
-            string msg = String.Format(fmt, args);
-            throw new TmxException(msg);
-        }
-
-        public static void FromAttributeException(Exception inner, XElement element)
-        {
-            StringBuilder builder = new StringBuilder(inner.Message);
-            Array.ForEach(element.Attributes().ToArray(), a => builder.AppendFormat("\n  {0}", a.ToString()));
-            TmxException.ThrowFormat("Error parsing {0} attributes\n{1}", element.Name, builder.ToString());
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxFrame.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    public partial class TmxFrame
-    {
-        public uint GlobalTileId { get; private set; }
-        public int DurationMs { get; private set; }
-
-        public static TmxFrame FromTileId(uint tileId)
-        {
-            TmxFrame tmxFrame = new TmxFrame();
-            tmxFrame.GlobalTileId = tileId;
-            tmxFrame.DurationMs = 0;
-
-            return tmxFrame;
-        }
-
-        public static TmxFrame FromXml(XElement xml, uint globalStartId)
-        {
-            TmxFrame tmxFrame = new TmxFrame();
-
-            uint localTileId = TmxHelper.GetAttributeAsUInt(xml, "tileid");
-            tmxFrame.GlobalTileId = localTileId + globalStartId;
-            tmxFrame.DurationMs = TmxHelper.GetAttributeAsInt(xml, "duration", 100);
-
-            return tmxFrame;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxHasPoints.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    interface TmxHasPoints
-    {
-        List<PointF> Points { get; set; }
-        bool ArePointsClosed();
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxHasProperties.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    interface TmxHasProperties
-    {
-        TmxProperties Properties { get; }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxHelper.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.IO;
-// using System.Linq;
-// using System.Text;
-// using System.Windows.Media;
-// using System.Xml;
-// using System.Xml.Linq;
-
-
-namespace Tiled2Unity
-{
-    class TmxHelper
-    {
-        public static string GetAttributeAsString(XElement elem, string attrName)
-        {
-            return elem.Attribute(attrName).Value;
-        }
-
-        public static string GetAttributeAsString(XElement elem, string attrName, string defaultValue)
-        {
-            XAttribute attr = elem.Attribute(attrName);
-            if (attr == null)
-            {
-                return defaultValue;
-            }
-            return GetAttributeAsString(elem, attrName);
-        }
-
-        public static int GetAttributeAsInt(XElement elem, string attrName)
-        {
-            return Convert.ToInt32(elem.Attribute(attrName).Value);
-        }
-
-        public static int GetAttributeAsInt(XElement elem, string attrName, int defaultValue)
-        {
-            XAttribute attr = elem.Attribute(attrName);
-            if (attr == null)
-            {
-                return defaultValue;
-            }
-            return GetAttributeAsInt(elem, attrName);
-        }
-
-        public static uint GetAttributeAsUInt(XElement elem, string attrName)
-        {
-            return Convert.ToUInt32(elem.Attribute(attrName).Value);
-        }
-
-        public static uint GetAttributeAsUInt(XElement elem, string attrName, uint defaultValue)
-        {
-            XAttribute attr = elem.Attribute(attrName);
-            if (attr == null)
-            {
-                return defaultValue;
-            }
-            return GetAttributeAsUInt(elem, attrName);
-        }
-
-        public static float GetAttributeAsFloat(XElement elem, string attrName)
-        {
-            return Convert.ToSingle(elem.Attribute(attrName).Value);
-        }
-
-        public static float GetAttributeAsFloat(XElement elem, string attrName, float defaultValue)
-        {
-            XAttribute attr = elem.Attribute(attrName);
-            if (attr == null)
-            {
-                return defaultValue;
-            }
-            return GetAttributeAsFloat(elem, attrName);
-        }
-
-        public static string GetAttributeAsFullPath(XElement elem, string attrName)
-        {
-            return Path.GetFullPath(elem.Attribute(attrName).Value);
-        }
-
-#if TILED_2_UNITY_LITE
-        // System.Windows.Media.Color is a Microsoft-only library not supported (yet) by Mono
-        // It turns out we don't need ARGB colors for Tiled2UnityLite anyhow.
-        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName)
-        {
-            return System.Drawing.Color.FromArgb(255, 128, 128, 128);
-        }
-
-        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName, System.Drawing.Color defaultValue)
-        {
-            return System.Drawing.Color.FromArgb(255, 128, 128, 128);
-        }
-#else
-        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName)
-        {
-            string colorString = elem.Attribute(attrName).Value;
-            System.Windows.Media.Color mediaColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colorString);
-            return System.Drawing.Color.FromArgb(mediaColor.A, mediaColor.R, mediaColor.G, mediaColor.B);
-        }
-
-        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName, System.Drawing.Color defaultValue)
-        {
-            XAttribute attr = elem.Attribute(attrName);
-            if (attr == null)
-            {
-                return defaultValue;
-            }
-            return GetAttributeAsColor(elem, attrName);
-        }
-#endif
-
-        public static T GetStringAsEnum<T>(string enumString)
-        {
-            enumString = enumString.Replace("-", "_");
-
-            T value = default(T);
-            try
-            {
-                value = (T)Enum.Parse(typeof(T), enumString, true);
-            }
-            catch
-            {
-                StringBuilder msg = new StringBuilder();
-                msg.AppendFormat("Could not convert '{0}' to enum of type '{1}'\n", enumString, typeof(T).ToString());
-                msg.AppendFormat("Choices are:\n");
-
-                foreach (T t in Enum.GetValues(typeof(T)))
-                {
-                    msg.AppendFormat("  {0}\n", t.ToString());
-                }
-                TmxException.ThrowFormat(msg.ToString());
-            }
-
-            return value;
-        }
-
-        public static T GetAttributeAsEnum<T>(XElement elem, string attrName)
-        {
-            string enumString = elem.Attribute(attrName).Value.Replace("-", "_");
-            return GetStringAsEnum<T>(enumString);
-        }
-
-        public static T GetAttributeAsEnum<T>(XElement elem, string attrName, T defaultValue)
-        {
-            XAttribute attr = elem.Attribute(attrName);
-            if (attr == null)
-            {
-                return defaultValue;
-            }
-            return GetAttributeAsEnum<T>(elem, attrName);
-        }
-
-        public static TmxProperties GetPropertiesWithTypeDefaults(TmxHasProperties hasProperties, TmxObjectTypes objectTypes)
-        {
-            TmxProperties tmxProperties = new TmxProperties();
-
-            // Fill in all the default properties first
-            // (Note: At the moment, only TmxObject has default properties it inherits from TmxObjectType)
-            string objectTypeName = null;
-            if (hasProperties is TmxObject)
-            {
-                TmxObject tmxObject = hasProperties as TmxObject;
-                objectTypeName = tmxObject.Type;
-            }
-
-            // If an object type has been found then copy over all the default values for properties
-            TmxObjectType tmxObjectType = objectTypes.GetValueOrNull(objectTypeName);
-            if (tmxObjectType != null)
-            {
-                foreach (TmxObjectTypeProperty tmxTypeProp in tmxObjectType.Properties.Values)
-                {
-                    tmxProperties.PropertyMap[tmxTypeProp.Name] = new TmxProperty() { Name = tmxTypeProp.Name, Type = tmxTypeProp.Type, Value = tmxTypeProp.Default };
-                }
-            }
-
-            // Now add all the object properties (which may override some of the default properties)
-            foreach (TmxProperty tmxProp in hasProperties.Properties.PropertyMap.Values)
-            {
-                tmxProperties.PropertyMap[tmxProp.Name] = tmxProp;
-            }
-
-            return tmxProperties;
-        }
-
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxImage.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public partial class TmxImage
-    {
-        public string AbsolutePath { get; private set; }
-        public Size Size { get; private set; }
-        public String TransparentColor { get; set; }
-
-#if !TILED_2_UNITY_LITE
-        public Bitmap ImageBitmap { get; private set; }
-#endif
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxImage.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.IO;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    partial class TmxImage
-    {
-        public static TmxImage FromXml(XElement elemImage)
-        {
-            TmxImage tmxImage = new TmxImage();
-            tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
-
-#if TILED_2_UNITY_LITE
-            // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
-            int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-            int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
-            tmxImage.Size = new System.Drawing.Size(width, height);
-#else
-            try
-            {
-                // We use pre-muliplied alpha pixel format (it is 2x faster)
-                Bitmap bitmapRaw = (Bitmap)Bitmap.FromFile(tmxImage.AbsolutePath);
-                Bitmap bitmapPArgb = new Bitmap(bitmapRaw.Width, bitmapRaw.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-
-                using (Graphics g = Graphics.FromImage(bitmapPArgb))
-                {
-                    g.DrawImage(bitmapRaw, 0, 0, bitmapPArgb.Width, bitmapPArgb.Height);
-                    tmxImage.ImageBitmap = bitmapPArgb;
-                }
-
-                tmxImage.ImageBitmap = bitmapPArgb;
-            }
-            catch (FileNotFoundException fnf)
-            {
-                string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
-                throw new TmxException(msg, fnf);
-
-                // Testing for when image files are missing. Just make up an image.
-                //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-                //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
-                //tmxImage.ImageBitmap = new Bitmap(width, height);
-                //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
-                //{
-                //    int color32 = tmxImage.AbsolutePath.GetHashCode();
-                //    Color color = Color.FromArgb(color32);
-                //    color = Color.FromArgb(255, color);
-                //    using (Brush brush = new SolidBrush(color))
-                //    {
-                //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
-                //    }
-                //}
-            }
-
-            tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
-#endif
-
-            // Some images use a transparency color key instead of alpha (blerg)
-            tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
-            if (!String.IsNullOrEmpty(tmxImage.TransparentColor))
-            {
-                if (!tmxImage.TransparentColor.StartsWith("#"))
-                {
-                    // The hash makes it an HTML color
-                    tmxImage.TransparentColor = "#" + tmxImage.TransparentColor;
-                }
-
-#if !TILED_2_UNITY_LITE
-                System.Drawing.Color transColor = System.Drawing.ColorTranslator.FromHtml(tmxImage.TransparentColor);
-                tmxImage.ImageBitmap.MakeTransparent(transColor);
-#endif
-            }
-
-            return tmxImage;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxLayer.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Diagnostics;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public partial class TmxLayer : TmxLayerBase
-    {
-        public enum IgnoreSettings
-        {
-            False,      // Ingore nothing (layer fully-enabled)
-            True,       // Ignore everything (like layer doesn't exist)
-            Collision,  // Ignore collision on layer
-            Visual,     // Ignore visual on layer
-        };
-
-        public TmxMap TmxMap { get; private set; }
-        public string Name { get; private set; }
-        public bool Visible { get; private set; }
-        public float Opacity { get; private set; }
-        public PointF Offset { get; private set; }
-        public int Width { get; private set; }
-        public int Height { get; private set; }
-        public IgnoreSettings Ignore { get; private set; }
-        public uint[] TileIds { get; private set; }
-        public List<TmxMesh> Meshes { get; private set; }
-        public List<TmxLayer> CollisionLayers { get; private set; }
-
-        public TmxLayer(TmxMap map)
-        {
-            this.TmxMap = map;
-            this.Visible = true;
-            this.Opacity = 1.0f;
-            this.CollisionLayers = new List<TmxLayer>();
-        }
-
-        public uint GetTileIdAt(int x, int y)
-        {
-            uint tileId = GetRawTileIdAt(x, y);
-            return TmxMath.GetTileIdWithoutFlags(tileId);
-        }
-
-        public uint GetRawTileIdAt(int x, int y)
-        {
-            Debug.Assert(x < this.Width && y < this.Height);
-            Debug.Assert(x >= 0 && y >= 0);
-            int index = GetTileIndex(x, y);
-            return this.TileIds[index];
-        }
-
-        public int GetTileIndex(int x, int y)
-        {
-            return y * this.Width + x;
-        }
-
-        public bool IsExportingConvexPolygons()
-        {
-            // Always obey layer first
-            if (this.Properties.PropertyMap.ContainsKey("unity:convex"))
-            {
-                return this.Properties.GetPropertyValueAsBoolean("unity:convex", true);
-            }
-
-            // Use the map next
-            if (this.TmxMap.Properties.PropertyMap.ContainsKey("unity:convex"))
-            {
-                return this.TmxMap.Properties.GetPropertyValueAsBoolean("unity:convex", true);
-            }
-
-            // Use the program setting last
-            return Program.PreferConvexPolygons;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxLayer.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.IO;
-// using System.IO.Compression;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    // Partial class methods for building layer data from xml strings or files
-    partial class TmxLayer
-    {
-        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap)
-        {
-            Program.WriteVerbose(elem.ToString());
-            TmxLayer tmxLayer = new TmxLayer(tmxMap);
-
-            // Order within Xml file is import for layer types
-            tmxLayer.XmlElementIndex = elem.NodesBeforeSelf().Count();
-
-            // Have to decorate layer names in order to force them into being unique
-            // Also, can't have whitespace in the name because Unity will add underscores
-            tmxLayer.Name = TmxHelper.GetAttributeAsString(elem, "name");
-
-            tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
-            tmxLayer.Opacity = TmxHelper.GetAttributeAsFloat(elem, "opacity", 1);
-
-            PointF offset = new PointF(0, 0);
-            offset.X = TmxHelper.GetAttributeAsFloat(elem, "offsetx", 0);
-            offset.Y = TmxHelper.GetAttributeAsFloat(elem, "offsety", 0);
-            tmxLayer.Offset = offset;
-
-            // Set our properties
-            tmxLayer.Properties = TmxProperties.FromXml(elem);
-
-            // Set the "ignore" setting on this layer
-            tmxLayer.Ignore = tmxLayer.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
-
-            // We can build a layer from a "tile layer" (default) or an "image layer"
-            if (elem.Name == "layer")
-            {
-                tmxLayer.Width = TmxHelper.GetAttributeAsInt(elem, "width");
-                tmxLayer.Height = TmxHelper.GetAttributeAsInt(elem, "height");
-                tmxLayer.ParseData(elem.Element("data"));
-            }
-            else if (elem.Name == "imagelayer")
-            {
-                XElement xmlImage = elem.Element("image");
-                if (xmlImage == null)
-                {
-                    Program.WriteWarning("Image Layer '{0}' is being ignored since it has no image.", tmxLayer.Name);
-                    tmxLayer.Ignore = IgnoreSettings.True;
-                    return tmxLayer;
-                }
-
-                // An image layer is sort of like an tile layer but with just one tile
-                tmxLayer.Width = 1;
-                tmxLayer.Height = 1;
-
-                // Find the "tile" that matches our image
-                string imagePath = TmxHelper.GetAttributeAsFullPath(elem.Element("image"), "source");
-                TmxTile tile = tmxMap.Tiles.First(t => t.Value.TmxImage.AbsolutePath == imagePath).Value;
-                tmxLayer.TileIds = new uint[1] { tile.GlobalId };
-
-                // The image layer needs to be tranlated in an interesting way when expressed as a tile layer
-                PointF translated = tmxLayer.Offset;
-
-                // Make up for height of a regular tile in the map
-                translated.Y -= (float)tmxMap.TileHeight;
-
-                // Make up for the height of this image
-                translated.Y += (float)tile.TmxImage.Size.Height;
-
-                // Correct for any orientation effects on the map (like isometric)
-                // (We essentially undo the translation via orientation here)
-                PointF orientation = TmxMath.TileCornerInScreenCoordinates(tmxMap, 0, 0);
-                translated.X -= orientation.X;
-                translated.Y -= orientation.Y;
-
-                // Translate by the x and y coordiantes
-                translated.X += TmxHelper.GetAttributeAsFloat(elem, "x", 0);
-                translated.Y += TmxHelper.GetAttributeAsFloat(elem, "y", 0);
-                tmxLayer.Offset = translated;
-            }
-
-            // Sometimes TMX files have "dead" tiles in them (tiles that were removed but are still referenced)
-            // Remove these tiles from the layer by replacing them with zero
-            for (int t = 0; t < tmxLayer.TileIds.Length; ++t)
-            {
-                uint tileId = tmxLayer.TileIds[t];
-                tileId = TmxMath.GetTileIdWithoutFlags(tileId);
-                if (!tmxMap.Tiles.ContainsKey(tileId))
-                {
-                    tmxLayer.TileIds[t] = 0;
-                }
-            }
-
-            // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
-            tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
-
-            // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
-            tmxLayer.UnityLayerOverrideName = tmxLayer.Properties.GetPropertyValueAsString("unity:layer", "");
-            tmxLayer.BuildCollisionLayers();
-
-            return tmxLayer;
-        }
-
-        private void ParseData(XElement elem)
-        {
-            Program.WriteLine("Parse {0} layer data ...", this.Name);
-            Program.WriteVerbose(elem.ToString());
-
-            string encoding = TmxHelper.GetAttributeAsString(elem, "encoding", "");
-            string compression = TmxHelper.GetAttributeAsString(elem, "compression", "");
-            if (elem.Element("tile") != null)
-            {
-                ParseTileDataAsXml(elem);
-            }
-            else if (encoding == "csv")
-            {
-                ParseTileDataAsCsv(elem);
-            }
-            else if (encoding == "base64" && String.IsNullOrEmpty(compression))
-            {
-                ParseTileDataAsBase64(elem);
-            }
-            else if (encoding == "base64" && compression == "gzip")
-            {
-                ParseTileDataAsBase64GZip(elem);
-            }
-            else if (encoding == "base64" && compression == "zlib")
-            {
-                ParseTileDataAsBase64Zlib(elem);
-            }
-            else
-            {
-                TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.Name);
-            }
-        }
-
-        private void ParseTileDataAsXml(XElement elemData)
-        {
-            Program.WriteLine("Parsing layer data as Xml elements ...");
-            var tiles = from t in elemData.Elements("tile")
-                        select TmxHelper.GetAttributeAsUInt(t, "gid");
-            this.TileIds = tiles.ToArray();
-        }
-
-        private void ParseTileDataAsCsv(XElement elem)
-        {
-            Program.WriteLine("Parsing layer data as CSV ...");
-            List<uint> tileIds = new List<uint>();
-
-            // Splitting line-by-line reducues out-of-memory exceptions in x86 builds
-            string value = elem.Value;
-            StringReader reader = new StringReader(value);
-            string line = string.Empty;
-            do
-            {
-                line = reader.ReadLine();
-                if (!String.IsNullOrEmpty(line))
-                {
-                    var datum = from val in line.Split(',')
-                                where !String.IsNullOrEmpty(val)
-                                select Convert.ToUInt32(val);
-                    tileIds.AddRange(datum);
-                }
-
-            } while (line != null);
-
-            this.TileIds = tileIds.ToArray();
-        }
-
-        private void ParseTileDataAsBase64(XElement elem)
-        {
-            Program.WriteLine("Parsing layer data as base64 string ...");
-            byte[] bytes = Convert.FromBase64String(elem.Value);
-            BytesToTiles(bytes);
-        }
-
-        private void ParseTileDataAsBase64GZip(XElement elem)
-        {
-            Program.WriteLine("Parsing layer data as base64 gzip-compressed string ...");
-            byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
-
-            MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
-
-            // Now, decompress the bytes
-            using (MemoryStream streamDecompressed = new MemoryStream())
-            using (GZipStream deflateStream = new GZipStream(streamCompressed, CompressionMode.Decompress))
-            {
-                deflateStream.CopyTo(streamDecompressed);
-                byte[] bytesDecompressed = streamDecompressed.ToArray();
-                BytesToTiles(bytesDecompressed);
-            }
-        }
-
-        private void ParseTileDataAsBase64Zlib(XElement elem)
-        {
-            Program.WriteLine("Parsing layer data as base64 zlib-compressed string ...");
-            byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
-
-            MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
-
-            // Nasty trick: Have to read past the zlib stream header
-            streamCompressed.ReadByte();
-            streamCompressed.ReadByte();
-
-            // Now, decompress the bytes
-            using (MemoryStream streamDecompressed = new MemoryStream())
-            using (DeflateStream deflateStream = new DeflateStream(streamCompressed, CompressionMode.Decompress))
-            {
-                deflateStream.CopyTo(streamDecompressed);
-                byte[] bytesDecompressed = streamDecompressed.ToArray();
-                BytesToTiles(bytesDecompressed);
-            }
-        }
-
-        private void BytesToTiles(byte[] bytes)
-        {
-            this.TileIds = new uint[bytes.Length / 4];
-            for (int i = 0; i < this.TileIds.Count(); ++i)
-            {
-                this.TileIds[i] = BitConverter.ToUInt32(bytes, i * 4);
-            }
-        }
-
-        private void BuildCollisionLayers()
-        {
-            this.CollisionLayers.Clear();
-
-            // Don't build collision layers if we're invisible
-            if (this.Visible == false)
-                return;
-
-            // Don't build collision layers if we're ignored
-            if (this.Ignore == IgnoreSettings.True)
-                return;
-
-            // Don't build collision layers if collision is ignored
-            if (this.Ignore == IgnoreSettings.Collision)
-                return;
-
-            // Are we using a unity-layer override? If so we have to put everything from this layer into it.
-            if (String.IsNullOrEmpty(this.UnityLayerOverrideName))
-            {
-                BuildBuildCollisionLayers_ByObjectType();
-            }
-            else
-            {
-                BuildBuildCollisionLayers_Override();
-            }
-        }
-
-        private void BuildBuildCollisionLayers_Override()
-        {
-            // Just make the layer the collision layer
-            this.CollisionLayers.Clear();
-            this.CollisionLayers.Add(this);
-        }
-
-        private void BuildBuildCollisionLayers_ByObjectType()
-        {
-            // Find all tiles with collisions on them and put them into a "Collision Layer" of the same type
-            for (int t = 0; t < this.TileIds.Length; ++t)
-            {
-                uint rawTileId = this.TileIds[t];
-                if (rawTileId == 0)
-                    continue;
-
-                uint tileId = TmxMath.GetTileIdWithoutFlags(rawTileId);
-                TmxTile tmxTile = this.TmxMap.Tiles[tileId];
-
-                foreach (TmxObject colliderObject in tmxTile.ObjectGroup.Objects)
-                {
-                    if ((colliderObject is TmxHasPoints) == false)
-                        continue;
-
-                    // We have a collider object on the tile
-                    // Add the tile to the Collision Layer of the matching type
-                    // Or, create a new Collision Layer of this type to add this tile to
-                    TmxLayer collisionLayer = this.CollisionLayers.Find(l => String.Compare(l.Name, colliderObject.Type, true) == 0);
-                    if (collisionLayer == null)
-                    {
-                        // Create a new Collision Layer
-                        collisionLayer = new TmxLayer(this.TmxMap);
-                        this.CollisionLayers.Add(collisionLayer);
-
-                        // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)
-                        collisionLayer.Name = colliderObject.Type;
-                        collisionLayer.TileIds = new uint[this.TileIds.Length];
-
-                        // Copy over some stuff from parent layer that we need for creating collisions
-                        collisionLayer.Offset = this.Offset;
-                        collisionLayer.Width = this.Width;
-                        collisionLayer.Height = this.Height;
-                        collisionLayer.Ignore = this.Ignore;
-                        collisionLayer.Properties = this.Properties;
-                    }
-
-                    // Add the tile to this collision layer
-                    collisionLayer.TileIds[t] = rawTileId;
-                }
-            }
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxLayerBase.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    // There are several different "layer" types in Tiled that share some behaviour (tile layer, object layer, image layer)
-    // (In Tiled2Unity we treat image layers as a special case of tile layer)
-    public class TmxLayerBase : TmxHasProperties
-    {
-        public TmxProperties Properties { get; protected set; }
-
-        public int XmlElementIndex { get; protected set; }
-
-        public string SortingLayerName { get; set; }
-        public int SortingOrder { get; set; }
-
-        public string UnityLayerOverrideName { get; protected set; }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxMap.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.IO;
-// using System.Linq;
-// using System.Text;
-
-
-namespace Tiled2Unity
-{
-    public partial class TmxMap : TmxHasProperties
-    {
-        public delegate void ReadTmxFileCompleted(TmxMap tmxMap);
-        public static event ReadTmxFileCompleted OnReadTmxFileCompleted;
-
-        public enum MapOrientation
-        {
-            Orthogonal,
-            Isometric,
-            Staggered,
-            Hexagonal,
-        }
-
-        public enum MapStaggerAxis
-        {
-            X,
-            Y,
-        }
-
-        public enum MapStaggerIndex
-        {
-            Odd,
-            Even,
-        }
-
-        public string Name { get; private set; }
-        public MapOrientation Orientation { get; set; }
-        public MapStaggerAxis StaggerAxis { get; private set; }
-        public MapStaggerIndex StaggerIndex { get; private set; }
-        public int HexSideLength { get; set; }
-        public int DrawOrderHorizontal { get; private set; }
-        public int DrawOrderVertical { get; private set; }
-        public int Width { get; private set; }
-        public int Height { get; private set; }
-        public int TileWidth { get; private set; }
-        public int TileHeight { get; private set; }
-        public Color BackgroundColor { get; private set; }
-        public TmxProperties Properties { get; private set; }
-
-        public IDictionary<uint, TmxTile> Tiles = new Dictionary<uint, TmxTile>();
-
-        public IList<TmxLayer> Layers = new List<TmxLayer>();
-        public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
-
-        // The map may load object type data from another file
-        public TmxObjectTypes ObjectTypes = new TmxObjectTypes();
-
-        private uint nextUniqueId = 0;
-
-        public override string ToString()
-        {
-            return String.Format("{{ \"{6}\" size = {0}x{1}, tile size = {2}x{3}, # tiles = {4}, # layers = {5}, # obj groups = {6} }}",
-                this.Width,
-                this.Height,
-                this.TileWidth,
-                this.TileHeight,
-                this.Tiles.Count(),
-                this.Layers.Count(),
-                this.ObjectGroups.Count(),
-                this.Name);
-        }
-
-        public TmxTile GetTileFromTileId(uint tileId)
-        {
-            if (tileId == 0)
-                return null;
-
-            tileId = TmxMath.GetTileIdWithoutFlags(tileId);
-            return this.Tiles[tileId];
-        }
-
-        public Point GetMapPositionAt(int x, int y)
-        {
-            return TmxMath.TileCornerInScreenCoordinates(this, x, y);
-        }
-
-        public Point GetMapPositionAt(int x, int y, TmxTile tile)
-        {
-            Point point = GetMapPositionAt(x, y);
-
-            // The tile may have different dimensions than the cells of the map so correct for that
-            // In this case, the y-position needs to be adjusted
-            point.Y = (point.Y + this.TileHeight) - tile.TileSize.Height;
-
-            return point;
-        }
-
-        // Get a unique Id tied to this map instance.
-        public uint GetUniqueId()
-        {
-            return ++this.nextUniqueId;
-        }
-
-        public Size MapSizeInPixels()
-        {
-            // Takes the orientation of the map into account when calculating the size
-            if (this.Orientation == MapOrientation.Isometric)
-            {
-                Size size = Size.Empty;
-                size.Width = (this.Width + this.Height) * this.TileWidth / 2;
-                size.Height = (this.Width + this.Height) * this.TileHeight / 2;
-                return size;
-            }
-            else if (this.Orientation == MapOrientation.Staggered || this.Orientation == MapOrientation.Hexagonal)
-            {
-                int tileHeight = this.TileHeight & ~1;
-                int tileWidth = this.TileWidth & ~1;
-
-                if (this.StaggerAxis == MapStaggerAxis.Y)
-                {
-                    int halfHexLeftover = (tileHeight - this.HexSideLength) / 2;
-
-                    Size size = Size.Empty;
-                    size.Width = (tileWidth * this.Width) + tileWidth / 2;
-                    size.Height = (halfHexLeftover + this.HexSideLength) * this.Height + halfHexLeftover;
-                    return size;
-                }
-                else
-                {
-                    int halfHexLeftover = (tileWidth - this.HexSideLength) / 2;
-
-                    Size size = Size.Empty;
-                    size.Width = (halfHexLeftover + this.HexSideLength) * this.Width + halfHexLeftover;
-                    size.Height = (tileHeight * this.Height) + tileHeight / 2;
-                    return size;
-                }
-            }
-
-            // Default orientation (orthongonal)
-            return new Size(this.Width * this.TileWidth, this.Height * this.TileHeight);
-        }
-
-        // Get a unique list of all the tiles that are used as tile objects
-        public List<TmxMesh> GetUniqueListOfVisibleObjectTileMeshes()
-        {
-            var tiles = from objectGroup in this.ObjectGroups
-                        where objectGroup.Visible == true
-                        from tmxObject in objectGroup.Objects
-                        where tmxObject.Visible == true
-                        let tmxObjectTile = tmxObject as TmxObjectTile
-                        where tmxObjectTile != null
-                        from tmxMesh in tmxObjectTile.Tile.Meshes
-                        select tmxMesh;
-
-            // Make list unique based on mesh name
-            return tiles.GroupBy(m => m.UniqueMeshName).Select(g => g.First()).ToList();
-        }
-
-        // Load an Object Type Xml file for this map's objects to reference
-        public void LoadObjectTypeXml(string xmlPath)
-        {
-            if (String.IsNullOrEmpty(xmlPath))
-            {
-                Program.WriteLine("No Object Type Xml file loaded.");
-                this.ObjectTypes = new TmxObjectTypes();
-            }
-            else
-            {
-                Program.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
-
-                try
-                {
-                    this.ObjectTypes = TmxObjectTypes.FromXmlFile(xmlPath);
-                }
-                catch (FileNotFoundException)
-                {
-                    Program.WriteError("Object Type Xml file was not found: {0}", xmlPath);
-                }
-                catch (Exception e)
-                {
-                    Program.WriteError("Error parsing Object Type Xml file: {0}\n{1}", xmlPath, e.Message);
-                }
-            }
-
-            Program.WriteLine("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxMap.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.IO;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    // Partial class methods for creating TmxMap data from xml files/data
-    partial class TmxMap
-    {
-        public static TmxMap LoadFromFile(string tmxPath)
-        {
-            string fullTmxPath = Path.GetFullPath(tmxPath);
-            using (ChDir chdir = new ChDir(fullTmxPath))
-            {
-                TmxMap tmxMap = new TmxMap();
-                XDocument doc = tmxMap.LoadDocument(fullTmxPath);
-
-                tmxMap.Name = Path.GetFileNameWithoutExtension(fullTmxPath);
-                tmxMap.ParseMapXml(doc);
-
-                // We're done reading and parsing the tmx file
-                Program.WriteLine("Map details: {0}", tmxMap.ToString());
-                Program.WriteSuccess("Finished parsing file: {0}", fullTmxPath);
-
-                // Let listeners know of our success
-                if (TmxMap.OnReadTmxFileCompleted != null)
-                {
-                    TmxMap.OnReadTmxFileCompleted(tmxMap);
-                }
-
-                return tmxMap;
-            }
-        }
-
-        private XDocument LoadDocument(string xmlPath)
-        {
-            XDocument doc = null;
-            Program.WriteLine("Opening {0} ...", xmlPath);
-            try
-            {
-                doc = XDocument.Load(xmlPath);
-            }
-            catch (FileNotFoundException fnf)
-            {
-                string msg = String.Format("File not found: {0}", fnf.FileName);
-                throw new TmxException(msg, fnf);
-            }
-            catch (XmlException xml)
-            {
-                string msg = String.Format("Xml error in {0}\n  {1}", xmlPath, xml.Message);
-                throw new TmxException(msg, xml);
-            }
-            return doc;
-        }
-
-        private void ParseMapXml(XDocument doc)
-        {
-            Program.WriteLine("Parsing map root ...");
-            //Program.WriteVerbose(doc.ToString()); // Some TMX files are far too big (cause out of memory exception) so don't do this
-            XElement map = doc.Element("map");
-            try
-            {
-                this.Orientation = TmxHelper.GetAttributeAsEnum<MapOrientation>(map, "orientation");
-                this.StaggerAxis = TmxHelper.GetAttributeAsEnum(map, "staggeraxis", MapStaggerAxis.Y);
-                this.StaggerIndex = TmxHelper.GetAttributeAsEnum(map, "staggerindex", MapStaggerIndex.Odd);
-                this.HexSideLength = TmxHelper.GetAttributeAsInt(map, "hexsidelength", 0);
-                this.DrawOrderHorizontal = TmxHelper.GetAttributeAsString(map, "renderorder", "right-down").Contains("right") ? 1 : -1;
-                this.DrawOrderVertical = TmxHelper.GetAttributeAsString(map, "renderorder", "right-down").Contains("down") ? 1 : -1;
-                this.Width = TmxHelper.GetAttributeAsInt(map, "width");
-                this.Height = TmxHelper.GetAttributeAsInt(map, "height");
-                this.TileWidth = TmxHelper.GetAttributeAsInt(map, "tilewidth");
-                this.TileHeight = TmxHelper.GetAttributeAsInt(map, "tileheight");
-                this.BackgroundColor = TmxHelper.GetAttributeAsColor(map, "backgroundcolor", Color.FromArgb(128, 128, 128));
-            }
-            catch (Exception e)
-            {
-                TmxException.FromAttributeException(e, map);
-            }
-
-            // Collect our map properties
-            this.Properties = TmxProperties.FromXml(map);
-
-            ParseAllTilesets(doc);
-            ParseAllLayers(doc);
-            ParseAllObjectGroups(doc);
-
-            // Once everything is loaded, take a moment to do additional plumbing
-            ParseCompleted();
-        }
-
-        private void ParseAllTilesets(XDocument doc)
-        {
-            Program.WriteLine("Parsing tileset elements ...");
-            var tilesets = from item in doc.Descendants("tileset")
-                           select item;
-
-            foreach (var ts in tilesets)
-            {
-                ParseSingleTileset(ts);
-            }
-
-            // Treat images in imagelayers as tileset with a single entry
-            var imageLayers = from item in doc.Descendants("imagelayer") select item;
-            foreach (var il in imageLayers)
-            {
-                ParseTilesetFromImageLayer(il);
-            }
-        }
-
-        private void ParseSingleTileset(XElement elem)
-        {
-            // Parse the tileset data and populate the tiles from it
-            uint firstId = TmxHelper.GetAttributeAsUInt(elem, "firstgid");
-
-            // Does the element contain all tileset data or reference an external tileset?
-            XAttribute attrSource = elem.Attribute("source");
-            if (attrSource == null)
-            {
-                ParseInternalTileset(elem, firstId);
-            }
-            else
-            {
-                // Need to load the tileset data from an external file first
-                // Then we'll parse it as if it's internal data
-                Program.WriteVerbose(elem.ToString());
-                ParseExternalTileset(attrSource.Value, firstId);
-            }
-        }
-
-        // This method is called eventually for external tilesets too
-        // Only the gid attribute has been consumed at this point for the tileset
-        private void ParseInternalTileset(XElement elemTileset, uint firstId)
-        {
-            string tilesetName = TmxHelper.GetAttributeAsString(elemTileset, "name");
-
-            Program.WriteLine("Parse internal tileset '{0}' (gid = {1}) ...", tilesetName, firstId);
-            Program.WriteVerbose(elemTileset.ToString());
-
-            int tileWidth = TmxHelper.GetAttributeAsInt(elemTileset, "tilewidth");
-            int tileHeight = TmxHelper.GetAttributeAsInt(elemTileset, "tileheight");
-            int spacing = TmxHelper.GetAttributeAsInt(elemTileset, "spacing", 0);
-            int margin = TmxHelper.GetAttributeAsInt(elemTileset, "margin", 0);
-
-            PointF tileOffset = PointF.Empty;
-            XElement xmlTileOffset = elemTileset.Element("tileoffset");
-            if (xmlTileOffset != null)
-            {
-                tileOffset.X = TmxHelper.GetAttributeAsInt(xmlTileOffset, "x");
-                tileOffset.Y = TmxHelper.GetAttributeAsInt(xmlTileOffset, "y");
-            }
-
-            IList<TmxTile> tilesToAdd = new List<TmxTile>();
-
-            // Tilesets may have an image for all tiles within it, or it may have an image per tile
-            if (elemTileset.Element("image") != null)
-            {
-                TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"));
-
-                // Create all the tiles
-                // This is a bit complicated because of spacing and margin
-                // (Margin is ignored from Width and Height)
-                for (int end_y = margin + tileHeight; end_y <= tmxImage.Size.Height; end_y += spacing + tileHeight)
-                {
-                    for (int end_x = margin + tileWidth; end_x <= tmxImage.Size.Width; end_x += spacing + tileWidth)
-                    {
-                        uint localId = (uint) tilesToAdd.Count();
-                        uint globalId = firstId + localId;
-                        TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
-                        tile.Offset = tileOffset;
-                        tile.SetTileSize(tileWidth, tileHeight);
-                        tile.SetLocationOnSource(end_x - tileWidth, end_y - tileHeight);
-                        tilesToAdd.Add(tile);
-                    }
-                }
-            }
-            else
-            {
-                // Each tile will have it's own image
-                foreach (var t in elemTileset.Elements("tile"))
-                {
-                    TmxImage tmxImage = TmxImage.FromXml(t.Element("image"));
-
-                    uint localId = (uint)tilesToAdd.Count();
-
-                    // Local Id can be overridden by the tile element
-                    // This is because tiles can be removed from the tileset, so we won'd always have a zero-based index
-                    localId = TmxHelper.GetAttributeAsUInt(t, "id", localId);
-
-                    uint globalId = firstId + localId;
-                    TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
-                    tile.Offset = tileOffset;
-                    tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
-                    tile.SetLocationOnSource(0, 0);
-                    tilesToAdd.Add(tile);
-                }
-            }
-
-            StringBuilder builder = new StringBuilder();
-            foreach (TmxTile tile in tilesToAdd)
-            {
-                builder.AppendFormat("{0}", tile.ToString());
-                if (tile != tilesToAdd.Last()) builder.Append("\n");
-                this.Tiles[tile.GlobalId] = tile;
-            }
-            Program.WriteLine("Added {0} tiles", tilesToAdd.Count);
-            Program.WriteVerbose(builder.ToString());
-
-            // Add any extra data to tiles
-            foreach (var elemTile in elemTileset.Elements("tile"))
-            {
-                int localTileId = TmxHelper.GetAttributeAsInt(elemTile, "id");
-                var tiles = from t in this.Tiles
-                            where t.Value.GlobalId == localTileId + firstId
-                            select t.Value;
-
-                // Note that some old tile data may be sticking around
-                if (tiles.Count() == 0)
-                {
-                    Program.WriteWarning("Tile '{0}' in tileset '{1}' does not exist but there is tile data for it.\n{2}", localTileId, tilesetName, elemTile.ToString());
-                }
-                else
-                {
-                    tiles.First().ParseTileXml(elemTile, this, firstId);
-                }
-            }
-        }
-
-        private void ParseExternalTileset(string tsxPath, uint firstId)
-        {
-            string fullTsxPath = Path.GetFullPath(tsxPath);
-            using (ChDir chdir = new ChDir(fullTsxPath))
-            {
-                XDocument tsx = LoadDocument(fullTsxPath);
-                ParseInternalTileset(tsx.Root, firstId);
-            }
-        }
-
-        private void ParseTilesetFromImageLayer(XElement elemImageLayer)
-        {
-            string tilesetName = TmxHelper.GetAttributeAsString(elemImageLayer, "name");
-
-            XElement xmlImage = elemImageLayer.Element("image");
-            if (xmlImage == null)
-            {
-                Program.WriteWarning("Image Layer '{0}' has no image assigned.", tilesetName);
-                return;
-            }
-
-            TmxImage tmxImage = TmxImage.FromXml(xmlImage);
-
-            // The "firstId" is is always one more than all the tiles that we've already parsed (which may be zero)
-            uint firstId = 1;
-            if (this.Tiles.Count > 0)
-            {
-                firstId = this.Tiles.Max(t => t.Key) + 1;
-            }
-            
-            uint localId = 1;
-            uint globalId = firstId + localId;
-
-            TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
-            tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
-            tile.SetLocationOnSource(0, 0);
-            this.Tiles[tile.GlobalId] = tile;
-        }
-
-        private void ParseAllLayers(XDocument doc)
-        {
-            Program.WriteLine("Parsing layer elements ...");
-
-            // Parse "layer"s and "imagelayer"s
-            var layers = (from item in doc.Descendants()
-                          where (item.Name == "layer" || item.Name == "imagelayer")
-                          select item).ToList();
-
-            foreach (var lay in layers)
-            {
-                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this);
-
-                // Layers may be ignored
-                if (tmxLayer.Ignore == TmxLayer.IgnoreSettings.True)
-                {
-                    // We don't care about this layer
-                    Program.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.Name);
-                    continue;
-                }
-
-                this.Layers.Add(tmxLayer);
-            }
-        }
-
-        private void ParseAllObjectGroups(XDocument doc)
-        {
-            Program.WriteLine("Parsing objectgroup elements ...");
-            var groups = from item in doc.Root.Elements("objectgroup")
-                         select item;
-
-            foreach (var g in groups)
-            {
-                TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
-                this.ObjectGroups.Add(tmxObjectGroup);
-            }
-        }
-
-        private void ParseCompleted()
-        {
-            // Every "layer type" instance needs its sort ordering figured out
-            var layers = new List<TmxLayerBase>();
-            layers.AddRange(this.Layers);
-            layers.AddRange(this.ObjectGroups);
-
-            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
-            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
-
-            for (int i = 0; i < layers.Count(); ++i)
-            {
-                TmxLayerBase layer = layers[i];
-                layer.SortingLayerName = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
-                layer.SortingOrder = layer.Properties.GetPropertyValueAsInt("unity:sortingOrder", i);
-            }
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxMath.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-// Helper utitlities for performing math within a Tiled context
-namespace Tiled2Unity
-{
-    class TmxMath
-    {
-        static public readonly uint FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
-        static public readonly uint FLIPPED_VERTICALLY_FLAG = 0x40000000;
-        static public readonly uint FLIPPED_DIAGONALLY_FLAG = 0x20000000;
-
-        static public uint GetTileIdWithoutFlags(uint tileId)
-        {
-            return tileId & ~(FLIPPED_HORIZONTALLY_FLAG | FLIPPED_VERTICALLY_FLAG | FLIPPED_DIAGONALLY_FLAG);
-        }
-
-        static public bool IsTileFlippedDiagonally(uint tileId)
-        {
-            return (tileId & FLIPPED_DIAGONALLY_FLAG) != 0;
-        }
-
-        static public bool IsTileFlippedHorizontally(uint tileId)
-        {
-            return (tileId & FLIPPED_HORIZONTALLY_FLAG) != 0;
-        }
-
-        static public bool IsTileFlippedVertically(uint tileId)
-        {
-            return (tileId & FLIPPED_VERTICALLY_FLAG) != 0;
-        }
-
-        static public void RotatePoints(PointF[] points, TmxObject tmxObject)
-        {
-            TranslatePoints(points, -tmxObject.Position.X, -tmxObject.Position.Y);
-
-            TmxRotationMatrix rotate = new TmxRotationMatrix(-tmxObject.Rotation);
-            rotate.TransformPoints(points);
-
-            TranslatePoints(points, tmxObject.Position.X, tmxObject.Position.Y);
-        }
-
-        static public void TransformPoints(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
-        {
-            // Put the points into origin/local space
-            TranslatePoints(points, -origin.X, -origin.Y);
-
-            TmxRotationMatrix rotate = new TmxRotationMatrix();
-
-            // Apply the flips/rotations (order matters)
-            if (horizontal)
-            {
-                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
-                rotate = TmxRotationMatrix.Multiply(h, rotate);
-            }
-            if (vertical)
-            {
-                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
-                rotate = TmxRotationMatrix.Multiply(v, rotate);
-            }
-            if (diagonal)
-            {
-                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
-                rotate = TmxRotationMatrix.Multiply(d, rotate);
-            }
-
-            // Apply the combined flip/rotate transformation
-            rotate.TransformPoints(points);
-
-            // Put points back into world space
-            TranslatePoints(points, origin.X, origin.Y);
-        }
-
-        // Hack function to do diaonal flip first in transformations
-        static public void TransformPoints_DiagFirst(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
-        {
-            // Put the points into origin/local space
-            TranslatePoints(points, -origin.X, -origin.Y);
-
-            TmxRotationMatrix rotate = new TmxRotationMatrix();
-
-            // Apply the flips/rotations (order matters)
-            if (diagonal)
-            {
-                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
-                rotate = TmxRotationMatrix.Multiply(d, rotate);
-            }
-            if (horizontal)
-            {
-                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
-                rotate = TmxRotationMatrix.Multiply(h, rotate);
-            }
-            if (vertical)
-            {
-                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
-                rotate = TmxRotationMatrix.Multiply(v, rotate);
-            }
-
-            // Apply the combined flip/rotate transformation
-            rotate.TransformPoints(points);
-
-            // Put points back into world space
-            TranslatePoints(points, origin.X, origin.Y);
-        }
-
-        static public void TranslatePoints(PointF[] points, float tx, float ty)
-        {
-            TranslatePoints(points, new PointF(tx, ty));
-        }
-
-        static public void TranslatePoints(PointF[] points, PointF translate)
-        {
-            SizeF trans = new SizeF(translate.X, translate.Y);
-            for (int p = 0; p < points.Length; ++p)
-            {
-                points[p] = PointF.Add(points[p], trans);
-            }
-        }
-
-        static public bool DoStaggerX(TmxMap tmxMap, int x)
-        {
-            int staggerX = (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X) ? 1 : 0;
-            int staggerEven = (tmxMap.StaggerIndex == TmxMap.MapStaggerIndex.Even) ? 1 : 0;
-
-            return staggerX != 0 && ((x & 1) ^ staggerEven) != 0;
-        }
-
-        static public bool DoStaggerY(TmxMap tmxMap, int y)
-        {
-            int staggerX = (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X) ? 1 : 0;
-            int staggerEven = (tmxMap.StaggerIndex == TmxMap.MapStaggerIndex.Even) ? 1 : 0;
-
-            return staggerX == 0 && ((y & 1) ^ staggerEven) != 0;
-        }
-
-        static public Point TileCornerInGridCoordinates(TmxMap tmxMap, int x, int y)
-        {
-            // Support different map display types (orthographic, isometric, etc..)
-            // Note: simulates "tileToScreenCoords" function from Tiled source
-            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
-            {
-                Point point = Point.Empty;
-
-                int origin_x = tmxMap.Height * tmxMap.TileWidth / 2;
-                point.X = (x - y) * tmxMap.TileWidth / 2 + origin_x;
-                point.Y = (x + y) * tmxMap.TileHeight / 2;
-
-                return point;
-            }
-            else if (tmxMap.Orientation == TmxMap.MapOrientation.Staggered || tmxMap.Orientation == TmxMap.MapOrientation.Hexagonal)
-            {
-                Point point = Point.Empty;
-
-                int tileWidth = tmxMap.TileWidth & ~1;
-                int tileHeight = tmxMap.TileHeight & ~1;
-
-                int sideLengthX = tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X ? tmxMap.HexSideLength : 0;
-                int sideLengthY = tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.Y ? tmxMap.HexSideLength : 0;
-
-                int sideOffsetX = (tileWidth - sideLengthX) / 2;
-                int sideOffsetY = (tileHeight - sideLengthY) / 2;
-
-                int columnWidth = sideOffsetX + sideLengthX;
-                int rowHeight = sideOffsetY + sideLengthY;
-
-                if (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X)
-                {
-                    point.Y = y * (tileHeight + sideLengthY);
-                    if (TmxMath.DoStaggerX(tmxMap, x))
-                    {
-                        point.Y += rowHeight;
-                    }
-
-                    point.X = x * columnWidth;
-                }
-                else
-                {
-                    point.X = x * (tileWidth + sideLengthX);
-                    if (TmxMath.DoStaggerY(tmxMap, y))
-                    {
-                        point.X += columnWidth;
-                    }
-
-                    point.Y = y * rowHeight;
-                }
-
-                point.Offset(tileWidth / 2, 0);
-                return point;
-            }
-
-            // Default orthographic orientation
-            return new Point(x * tmxMap.TileWidth, y * tmxMap.TileHeight);
-        }
-
-        static public Point TileCornerInScreenCoordinates(TmxMap tmxMap, int x, int y)
-        {
-            Point point = TileCornerInGridCoordinates(tmxMap, x, y);
-
-            if (tmxMap.Orientation != TmxMap.MapOrientation.Orthogonal)
-            {
-                point.Offset(-tmxMap.TileWidth / 2, 0);
-            }
-
-            return point;
-        }
-
-        static public PointF ObjectPointFToMapSpace(TmxMap tmxMap, float x, float y)
-        {
-            return ObjectPointFToMapSpace(tmxMap, new PointF(x, y));
-        }
-
-        static public PointF ObjectPointFToMapSpace(TmxMap tmxMap, PointF pt)
-        {
-            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
-            {
-                PointF xf = PointF.Empty;
-
-                float origin_x = tmxMap.Height * tmxMap.TileWidth * 0.5f;
-                float tile_y = pt.Y / tmxMap.TileHeight;
-                float tile_x = pt.X / tmxMap.TileHeight;
-
-                xf.X = (tile_x - tile_y) * tmxMap.TileWidth * 0.5f + origin_x;
-                xf.Y = (tile_x + tile_y) * tmxMap.TileHeight * 0.5f;
-                return xf;
-            }
-
-            // Other maps types don't transform object points
-            return pt;
-        }
-
-
-        public static Point AddPoints(Point a, Point b)
-        {
-            return new Point(a.X + b.X, a.Y + b.Y);
-        }
-
-        public static PointF AddPoints(PointF a, PointF b)
-        {
-            return new PointF(a.X + b.X, a.Y + b.Y);
-        }
-
-        public static PointF ScalePoints(PointF p, float s)
-        {
-            return new PointF(p.X * s, p.Y * s);
-        }
-
-        public static List<PointF> GetPointsInMapSpace(TmxMap tmxMap, TmxHasPoints objectWithPoints)
-        {
-            PointF local = TmxMath.ObjectPointFToMapSpace(tmxMap, 0, 0);
-            local.X = -local.X;
-            local.Y = -local.Y;
-
-            List<PointF> xfPoints = objectWithPoints.Points.Select(pt => TmxMath.ObjectPointFToMapSpace(tmxMap, pt)).ToList();
-            xfPoints = xfPoints.Select(pt => TmxMath.AddPoints(pt, local)).ToList();
-            return xfPoints;
-        }
-
-        // We don't want ugly floating point issues. Take for granted that sanitized values can be rounded to nearest 1/256th of value
-        public static float Sanitize(float v)
-        {
-            return (float)Math.Round(v * 256) / 256.0f;
-        }
-
-        public static PointF Sanitize(PointF pt)
-        {
-            return new PointF(Sanitize(pt.X), Sanitize(pt.Y));
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxMesh.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.IO;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    // There are no mesh components to a TMX file, this is for convenience in mesh-ifying Tiled layers
-    public class TmxMesh
-    {
-        // Unity meshes have a limit on the number of vertices they can contain (65534)
-        // Each face of a mesh has 4 vertices so we are limited to 65534 / 4 = 16383 faces
-        // Note: In some cases, Unity still splits up a mesh (incorrectly) into "1 parts" with 16383 faces so we go with 16382 faces to be extra safe.
-        private static readonly int MaxNumberOfTiles = 16382;
-
-        public string UniqueMeshName { get; private set; }
-        public string ObjectName { get; private set; }
-        public TmxImage TmxImage { get; private set; }
-        public uint[] TileIds { get; private set; }
-
-        public int StartingTileIndex { get; private set; }
-        public int NumberOfTiles { get; private set; }
-
-        // Animation properties
-        public int StartTimeMs { get; private set; }
-        public int DurationMs { get; private set; }
-        public int FullAnimationDurationMs { get; private set; }
-
-        public bool IsMeshFull()
-        {
-            return this.NumberOfTiles >= TmxMesh.MaxNumberOfTiles;
-        }
-
-        public uint GetTileIdAt(int tileIndex)
-        {
-            int fauxIndex = tileIndex - this.StartingTileIndex;
-            if (fauxIndex < 0 || fauxIndex >= this.TileIds.Length)
-            {
-                return 0;
-            }
-
-            return this.TileIds[fauxIndex];
-        }
-
-        private void AddTile(int index, uint tileId)
-        {
-            // Assumes non-zero tileIds
-            this.TileIds[index] = tileId;
-            this.NumberOfTiles++;
-
-            // Is the mesh "full" now
-            if (IsMeshFull())
-            {
-                List<uint> tiles = this.TileIds.ToList();
-
-                // Remove leading batch of zero tiles
-                int firstNonZero = tiles.FindIndex(t => t != 0);
-                if (firstNonZero > 0)
-                {
-                    this.StartingTileIndex = firstNonZero;
-                    tiles.RemoveRange(0, firstNonZero);
-                }
-                
-                // Remove the trailing batch of zero tiles
-                tiles.Reverse();
-                firstNonZero = tiles.FindIndex(t => t != 0);
-                if (firstNonZero > 0)
-                {
-                    tiles.RemoveRange(0, firstNonZero);
-                }
-
-                // Reverse the tiles back
-                tiles.Reverse();
-
-                this.TileIds = tiles.ToArray();
-            }
-        }
-
-        // Splits a layer into TmxMesh instances
-        public static List<TmxMesh> ListFromTmxLayer(TmxLayer layer)
-        {
-            List<TmxMesh> meshes = new List<TmxMesh>();
-
-            for (int i = 0; i < layer.TileIds.Count(); ++i)
-            {
-                // Copy the tile unto the mesh that uses the same image
-                // (In other words, we are grouping tiles by images into a mesh)
-                uint tileId = layer.TileIds[i];
-                TmxTile tile = layer.TmxMap.GetTileFromTileId(tileId);
-                if (tile == null)
-                    continue;
-
-                int timeMs = 0;
-                foreach (var frame in tile.Animation.Frames)
-                {
-                    uint frameTileId = frame.GlobalTileId;
-
-                    // Have to put any rotations/flipping from the source tile into this one
-                    frameTileId |= (tileId & TmxMath.FLIPPED_HORIZONTALLY_FLAG);
-                    frameTileId |= (tileId & TmxMath.FLIPPED_VERTICALLY_FLAG);
-                    frameTileId |= (tileId & TmxMath.FLIPPED_DIAGONALLY_FLAG);
-
-                    // Find a mesh to stick this tile into (if it exists)
-                    TmxMesh mesh = meshes.Find(m => m.CanAddFrame(tile, timeMs, frame.DurationMs));
-                    if (mesh == null)
-                    {
-                        // Create a new mesh and add it to our list
-                        mesh = new TmxMesh();
-                        mesh.TileIds = new uint[layer.TileIds.Count()];
-                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
-                        mesh.TmxImage = tile.TmxImage;
-
-                        // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
-                        mesh.StartTimeMs = timeMs;
-                        mesh.DurationMs = frame.DurationMs;
-                        mesh.FullAnimationDurationMs = tile.Animation.TotalTimeMs;
-
-                        mesh.ObjectName = Path.GetFileNameWithoutExtension(tile.TmxImage.AbsolutePath);
-                        if (mesh.DurationMs != 0)
-                        {
-                            // Decorate the name a bit with some animation details for the frame
-                            mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
-                        }
-
-                        meshes.Add(mesh);
-                    }
-
-                    // This mesh contains this tile
-                    mesh.AddTile(i, frameTileId);
-
-                    // Advance time
-                    timeMs += frame.DurationMs;
-                }
-            }
-
-            return meshes;
-        }
-
-        // Creates a TmxMesh from a tile (for tile objects)
-        public static List<TmxMesh> FromTmxTile(TmxTile tmxTile, TmxMap tmxMap)
-        {
-            List<TmxMesh> meshes = new List<TmxMesh>();
-
-            int timeMs = 0;
-            foreach (var frame in tmxTile.Animation.Frames)
-            {
-                uint frameTileId = frame.GlobalTileId;
-                TmxTile frameTile = tmxMap.Tiles[frameTileId];
-
-                TmxMesh mesh = new TmxMesh();
-                mesh.TileIds = new uint[1];
-                mesh.TileIds[0] = frameTileId;
-
-                mesh.UniqueMeshName = String.Format("mesh_tile_{0}", TmxMath.GetTileIdWithoutFlags(frameTileId).ToString("D4"));
-                mesh.TmxImage = frameTile.TmxImage;
-                mesh.ObjectName = "tile_obj";
-
-                // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
-                mesh.StartTimeMs = timeMs;
-                mesh.DurationMs = frame.DurationMs;
-                mesh.FullAnimationDurationMs = tmxTile.Animation.TotalTimeMs;
-
-                if (mesh.DurationMs != 0)
-                {
-                    // Decorate the name a bit with some animation details for the frame
-                    mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
-                }
-
-                // Advance time
-                timeMs += frame.DurationMs;
-
-                // Add the animation frame to our list of meshes
-                meshes.Add(mesh);
-            }
-
-            return meshes;
-        }
-
-        private bool CanAddFrame(TmxTile tile, int startMs, int durationMs)
-        {
-            if (IsMeshFull())
-                return false;
-
-            if (this.TmxImage != tile.TmxImage)
-                return false;
-
-            if (this.StartTimeMs != startMs)
-                return false;
-
-            if (this.DurationMs != durationMs)
-                return false;
-
-            return true;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObject.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    public abstract partial class TmxObject : TmxHasProperties
-    {
-        public string Name { get; private set; }
-        public string Type { get; private set; }
-        public bool Visible { get; private set; }
-        public PointF Position { get; private set; }
-        public SizeF Size { get; private set; }
-        public float Rotation { get; private set; }
-        public TmxProperties Properties { get; private set; }
-        public TmxObjectGroup ParentObjectGroup { get; private set; }
-
-        public string GetNonEmptyName()
-        {
-            if (String.IsNullOrEmpty(this.Name))
-                return InternalGetDefaultName();
-            return this.Name;
-        }
-
-        public override string ToString()
-        {
-            return String.Format("{0} {1} pos={2}, size={3} rot = {4}", GetType().Name, GetNonEmptyName(), this.Position, this.Size, this.Rotation);
-        }
-
-        public void BakeRotation()
-        {
-            // Rotate (0, 0)
-            PointF[] pointfs = new PointF[1] { PointF.Empty };
-            TmxMath.RotatePoints(pointfs, this);
-
-            // Bake that rotation into our position, sanitizing the result
-            float x = this.Position.X - pointfs[0].X;
-            float y = this.Position.Y - pointfs[0].Y;
-            this.Position = new PointF(x, y);
-            this.Position = TmxMath.Sanitize(this.Position);
-
-            // Null out our rotation
-            this.Rotation = 0;
-        }
-
-        static protected void CopyBaseProperties(TmxObject from, TmxObject to)
-        {
-            to.Name = from.Name;
-            to.Type = from.Type;
-            to.Visible = from.Visible;
-            to.Position = from.Position;
-            to.Size = from.Size;
-            to.Rotation = from.Rotation;
-            to.Properties = from.Properties;
-            to.ParentObjectGroup = from.ParentObjectGroup;
-        }
-
-        public abstract RectangleF GetWorldBounds();
-        protected abstract void InternalFromXml(XElement xml, TmxMap tmxMap);
-        protected abstract string InternalGetDefaultName();
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObject.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    partial class TmxObject
-    {
-        public static TmxObject FromXml(XElement xml, TmxObjectGroup tmxObjectGroup, TmxMap tmxMap)
-        {
-            Program.WriteLine("Parsing object ...");
-            Program.WriteVerbose(xml.ToString());
-
-            // What kind of TmxObject are we creating?
-            TmxObject tmxObject = null;
-
-            if (xml.Element("ellipse") != null)
-            {
-                tmxObject = new TmxObjectEllipse();
-            }
-            else if (xml.Element("polygon") != null)
-            {
-                tmxObject = new TmxObjectPolygon();
-            }
-            else if (xml.Element("polyline") != null)
-            {
-                tmxObject = new TmxObjectPolyline();
-            }
-            else if (xml.Attribute("gid") != null)
-            {
-                uint gid = TmxHelper.GetAttributeAsUInt(xml, "gid");
-                gid = TmxMath.GetTileIdWithoutFlags(gid);
-                if (tmxMap.Tiles.ContainsKey(gid))
-                {
-                    tmxObject = new TmxObjectTile();
-                }
-                else
-                {
-                    // For some reason, the tile is not in any of our tilesets
-                    // Warn the user and use a rectangle
-                    Program.WriteWarning("Tile Id {0} not found in tilesets. Using a rectangle instead.\n{1}", gid, xml.ToString());
-                    tmxObject = new TmxObjectRectangle();
-                }
-            }
-            else
-            {
-                // Just a rectangle
-                tmxObject = new TmxObjectRectangle();
-            }
-
-            // Data found on every object type
-            tmxObject.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
-            tmxObject.Type = TmxHelper.GetAttributeAsString(xml, "type", "");
-            tmxObject.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
-            tmxObject.ParentObjectGroup = tmxObjectGroup;
-
-            float x = TmxHelper.GetAttributeAsFloat(xml, "x");
-            float y = TmxHelper.GetAttributeAsFloat(xml, "y");
-            float w = TmxHelper.GetAttributeAsFloat(xml, "width", 0);
-            float h = TmxHelper.GetAttributeAsFloat(xml, "height", 0);
-            float r = TmxHelper.GetAttributeAsFloat(xml, "rotation", 0);
-            tmxObject.Position = new System.Drawing.PointF(x, y);
-            tmxObject.Size = new System.Drawing.SizeF(w, h);
-            tmxObject.Rotation = r;
-
-            tmxObject.Properties = TmxProperties.FromXml(xml);
-
-            tmxObject.InternalFromXml(xml, tmxMap);
-
-            return tmxObject;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectEllipse.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Diagnostics;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    class TmxObjectEllipse : TmxObject
-    {
-        public bool IsCircle()
-        {
-            return (this.Size.Width == this.Size.Height);
-        }
-
-        public float Radius
-        {
-            get
-            {
-                Debug.Assert(IsCircle());
-                return this.Size.Width * 0.5f;
-            }
-        }
-
-        public override System.Drawing.RectangleF GetWorldBounds()
-        {
-            return new System.Drawing.RectangleF(this.Position, this.Size);
-        }
-
-        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
-        {
-            // No extra data for ellipses
-        }
-
-        protected override string InternalGetDefaultName()
-        {
-            if (IsCircle())
-                return "CircleObject";
-            return "EllipseObject";
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectGroup.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public partial class TmxObjectGroup : TmxLayerBase
-    {
-        public string Name { get; private set; }
-        public bool Visible { get; private set; }
-        public List<TmxObject> Objects { get; private set; }
-        public Color Color { get; private set; }
-        public PointF Offset { get; private set; }
-
-        public TmxObjectGroup()
-        {
-            this.Objects = new List<TmxObject>();
-        }
-
-        public RectangleF GetWorldBounds(PointF translation)
-        {
-            RectangleF bounds = new RectangleF();
-            foreach (var obj in this.Objects)
-            {
-                RectangleF objBounds = obj.GetWorldBounds();
-                objBounds.Offset(translation);
-                bounds = RectangleF.Union(bounds, objBounds);
-            }
-            return bounds;
-        }
-
-        public RectangleF GetWorldBounds()
-        {
-            return GetWorldBounds(new PointF(0, 0));
-        }
-
-        public override string ToString()
-        {
-            return String.Format("{{ ObjectGroup name={0}, numObjects={1} }}", this.Name, this.Objects.Count());
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectGroup.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Diagnostics;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    public partial class TmxObjectGroup
-    {
-        public static TmxObjectGroup FromXml(XElement xml, TmxMap tmxMap)
-        {
-            Debug.Assert(xml.Name == "objectgroup");
-
-            TmxObjectGroup tmxObjectGroup = new TmxObjectGroup();
-
-            // Order within Xml file is import for layer types
-            tmxObjectGroup.XmlElementIndex = xml.NodesBeforeSelf().Count();
-
-            tmxObjectGroup.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
-            tmxObjectGroup.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
-            tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
-            tmxObjectGroup.Properties = TmxProperties.FromXml(xml);
-
-            PointF offset = new PointF(0, 0);
-            offset.X = TmxHelper.GetAttributeAsFloat(xml, "offsetx", 0);
-            offset.Y = TmxHelper.GetAttributeAsFloat(xml, "offsety", 0);
-            tmxObjectGroup.Offset = offset;
-
-            // Get all the objects
-            Program.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
-            var objects = from obj in xml.Elements("object")
-                          select TmxObject.FromXml(obj, tmxObjectGroup, tmxMap);
-
-            tmxObjectGroup.Objects = objects.ToList();
-
-            // Are we using a unity:layer override?
-            tmxObjectGroup.UnityLayerOverrideName = tmxObjectGroup.Properties.GetPropertyValueAsString("unity:layer", "");
-
-            return tmxObjectGroup;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectPolygon.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Diagnostics;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    class TmxObjectPolygon : TmxObject, TmxHasPoints
-    {
-        public List<PointF> Points { get; set; }
-
-        public TmxObjectPolygon()
-        {
-            this.Points = new List<PointF>();
-        }
-
-        public override RectangleF GetWorldBounds()
-        {
-            float xmin = float.MaxValue;
-            float xmax = float.MinValue;
-            float ymin = float.MaxValue;
-            float ymax = float.MinValue;
-
-            foreach (var p in this.Points)
-            {
-                xmin = Math.Min(xmin, p.X);
-                xmax = Math.Max(xmax, p.X);
-                ymin = Math.Min(ymin, p.Y);
-                ymax = Math.Max(ymax, p.Y);
-            }
-
-            RectangleF bounds = new RectangleF(xmin, ymin, xmax - xmin, ymax - ymin);
-            bounds.Offset(this.Position);
-            return bounds;
-        }
-
-        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
-        {
-            var points = from pt in xml.Element("polygon").Attribute("points").Value.Split(' ')
-                         let x = float.Parse(pt.Split(',')[0])
-                         let y = float.Parse(pt.Split(',')[1])
-                         select new PointF(x, y);
-
-            this.Points = points.ToList();
-
-            // Test if polygons are counter clocksise
-            // From: http://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order
-            float sum = 0.0f;
-            for (int i = 1; i < this.Points.Count(); i++)
-            {
-                var p1 = this.Points[i - 1];
-                var p2 = this.Points[i];
-
-                float v = (p2.X - p1.X) * -(p2.Y + p1.Y);
-                sum += v;
-            }
-
-            if (sum < 0)
-            {
-                // Winding of polygons is counter-clockwise. Reverse the list.
-                this.Points.Reverse();
-            }
-        }
-
-        protected override string InternalGetDefaultName()
-        {
-            return "PolygonObject";
-        }
-
-
-        public override string ToString()
-        {
-            StringBuilder pts = new StringBuilder();
-            if (this.Points == null)
-            {
-                pts.Append("<empty>");
-            }
-            else
-            {
-                foreach (var p in this.Points)
-                {
-                    pts.AppendFormat("({0}, {1})", p.X, p.Y);
-                    if (p != this.Points.Last())
-                    {
-                        pts.AppendFormat(", ");
-                    }
-                }
-            }
-
-            return String.Format("{0} {1} {2} points=({3})", GetType().Name, GetNonEmptyName(), this.Position, pts.ToString());
-        }
-
-        public bool ArePointsClosed()
-        {
-            return true;
-        }
-
-        static public TmxObjectPolygon FromRectangle(TmxMap tmxMap, TmxObjectRectangle tmxRectangle)
-        {
-            TmxObjectPolygon tmxPolygon = new TmxObjectPolygon();
-            TmxObject.CopyBaseProperties(tmxRectangle, tmxPolygon);
-
-            tmxPolygon.Points = tmxRectangle.Points;
-
-            return tmxPolygon;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectPolyline.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Diagnostics;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    class TmxObjectPolyline : TmxObject, TmxHasPoints
-    {
-        public List<PointF> Points { get; set; }
-
-        public TmxObjectPolyline()
-        {
-            this.Points = new List<PointF>();
-        }
-
-        public override RectangleF GetWorldBounds()
-        {
-            float xmin = float.MaxValue;
-            float xmax = float.MinValue;
-            float ymin = float.MaxValue;
-            float ymax = float.MinValue;
-
-            foreach (var p in this.Points)
-            {
-                xmin = Math.Min(xmin, p.X);
-                xmax = Math.Max(xmax, p.X);
-                ymin = Math.Min(ymin, p.Y);
-                ymax = Math.Max(ymax, p.Y);
-            }
-
-            RectangleF bounds = new RectangleF(xmin, ymin, xmax - xmin, ymax - ymin);
-            bounds.Offset(this.Position);
-            return bounds;
-        }
-
-        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
-        {
-            Debug.Assert(xml.Name == "object");
-            Debug.Assert(xml.Element("polyline") != null);
-
-            var points = from pt in xml.Element("polyline").Attribute("points").Value.Split(' ')
-                         let x = float.Parse(pt.Split(',')[0])
-                         let y = float.Parse(pt.Split(',')[1])
-                         select new PointF(x, y);
-
-            this.Points = points.ToList();
-        }
-
-        protected override string InternalGetDefaultName()
-        {
-            return "PolylineObject";
-        }
-
-        public bool ArePointsClosed()
-        {
-            // Lines are open
-            return false;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectRectangle.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    class TmxObjectRectangle : TmxObjectPolygon
-    {
-        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
-        {
-            this.Points = new List<System.Drawing.PointF>();
-            this.Points.Add(new PointF(0, 0));
-            this.Points.Add(new PointF(this.Size.Width, 0));
-            this.Points.Add(new PointF(this.Size.Width, this.Size.Height));
-            this.Points.Add(new PointF(0, this.Size.Height));
-
-            if (this.Size.Width == 0 || this.Size.Height == 0)
-            {
-                Program.WriteWarning("Warning: Rectangle has zero width or height in object group\n{0}", xml.Parent.ToString());
-            }
-        }
-
-        protected override string InternalGetDefaultName()
-        {
-            return "RectangleObject";
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectTile.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    class TmxObjectTile : TmxObject
-    {
-        public TmxTile Tile { get; private set; }
-        public bool FlippedHorizontal { get; private set; }
-        public bool FlippedVertical { get; private set; }
-
-        public string SortingLayerName { get; private set; }
-        public int? SortingOrder { get; private set; }
-
-        public TmxObjectTile()
-        {
-            this.SortingLayerName = null;
-        }
-
-        public override System.Drawing.RectangleF GetWorldBounds()
-        {
-            RectangleF myBounds = new RectangleF(this.Position.X, this.Position.Y - this.Size.Height, this.Size.Width, this.Size.Height);
-
-            RectangleF groupBounds = this.Tile.ObjectGroup.GetWorldBounds(this.Position);
-            if (groupBounds.IsEmpty)
-            {
-                return myBounds;
-            }
-            RectangleF combinedBounds = RectangleF.Union(myBounds, groupBounds);
-            return combinedBounds;
-        }
-
-        public override string ToString()
-        {
-            return String.Format("{{ TmxObjectTile: name={0}, pos={1}, tile={2} }}", GetNonEmptyName(), this.Position, this.Tile);
-        }
-
-        public SizeF GetTileObjectScale()
-        {
-            float scaleX = this.Size.Width / this.Tile.TileSize.Width;
-            float scaleY = this.Size.Height / this.Tile.TileSize.Height;
-            return new SizeF(scaleX, scaleY);
-        }
-
-        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
-        {
-            // Get the tile
-            uint gid = TmxHelper.GetAttributeAsUInt(xml, "gid");
-            this.FlippedHorizontal = TmxMath.IsTileFlippedHorizontally(gid);
-            this.FlippedVertical = TmxMath.IsTileFlippedVertically(gid);
-            uint rawTileId = TmxMath.GetTileIdWithoutFlags(gid);
-
-            this.Tile = tmxMap.Tiles[rawTileId];
-
-            // The tile needs to have a mesh on it.
-            // Note: The tile may already be referenced by another TmxObjectTile instance, and as such will have its mesh data already made
-            if (this.Tile.Meshes.Count() == 0)
-            {
-                this.Tile.Meshes = TmxMesh.FromTmxTile(this.Tile, tmxMap);
-            }
-
-            // Check properties for layer placement
-            if (this.Properties.PropertyMap.ContainsKey("unity:sortingLayerName"))
-            {
-                this.SortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName");
-            }
-            if (this.Properties.PropertyMap.ContainsKey("unity:sortingOrder"))
-            {
-                this.SortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
-            }
-        }
-
-        protected override string InternalGetDefaultName()
-        {
-            return "TileObject";
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectType.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    // Has data for a single object type
-    public class TmxObjectType
-    {
-        public string Name { get; private set; }
-        public Color Color { get; private set; }
-        public Dictionary<string, TmxObjectTypeProperty> Properties { get; private set; }
-
-        public TmxObjectType()
-        {
-            this.Name = "";
-            this.Color = Color.Gray;
-            this.Properties = new Dictionary<string, TmxObjectTypeProperty>();
-        }
-
-        public static TmxObjectType FromXml(XElement xml)
-        {
-            TmxObjectType tmxObjectType = new TmxObjectType();
-
-            tmxObjectType.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
-            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.Gray);
-            tmxObjectType.Properties = TmxObjectTypeProperty.FromObjectTypeXml(xml);
-
-            return tmxObjectType;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectTypeProperty.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    public class TmxObjectTypeProperty
-    {
-        public string Name { get; private set; }
-        public TmxPropertyType Type { get; private set; }
-        public string Default { get; set; }
-
-        // Create a dictionary collection of Object Type Property instances from the parent xml element
-        public static Dictionary<string, TmxObjectTypeProperty> FromObjectTypeXml(XElement xmlObjectType)
-        {
-            Dictionary<string, TmxObjectTypeProperty> tmxObjectTypeProperties = new Dictionary<string, TmxObjectTypeProperty>();
-
-            foreach (var xmlProperty in xmlObjectType.Elements("property"))
-            {
-                TmxObjectTypeProperty tmxObjectTypeProperty = new TmxObjectTypeProperty();
-
-                tmxObjectTypeProperty.Name = TmxHelper.GetAttributeAsString(xmlProperty, "name", "");
-                tmxObjectTypeProperty.Type = TmxHelper.GetAttributeAsEnum(xmlProperty, "type", TmxPropertyType.String);
-                tmxObjectTypeProperty.Default = TmxHelper.GetAttributeAsString(xmlProperty, "default", "");
-
-                tmxObjectTypeProperties.Add(tmxObjectTypeProperty.Name, tmxObjectTypeProperty);
-            }
-
-            return tmxObjectTypeProperties;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxObjectTypes.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.IO;
-// using System.Linq;
-// using System.Text;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    // The "objecttypes.xml" file has project-specific data to be used with the TmxObject instances
-    public class TmxObjectTypes
-    {
-        public Dictionary<string, TmxObjectType> TmxObjectTypeMapping { get; private set; }
-
-        public TmxObjectTypes()
-        {
-            this.TmxObjectTypeMapping = new Dictionary<string, TmxObjectType>(StringComparer.InvariantCultureIgnoreCase);
-        }
-
-        public TmxObjectType GetValueOrDefault(string key)
-        {
-            if (this.TmxObjectTypeMapping.ContainsKey(key))
-            {
-                return this.TmxObjectTypeMapping[key];
-            }
-
-            return new TmxObjectType();
-        }
-
-        public TmxObjectType GetValueOrNull(string key)
-        {
-            if (key != null && this.TmxObjectTypeMapping.ContainsKey(key))
-            {
-                return this.TmxObjectTypeMapping[key];
-            }
-
-            return null;
-        }
-
-
-        public static TmxObjectTypes FromXmlFile(string xmlPath)
-        {
-            TmxObjectTypes xmlObjectTypes = new TmxObjectTypes();
-
-            XDocument doc = XDocument.Load(xmlPath);
-
-            foreach (var xml in doc.Element("objecttypes").Elements("objecttype"))
-            {
-                TmxObjectType tmxObjectType = TmxObjectType.FromXml(xml);
-                xmlObjectTypes.TmxObjectTypeMapping[tmxObjectType.Name] = tmxObjectType;
-            }
-
-            return xmlObjectTypes;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxProperties.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public partial class TmxProperties
-    {
-        public IDictionary<string, TmxProperty> PropertyMap { get; private set; }
-
-        public TmxProperties()
-        {
-            this.PropertyMap = new Dictionary<string, TmxProperty>(StringComparer.InvariantCultureIgnoreCase);
-        }
-
-        public string GetPropertyValueAsString(string name)
-        {
-            return this.PropertyMap[name].Value;
-        }
-
-        public string GetPropertyValueAsString(string name, string defaultValue)
-        {
-            if (this.PropertyMap.ContainsKey(name))
-                return this.PropertyMap[name].Value;
-            return defaultValue;
-        }
-
-        public int GetPropertyValueAsInt(string name)
-        {
-            try
-            {
-                return Convert.ToInt32(this.PropertyMap[name].Value);
-            }
-            catch (System.FormatException inner)
-            {
-                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name].Value);
-                throw new TmxException(message, inner);
-            }
-        }
-
-        public int GetPropertyValueAsInt(string name, int defaultValue)
-        {
-            if (this.PropertyMap.ContainsKey(name))
-                return GetPropertyValueAsInt(name);
-            return defaultValue;
-        }
-
-        public bool GetPropertyValueAsBoolean(string name)
-        {
-            bool asBoolean = false;
-            try
-            {
-                asBoolean = Convert.ToBoolean(this.PropertyMap[name].Value);
-            }
-            catch (FormatException)
-            {
-                Program.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name].Value);
-            }
-
-            return asBoolean;
-        }
-
-        public bool GetPropertyValueAsBoolean(string name, bool defaultValue)
-        {
-            if (this.PropertyMap.ContainsKey(name))
-                return GetPropertyValueAsBoolean(name);
-            return defaultValue;
-        }
-
-        public T GetPropertyValueAsEnum<T>(string name)
-        {
-            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name].Value);
-        }
-
-        public T GetPropertyValueAsEnum<T>(string name, T defaultValue)
-        {
-            if (this.PropertyMap.ContainsKey(name))
-                return GetPropertyValueAsEnum<T>(name);
-            return defaultValue;
-        }
-
-    } // end class
-} // end namespace
-
-// ----------------------------------------------------------------------
-// TmxProperties.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    public partial class TmxProperties
-    {
-        public static TmxProperties FromXml(XElement elem)
-        {
-            TmxProperties tmxProps = new TmxProperties();
-
-            var props = from elem1 in elem.Elements("properties")
-                        from elem2 in elem1.Elements("property")
-                        select new
-                        {
-                            Name = TmxHelper.GetAttributeAsString(elem2, "name"),
-                            Type = TmxHelper.GetAttributeAsEnum(elem2, "type", TmxPropertyType.String),
-
-                            // Value may be attribute or inner text
-                            Value = TmxHelper.GetAttributeAsString(elem2, "value", null) ?? elem2.Value,
-                        };
-
-            if (props.Count() > 0)
-            {
-                Program.WriteLine("Parse properites ...");
-                Program.WriteVerbose(elem.Element("properties").ToString());
-            }
-
-            foreach (var p in props)
-            {
-                tmxProps.PropertyMap[p.Name] = new TmxProperty { Name = p.Name, Type = p.Type, Value = p.Value };
-            }
-
-            return tmxProps;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxProperty.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public class TmxProperty
-    {
-        public string Name { get; set; }
-        public string Value { get; set; }
-        public TmxPropertyType Type { get; set; }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxPropertyType.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public enum TmxPropertyType
-    {
-        String,
-        Int,
-        Float,
-        Bool,
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxRotationMatrix.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-// This is a working man's rotation matrix
-// This keeps us from invoking the .NET GDI+ Matrix which causes issues on Mac builds
-namespace Tiled2Unity
-{
-    class TmxRotationMatrix
-    {
-        private float[,] m = new float[2,2] { { 1, 0 },
-                                              { 0, 1 } };
-
-        public TmxRotationMatrix()
-        {
-        }
-
-        public TmxRotationMatrix(float degrees)
-        {
-            double rads = degrees * Math.PI / 180.0f;
-            float cos = (float)Math.Cos(rads);
-            float sin = (float)Math.Sin(rads);
-
-            m[0, 0] = cos;
-            m[0, 1] = -sin;
-            m[1, 0] = sin;
-            m[1, 1] = cos;
-        }
-
-        public TmxRotationMatrix(float m00, float m01, float m10, float m11)
-        {
-            m[0, 0] = m00;
-            m[0, 1] = m01;
-            m[1, 0] = m10;
-            m[1, 1] = m11;
-        }
-
-        public float this[int i, int j]
-        {
-            get { return m[i, j]; }
-            set { m[i, j] = value; }
-        }
-
-        static public TmxRotationMatrix Multiply(TmxRotationMatrix M1, TmxRotationMatrix M2)
-        {
-            float m00 = M1[0, 0] * M2[0, 0] + M1[0, 1] * M2[1, 0];
-            float m01 = M1[0, 0] * M2[0, 1] + M1[0, 1] * M2[1, 1];
-            float m10 = M1[1, 0] * M2[0, 0] + M1[1, 1] * M2[1, 0];
-            float m11 = M1[1, 0] * M2[0, 1] + M1[1, 1] * M2[1, 1];
-            return new TmxRotationMatrix(m00, m01, m10, m11);
-        }
-
-        public void TransformPoint(ref PointF pt)
-        {
-            float x = pt.X * m[0, 0] + pt.Y * m[1, 0];
-            float y = pt.X * m[0, 1] + pt.Y * m[1, 1];
-            pt.X = x;
-            pt.Y = y;
-        }
-
-        public void TransformPoints(PointF[] points)
-        {
-            for (int i = 0; i < points.Length; ++i)
-            {
-                TransformPoint(ref points[i]);
-            }
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxTile.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-
-namespace Tiled2Unity
-{
-    public partial class TmxTile : TmxHasProperties
-    {
-        public uint GlobalId { get; private set; }
-        public uint LocalId { get; private set; }
-        public Size TileSize { get; private set; }
-        public PointF Offset { get; set; }
-        public TmxImage TmxImage { get; private set; }
-        public Point LocationOnSource { get; private set; }
-        public TmxProperties Properties { get; private set; }
-        public TmxObjectGroup ObjectGroup { get; private set; }
-        public TmxAnimation Animation { get; private set; }
-
-        // Some tiles may be represented as a mesh for tile objects (a list is needed for animations)
-        public List<TmxMesh> Meshes { get; set; }
-
-
-        public TmxTile(uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
-        {
-            this.GlobalId = globalId;
-            this.LocalId = localId;
-            this.TmxImage = tmxImage;
-            this.Properties = new TmxProperties();
-            this.ObjectGroup = new TmxObjectGroup();
-            this.Animation = TmxAnimation.FromTileId(globalId);
-            this.Meshes = new List<TmxMesh>();
-        }
-
-        public bool IsEmpty
-        {
-            get
-            {
-                return this.GlobalId == 0 && this.LocalId == 0;
-            }
-        }
-
-        public void SetTileSize(int width, int height)
-        {
-            this.TileSize = new Size(width, height);
-        }
-
-        public void SetLocationOnSource(int x, int y)
-        {
-            this.LocationOnSource = new Point(x, y);
-        }
-
-        public override string ToString()
-        {
-            return String.Format("{{id = {0}, source({1})}}", this.GlobalId, this.LocationOnSource);
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TmxTile.Xml.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Drawing;
-// using System.Linq;
-// using System.Text;
-// using System.Xml;
-// using System.Xml.Linq;
-
-namespace Tiled2Unity
-{
-    // partial class methods that build tile data from xml
-    partial class TmxTile
-    {
-        public void ParseTileXml(XElement elem, TmxMap tmxMap, uint firstId)
-        {
-            Program.WriteLine("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
-            Program.WriteVerbose(elem.ToString());
-
-            this.Properties = TmxProperties.FromXml(elem);
-
-            // Do we have an object group for this tile?
-            XElement elemObjectGroup = elem.Element("objectgroup");
-            if (elemObjectGroup != null)
-            {
-                this.ObjectGroup = TmxObjectGroup.FromXml(elemObjectGroup, tmxMap);
-                FixTileColliderObjects(tmxMap);
-            }
-
-            // Is this an animated tile?
-            XElement elemAnimation = elem.Element("animation");
-            if (elemAnimation != null)
-            {
-                this.Animation = TmxAnimation.FromXml(elemAnimation, firstId);
-            }
-        }
-
-        private void FixTileColliderObjects(TmxMap tmxMap)
-        {
-            // Objects inside of tiles are colliders that will be merged with the colliders on neighboring tiles.
-            // In order to promote this merging we have to perform the following clean up operations ...
-            // - All rectangles objects are made into polygon objects
-            // - All polygon objects will have their rotations burned into the polygon points (and Rotation set to zero)
-            // - All cooridinates will be "sanitized" to make up for floating point errors due to rotation and poor placement of colliders
-            // (The sanitation will round all numbers to the nearest 1/256th)
-
-            // Replace rectangles with polygons
-            for (int i = 0; i < this.ObjectGroup.Objects.Count; i++)
-            {
-                TmxObject tmxObject = this.ObjectGroup.Objects[i];
-                if (tmxObject is TmxObjectRectangle)
-                {
-                    TmxObjectPolygon tmxObjectPolygon = TmxObjectPolygon.FromRectangle(tmxMap, tmxObject as TmxObjectRectangle);
-                    this.ObjectGroup.Objects[i] = tmxObjectPolygon;
-                }
-            }
-
-            // Burn rotation into all polygon points, sanitizing the point locations as we go
-            foreach (TmxObject tmxObject in this.ObjectGroup.Objects)
-            {
-                TmxHasPoints tmxHasPoints = tmxObject as TmxHasPoints;
-                if (tmxHasPoints != null)
-                {
-                    var pointfs = tmxHasPoints.Points.ToArray();
-
-                    // Rotate our points by the rotation and position in the object
-                    TmxMath.RotatePoints(pointfs, tmxObject);
-
-                    // Sanitize our points to make up for floating point precision errors
-                    pointfs = pointfs.Select(TmxMath.Sanitize).ToArray();
-
-                    // Set the points back into the object
-                    tmxHasPoints.Points = pointfs.ToList();
-
-                    // Zero out our rotation
-                    tmxObject.BakeRotation();
-                }
-            }
-        }
-
-    }
-}
 
 // ----------------------------------------------------------------------
 // MultiValueDictionary.cs
@@ -5837,6 +2923,11 @@ namespace SD.Tools.Algorithmia.GeneralDataStructures
 // ----------------------------------------------------------------------
 // clipper.cs
 
+// NOTE: This was put into Tiled2Unity namesapce for two reasons
+//  a) So we could have our own version with use_lines enabled
+//  b) Because the Mac version also uses ClipperLib and we were getting name collisions
+
+
 /*******************************************************************************
 *                                                                              *
 * Author    :  Angus Johnson                                                   *
@@ -5897,7 +2988,7 @@ namespace SD.Tools.Algorithmia.GeneralDataStructures
 //using System.IO;            //debugging with streamReader & StreamWriter
 //using System.Windows.Forms; //debugging to clipboard
 
-namespace ClipperLib
+namespace Tiled2Unity.ClipperLib
 {
 
 #if use_int32
@@ -10576,1113 +7667,6 @@ namespace ClipperLib
     //------------------------------------------------------------------------------
 
 } //end ClipperLib namespace
-
-// ----------------------------------------------------------------------
-// Options.cs
-
-//
-// Options.cs
-//
-// Authors:
-//  Jonathan Pryor <jpryor@novell.com>
-//
-// Copyright (C) 2008 Novell (http://www.novell.com)
-//
-// Permission is hereby granted, free of charge, to any person obtaining
-// a copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to
-// the following conditions:
-// 
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-//
-
-// Compile With:
-//   gmcs -debug+ -r:System.Core Options.cs -o:NDesk.Options.dll
-//   gmcs -debug+ -d:LINQ -r:System.Core Options.cs -o:NDesk.Options.dll
-//
-// The LINQ version just changes the implementation of
-// OptionSet.Parse(IEnumerable<string>), and confers no semantic changes.
-
-//
-// A Getopt::Long-inspired option parsing library for C#.
-//
-// NDesk.Options.OptionSet is built upon a key/value table, where the
-// key is a option format string and the value is a delegate that is 
-// invoked when the format string is matched.
-//
-// Option format strings:
-//  Regex-like BNF Grammar: 
-//    name: .+
-//    type: [=:]
-//    sep: ( [^{}]+ | '{' .+ '}' )?
-//    aliases: ( name type sep ) ( '|' name type sep )*
-// 
-// Each '|'-delimited name is an alias for the associated action.  If the
-// format string ends in a '=', it has a required value.  If the format
-// string ends in a ':', it has an optional value.  If neither '=' or ':'
-// is present, no value is supported.  `=' or `:' need only be defined on one
-// alias, but if they are provided on more than one they must be consistent.
-//
-// Each alias portion may also end with a "key/value separator", which is used
-// to split option values if the option accepts > 1 value.  If not specified,
-// it defaults to '=' and ':'.  If specified, it can be any character except
-// '{' and '}' OR the *string* between '{' and '}'.  If no separator should be
-// used (i.e. the separate values should be distinct arguments), then "{}"
-// should be used as the separator.
-//
-// Options are extracted either from the current option by looking for
-// the option name followed by an '=' or ':', or is taken from the
-// following option IFF:
-//  - The current option does not contain a '=' or a ':'
-//  - The current option requires a value (i.e. not a Option type of ':')
-//
-// The `name' used in the option format string does NOT include any leading
-// option indicator, such as '-', '--', or '/'.  All three of these are
-// permitted/required on any named option.
-//
-// Option bundling is permitted so long as:
-//   - '-' is used to start the option group
-//   - all of the bundled options are a single character
-//   - at most one of the bundled options accepts a value, and the value
-//     provided starts from the next character to the end of the string.
-//
-// This allows specifying '-a -b -c' as '-abc', and specifying '-D name=value'
-// as '-Dname=value'.
-//
-// Option processing is disabled by specifying "--".  All options after "--"
-// are returned by OptionSet.Parse() unchanged and unprocessed.
-//
-// Unprocessed options are returned from OptionSet.Parse().
-//
-// Examples:
-//  int verbose = 0;
-//  OptionSet p = new OptionSet ()
-//    .Add ("v", v => ++verbose)
-//    .Add ("name=|value=", v => Console.WriteLine (v));
-//  p.Parse (new string[]{"-v", "--v", "/v", "-name=A", "/name", "B", "extra"});
-//
-// The above would parse the argument string array, and would invoke the
-// lambda expression three times, setting `verbose' to 3 when complete.  
-// It would also print out "A" and "B" to standard output.
-// The returned array would contain the string "extra".
-//
-// C# 3.0 collection initializers are supported and encouraged:
-//  var p = new OptionSet () {
-//    { "h|?|help", v => ShowHelp () },
-//  };
-//
-// System.ComponentModel.TypeConverter is also supported, allowing the use of
-// custom data types in the callback type; TypeConverter.ConvertFromString()
-// is used to convert the value option to an instance of the specified
-// type:
-//
-//  var p = new OptionSet () {
-//    { "foo=", (Foo f) => Console.WriteLine (f.ToString ()) },
-//  };
-//
-// Random other tidbits:
-//  - Boolean options (those w/o '=' or ':' in the option format string)
-//    are explicitly enabled if they are followed with '+', and explicitly
-//    disabled if they are followed with '-':
-//      string a = null;
-//      var p = new OptionSet () {
-//        { "a", s => a = s },
-//      };
-//      p.Parse (new string[]{"-a"});   // sets v != null
-//      p.Parse (new string[]{"-a+"});  // sets v != null
-//      p.Parse (new string[]{"-a-"});  // sets v == null
-//
-
-// using System;
-// using System.Collections;
-// using System.Collections.Generic;
-// using System.Collections.ObjectModel;
-// using System.ComponentModel;
-// using System.Globalization;
-// using System.IO;
-// using System.Runtime.Serialization;
-// using System.Security.Permissions;
-// using System.Text;
-// using System.Text.RegularExpressions;
-
-#if LINQ
-// using System.Linq;
-#endif
-
-#if TEST
-// using NDesk.Options;
-#endif
-
-namespace NDesk.Options {
-
-	public class OptionValueCollection : IList, IList<string> {
-
-		List<string> values = new List<string> ();
-		OptionContext c;
-
-		internal OptionValueCollection (OptionContext c)
-		{
-			this.c = c;
-		}
-
-		#region ICollection
-		void ICollection.CopyTo (Array array, int index)  {(values as ICollection).CopyTo (array, index);}
-		bool ICollection.IsSynchronized                   {get {return (values as ICollection).IsSynchronized;}}
-		object ICollection.SyncRoot                       {get {return (values as ICollection).SyncRoot;}}
-		#endregion
-
-		#region ICollection<T>
-		public void Add (string item)                       {values.Add (item);}
-		public void Clear ()                                {values.Clear ();}
-		public bool Contains (string item)                  {return values.Contains (item);}
-		public void CopyTo (string[] array, int arrayIndex) {values.CopyTo (array, arrayIndex);}
-		public bool Remove (string item)                    {return values.Remove (item);}
-		public int Count                                    {get {return values.Count;}}
-		public bool IsReadOnly                              {get {return false;}}
-		#endregion
-
-		#region IEnumerable
-		IEnumerator IEnumerable.GetEnumerator () {return values.GetEnumerator ();}
-		#endregion
-
-		#region IEnumerable<T>
-		public IEnumerator<string> GetEnumerator () {return values.GetEnumerator ();}
-		#endregion
-
-		#region IList
-		int IList.Add (object value)                {return (values as IList).Add (value);}
-		bool IList.Contains (object value)          {return (values as IList).Contains (value);}
-		int IList.IndexOf (object value)            {return (values as IList).IndexOf (value);}
-		void IList.Insert (int index, object value) {(values as IList).Insert (index, value);}
-		void IList.Remove (object value)            {(values as IList).Remove (value);}
-		void IList.RemoveAt (int index)             {(values as IList).RemoveAt (index);}
-		bool IList.IsFixedSize                      {get {return false;}}
-		object IList.this [int index]               {get {return this [index];} set {(values as IList)[index] = value;}}
-		#endregion
-
-		#region IList<T>
-		public int IndexOf (string item)            {return values.IndexOf (item);}
-		public void Insert (int index, string item) {values.Insert (index, item);}
-		public void RemoveAt (int index)            {values.RemoveAt (index);}
-
-		private void AssertValid (int index)
-		{
-			if (c.Option == null)
-				throw new InvalidOperationException ("OptionContext.Option is null.");
-			if (index >= c.Option.MaxValueCount)
-				throw new ArgumentOutOfRangeException ("index");
-			if (c.Option.OptionValueType == OptionValueType.Required &&
-					index >= values.Count)
-				throw new OptionException (string.Format (
-							c.OptionSet.MessageLocalizer ("Missing required value for option '{0}'."), c.OptionName), 
-						c.OptionName);
-		}
-
-		public string this [int index] {
-			get {
-				AssertValid (index);
-				return index >= values.Count ? null : values [index];
-			}
-			set {
-				values [index] = value;
-			}
-		}
-		#endregion
-
-		public List<string> ToList ()
-		{
-			return new List<string> (values);
-		}
-
-		public string[] ToArray ()
-		{
-			return values.ToArray ();
-		}
-
-		public override string ToString ()
-		{
-			return string.Join (", ", values.ToArray ());
-		}
-	}
-
-	public class OptionContext {
-		private Option                option;
-		private string                name;
-		private int                   index;
-		private OptionSet             set;
-		private OptionValueCollection c;
-
-		public OptionContext (OptionSet set)
-		{
-			this.set = set;
-			this.c   = new OptionValueCollection (this);
-		}
-
-		public Option Option {
-			get {return option;}
-			set {option = value;}
-		}
-
-		public string OptionName { 
-			get {return name;}
-			set {name = value;}
-		}
-
-		public int OptionIndex {
-			get {return index;}
-			set {index = value;}
-		}
-
-		public OptionSet OptionSet {
-			get {return set;}
-		}
-
-		public OptionValueCollection OptionValues {
-			get {return c;}
-		}
-	}
-
-	public enum OptionValueType {
-		None, 
-		Optional,
-		Required,
-	}
-
-	public abstract class Option {
-		string prototype, description;
-		string[] names;
-		OptionValueType type;
-		int count;
-		string[] separators;
-
-		protected Option (string prototype, string description)
-			: this (prototype, description, 1)
-		{
-		}
-
-		protected Option (string prototype, string description, int maxValueCount)
-		{
-			if (prototype == null)
-				throw new ArgumentNullException ("prototype");
-			if (prototype.Length == 0)
-				throw new ArgumentException ("Cannot be the empty string.", "prototype");
-			if (maxValueCount < 0)
-				throw new ArgumentOutOfRangeException ("maxValueCount");
-
-			this.prototype   = prototype;
-			this.names       = prototype.Split ('|');
-			this.description = description;
-			this.count       = maxValueCount;
-			this.type        = ParsePrototype ();
-
-			if (this.count == 0 && type != OptionValueType.None)
-				throw new ArgumentException (
-						"Cannot provide maxValueCount of 0 for OptionValueType.Required or " +
-							"OptionValueType.Optional.",
-						"maxValueCount");
-			if (this.type == OptionValueType.None && maxValueCount > 1)
-				throw new ArgumentException (
-						string.Format ("Cannot provide maxValueCount of {0} for OptionValueType.None.", maxValueCount),
-						"maxValueCount");
-			if (Array.IndexOf (names, "<>") >= 0 && 
-					((names.Length == 1 && this.type != OptionValueType.None) ||
-					 (names.Length > 1 && this.MaxValueCount > 1)))
-				throw new ArgumentException (
-						"The default option handler '<>' cannot require values.",
-						"prototype");
-		}
-
-		public string           Prototype       {get {return prototype;}}
-		public string           Description     {get {return description;}}
-		public OptionValueType  OptionValueType {get {return type;}}
-		public int              MaxValueCount   {get {return count;}}
-
-		public string[] GetNames ()
-		{
-			return (string[]) names.Clone ();
-		}
-
-		public string[] GetValueSeparators ()
-		{
-			if (separators == null)
-				return new string [0];
-			return (string[]) separators.Clone ();
-		}
-
-		protected static T Parse<T> (string value, OptionContext c)
-		{
-			TypeConverter conv = TypeDescriptor.GetConverter (typeof (T));
-			T t = default (T);
-			try {
-				if (value != null)
-					t = (T) conv.ConvertFromString (value);
-			}
-			catch (Exception e) {
-				throw new OptionException (
-						string.Format (
-							c.OptionSet.MessageLocalizer ("Could not convert string `{0}' to type {1} for option `{2}'."),
-							value, typeof (T).Name, c.OptionName),
-						c.OptionName, e);
-			}
-			return t;
-		}
-
-		internal string[] Names           {get {return names;}}
-		internal string[] ValueSeparators {get {return separators;}}
-
-		static readonly char[] NameTerminator = new char[]{'=', ':'};
-
-		private OptionValueType ParsePrototype ()
-		{
-			char type = '\0';
-			List<string> seps = new List<string> ();
-			for (int i = 0; i < names.Length; ++i) {
-				string name = names [i];
-				if (name.Length == 0)
-					throw new ArgumentException ("Empty option names are not supported.", "prototype");
-
-				int end = name.IndexOfAny (NameTerminator);
-				if (end == -1)
-					continue;
-				names [i] = name.Substring (0, end);
-				if (type == '\0' || type == name [end])
-					type = name [end];
-				else 
-					throw new ArgumentException (
-							string.Format ("Conflicting option types: '{0}' vs. '{1}'.", type, name [end]),
-							"prototype");
-				AddSeparators (name, end, seps);
-			}
-
-			if (type == '\0')
-				return OptionValueType.None;
-
-			if (count <= 1 && seps.Count != 0)
-				throw new ArgumentException (
-						string.Format ("Cannot provide key/value separators for Options taking {0} value(s).", count),
-						"prototype");
-			if (count > 1) {
-				if (seps.Count == 0)
-					this.separators = new string[]{":", "="};
-				else if (seps.Count == 1 && seps [0].Length == 0)
-					this.separators = null;
-				else
-					this.separators = seps.ToArray ();
-			}
-
-			return type == '=' ? OptionValueType.Required : OptionValueType.Optional;
-		}
-
-		private static void AddSeparators (string name, int end, ICollection<string> seps)
-		{
-			int start = -1;
-			for (int i = end+1; i < name.Length; ++i) {
-				switch (name [i]) {
-					case '{':
-						if (start != -1)
-							throw new ArgumentException (
-									string.Format ("Ill-formed name/value separator found in \"{0}\".", name),
-									"prototype");
-						start = i+1;
-						break;
-					case '}':
-						if (start == -1)
-							throw new ArgumentException (
-									string.Format ("Ill-formed name/value separator found in \"{0}\".", name),
-									"prototype");
-						seps.Add (name.Substring (start, i-start));
-						start = -1;
-						break;
-					default:
-						if (start == -1)
-							seps.Add (name [i].ToString ());
-						break;
-				}
-			}
-			if (start != -1)
-				throw new ArgumentException (
-						string.Format ("Ill-formed name/value separator found in \"{0}\".", name),
-						"prototype");
-		}
-
-		public void Invoke (OptionContext c)
-		{
-			OnParseComplete (c);
-			c.OptionName  = null;
-			c.Option      = null;
-			c.OptionValues.Clear ();
-		}
-
-		protected abstract void OnParseComplete (OptionContext c);
-
-		public override string ToString ()
-		{
-			return Prototype;
-		}
-	}
-
-	[Serializable]
-	public class OptionException : Exception {
-		private string option;
-
-		public OptionException ()
-		{
-		}
-
-		public OptionException (string message, string optionName)
-			: base (message)
-		{
-			this.option = optionName;
-		}
-
-		public OptionException (string message, string optionName, Exception innerException)
-			: base (message, innerException)
-		{
-			this.option = optionName;
-		}
-
-		protected OptionException (SerializationInfo info, StreamingContext context)
-			: base (info, context)
-		{
-			this.option = info.GetString ("OptionName");
-		}
-
-		public string OptionName {
-			get {return this.option;}
-		}
-
-		[SecurityPermission (SecurityAction.LinkDemand, SerializationFormatter = true)]
-		public override void GetObjectData (SerializationInfo info, StreamingContext context)
-		{
-			base.GetObjectData (info, context);
-			info.AddValue ("OptionName", option);
-		}
-	}
-
-	public delegate void OptionAction<TKey, TValue> (TKey key, TValue value);
-
-	public class OptionSet : KeyedCollection<string, Option>
-	{
-		public OptionSet ()
-			: this (delegate (string f) {return f;})
-		{
-		}
-
-		public OptionSet (Converter<string, string> localizer)
-		{
-			this.localizer = localizer;
-		}
-
-		Converter<string, string> localizer;
-
-		public Converter<string, string> MessageLocalizer {
-			get {return localizer;}
-		}
-
-		protected override string GetKeyForItem (Option item)
-		{
-			if (item == null)
-				throw new ArgumentNullException ("option");
-			if (item.Names != null && item.Names.Length > 0)
-				return item.Names [0];
-			// This should never happen, as it's invalid for Option to be
-			// constructed w/o any names.
-			throw new InvalidOperationException ("Option has no names!");
-		}
-
-		[Obsolete ("Use KeyedCollection.this[string]")]
-		protected Option GetOptionForName (string option)
-		{
-			if (option == null)
-				throw new ArgumentNullException ("option");
-			try {
-				return base [option];
-			}
-			catch (KeyNotFoundException) {
-				return null;
-			}
-		}
-
-		protected override void InsertItem (int index, Option item)
-		{
-			base.InsertItem (index, item);
-			AddImpl (item);
-		}
-
-		protected override void RemoveItem (int index)
-		{
-			base.RemoveItem (index);
-			Option p = Items [index];
-			// KeyedCollection.RemoveItem() handles the 0th item
-			for (int i = 1; i < p.Names.Length; ++i) {
-				Dictionary.Remove (p.Names [i]);
-			}
-		}
-
-		protected override void SetItem (int index, Option item)
-		{
-			base.SetItem (index, item);
-			RemoveItem (index);
-			AddImpl (item);
-		}
-
-		private void AddImpl (Option option)
-		{
-			if (option == null)
-				throw new ArgumentNullException ("option");
-			List<string> added = new List<string> (option.Names.Length);
-			try {
-				// KeyedCollection.InsertItem/SetItem handle the 0th name.
-				for (int i = 1; i < option.Names.Length; ++i) {
-					Dictionary.Add (option.Names [i], option);
-					added.Add (option.Names [i]);
-				}
-			}
-			catch (Exception) {
-				foreach (string name in added)
-					Dictionary.Remove (name);
-				throw;
-			}
-		}
-
-		public new OptionSet Add (Option option)
-		{
-			base.Add (option);
-			return this;
-		}
-
-		sealed class ActionOption : Option {
-			Action<OptionValueCollection> action;
-
-			public ActionOption (string prototype, string description, int count, Action<OptionValueCollection> action)
-				: base (prototype, description, count)
-			{
-				if (action == null)
-					throw new ArgumentNullException ("action");
-				this.action = action;
-			}
-
-			protected override void OnParseComplete (OptionContext c)
-			{
-				action (c.OptionValues);
-			}
-		}
-
-		public OptionSet Add (string prototype, Action<string> action)
-		{
-			return Add (prototype, null, action);
-		}
-
-		public OptionSet Add (string prototype, string description, Action<string> action)
-		{
-			if (action == null)
-				throw new ArgumentNullException ("action");
-			Option p = new ActionOption (prototype, description, 1, 
-					delegate (OptionValueCollection v) { action (v [0]); });
-			base.Add (p);
-			return this;
-		}
-
-		public OptionSet Add (string prototype, OptionAction<string, string> action)
-		{
-			return Add (prototype, null, action);
-		}
-
-		public OptionSet Add (string prototype, string description, OptionAction<string, string> action)
-		{
-			if (action == null)
-				throw new ArgumentNullException ("action");
-			Option p = new ActionOption (prototype, description, 2, 
-					delegate (OptionValueCollection v) {action (v [0], v [1]);});
-			base.Add (p);
-			return this;
-		}
-
-		sealed class ActionOption<T> : Option {
-			Action<T> action;
-
-			public ActionOption (string prototype, string description, Action<T> action)
-				: base (prototype, description, 1)
-			{
-				if (action == null)
-					throw new ArgumentNullException ("action");
-				this.action = action;
-			}
-
-			protected override void OnParseComplete (OptionContext c)
-			{
-				action (Parse<T> (c.OptionValues [0], c));
-			}
-		}
-
-		sealed class ActionOption<TKey, TValue> : Option {
-			OptionAction<TKey, TValue> action;
-
-			public ActionOption (string prototype, string description, OptionAction<TKey, TValue> action)
-				: base (prototype, description, 2)
-			{
-				if (action == null)
-					throw new ArgumentNullException ("action");
-				this.action = action;
-			}
-
-			protected override void OnParseComplete (OptionContext c)
-			{
-				action (
-						Parse<TKey> (c.OptionValues [0], c),
-						Parse<TValue> (c.OptionValues [1], c));
-			}
-		}
-
-		public OptionSet Add<T> (string prototype, Action<T> action)
-		{
-			return Add (prototype, null, action);
-		}
-
-		public OptionSet Add<T> (string prototype, string description, Action<T> action)
-		{
-			return Add (new ActionOption<T> (prototype, description, action));
-		}
-
-		public OptionSet Add<TKey, TValue> (string prototype, OptionAction<TKey, TValue> action)
-		{
-			return Add (prototype, null, action);
-		}
-
-		public OptionSet Add<TKey, TValue> (string prototype, string description, OptionAction<TKey, TValue> action)
-		{
-			return Add (new ActionOption<TKey, TValue> (prototype, description, action));
-		}
-
-		protected virtual OptionContext CreateOptionContext ()
-		{
-			return new OptionContext (this);
-		}
-
-#if LINQ
-		public List<string> Parse (IEnumerable<string> arguments)
-		{
-			bool process = true;
-			OptionContext c = CreateOptionContext ();
-			c.OptionIndex = -1;
-			var def = GetOptionForName ("<>");
-			var unprocessed = 
-				from argument in arguments
-				where ++c.OptionIndex >= 0 && (process || def != null)
-					? process
-						? argument == "--" 
-							? (process = false)
-							: !Parse (argument, c)
-								? def != null 
-									? Unprocessed (null, def, c, argument) 
-									: true
-								: false
-						: def != null 
-							? Unprocessed (null, def, c, argument)
-							: true
-					: true
-				select argument;
-			List<string> r = unprocessed.ToList ();
-			if (c.Option != null)
-				c.Option.Invoke (c);
-			return r;
-		}
-#else
-		public List<string> Parse (IEnumerable<string> arguments)
-		{
-			OptionContext c = CreateOptionContext ();
-			c.OptionIndex = -1;
-			bool process = true;
-			List<string> unprocessed = new List<string> ();
-			Option def = Contains ("<>") ? this ["<>"] : null;
-			foreach (string argument in arguments) {
-				++c.OptionIndex;
-				if (argument == "--") {
-					process = false;
-					continue;
-				}
-				if (!process) {
-					Unprocessed (unprocessed, def, c, argument);
-					continue;
-				}
-				if (!Parse (argument, c))
-					Unprocessed (unprocessed, def, c, argument);
-			}
-			if (c.Option != null)
-				c.Option.Invoke (c);
-			return unprocessed;
-		}
-#endif
-
-		private static bool Unprocessed (ICollection<string> extra, Option def, OptionContext c, string argument)
-		{
-			if (def == null) {
-				extra.Add (argument);
-				return false;
-			}
-			c.OptionValues.Add (argument);
-			c.Option = def;
-			c.Option.Invoke (c);
-			return false;
-		}
-
-		private readonly Regex ValueOption = new Regex (
-			@"^(?<flag>--|-|/)(?<name>[^:=]+)((?<sep>[:=])(?<value>.*))?$");
-
-		protected bool GetOptionParts (string argument, out string flag, out string name, out string sep, out string value)
-		{
-			if (argument == null)
-				throw new ArgumentNullException ("argument");
-
-			flag = name = sep = value = null;
-			Match m = ValueOption.Match (argument);
-			if (!m.Success) {
-				return false;
-			}
-			flag  = m.Groups ["flag"].Value;
-			name  = m.Groups ["name"].Value;
-			if (m.Groups ["sep"].Success && m.Groups ["value"].Success) {
-				sep   = m.Groups ["sep"].Value;
-				value = m.Groups ["value"].Value;
-			}
-			return true;
-		}
-
-		protected virtual bool Parse (string argument, OptionContext c)
-		{
-			if (c.Option != null) {
-				ParseValue (argument, c);
-				return true;
-			}
-
-			string f, n, s, v;
-			if (!GetOptionParts (argument, out f, out n, out s, out v))
-				return false;
-
-			Option p;
-			if (Contains (n)) {
-				p = this [n];
-				c.OptionName = f + n;
-				c.Option     = p;
-				switch (p.OptionValueType) {
-					case OptionValueType.None:
-						c.OptionValues.Add (n);
-						c.Option.Invoke (c);
-						break;
-					case OptionValueType.Optional:
-					case OptionValueType.Required: 
-						ParseValue (v, c);
-						break;
-				}
-				return true;
-			}
-			// no match; is it a bool option?
-			if (ParseBool (argument, n, c))
-				return true;
-			// is it a bundled option?
-			if (ParseBundledValue (f, string.Concat (n + s + v), c))
-				return true;
-
-			return false;
-		}
-
-		private void ParseValue (string option, OptionContext c)
-		{
-			if (option != null)
-				foreach (string o in c.Option.ValueSeparators != null 
-						? option.Split (c.Option.ValueSeparators, StringSplitOptions.None)
-						: new string[]{option}) {
-					c.OptionValues.Add (o);
-				}
-			if (c.OptionValues.Count == c.Option.MaxValueCount || 
-					c.Option.OptionValueType == OptionValueType.Optional)
-				c.Option.Invoke (c);
-			else if (c.OptionValues.Count > c.Option.MaxValueCount) {
-				throw new OptionException (localizer (string.Format (
-								"Error: Found {0} option values when expecting {1}.", 
-								c.OptionValues.Count, c.Option.MaxValueCount)),
-						c.OptionName);
-			}
-		}
-
-		private bool ParseBool (string option, string n, OptionContext c)
-		{
-			Option p;
-			string rn;
-			if (n.Length >= 1 && (n [n.Length-1] == '+' || n [n.Length-1] == '-') &&
-					Contains ((rn = n.Substring (0, n.Length-1)))) {
-				p = this [rn];
-				string v = n [n.Length-1] == '+' ? option : null;
-				c.OptionName  = option;
-				c.Option      = p;
-				c.OptionValues.Add (v);
-				p.Invoke (c);
-				return true;
-			}
-			return false;
-		}
-
-		private bool ParseBundledValue (string f, string n, OptionContext c)
-		{
-			if (f != "-")
-				return false;
-			for (int i = 0; i < n.Length; ++i) {
-				Option p;
-				string opt = f + n [i].ToString ();
-				string rn = n [i].ToString ();
-				if (!Contains (rn)) {
-					if (i == 0)
-						return false;
-					throw new OptionException (string.Format (localizer (
-									"Cannot bundle unregistered option '{0}'."), opt), opt);
-				}
-				p = this [rn];
-				switch (p.OptionValueType) {
-					case OptionValueType.None:
-						Invoke (c, opt, n, p);
-						break;
-					case OptionValueType.Optional:
-					case OptionValueType.Required: {
-						string v     = n.Substring (i+1);
-						c.Option     = p;
-						c.OptionName = opt;
-						ParseValue (v.Length != 0 ? v : null, c);
-						return true;
-					}
-					default:
-						throw new InvalidOperationException ("Unknown OptionValueType: " + p.OptionValueType);
-				}
-			}
-			return true;
-		}
-
-		private static void Invoke (OptionContext c, string name, string value, Option option)
-		{
-			c.OptionName  = name;
-			c.Option      = option;
-			c.OptionValues.Add (value);
-			option.Invoke (c);
-		}
-
-		private const int OptionWidth = 29;
-
-		public void WriteOptionDescriptions (TextWriter o)
-		{
-			foreach (Option p in this) {
-				int written = 0;
-				if (!WriteOptionPrototype (o, p, ref written))
-					continue;
-
-				if (written < OptionWidth)
-					o.Write (new string (' ', OptionWidth - written));
-				else {
-					o.WriteLine ();
-					o.Write (new string (' ', OptionWidth));
-				}
-
-				List<string> lines = GetLines (localizer (GetDescription (p.Description)));
-				o.WriteLine (lines [0]);
-				string prefix = new string (' ', OptionWidth+2);
-				for (int i = 1; i < lines.Count; ++i) {
-					o.Write (prefix);
-					o.WriteLine (lines [i]);
-				}
-			}
-		}
-
-		bool WriteOptionPrototype (TextWriter o, Option p, ref int written)
-		{
-			string[] names = p.Names;
-
-			int i = GetNextOptionIndex (names, 0);
-			if (i == names.Length)
-				return false;
-
-			if (names [i].Length == 1) {
-				Write (o, ref written, "  -");
-				Write (o, ref written, names [0]);
-			}
-			else {
-				Write (o, ref written, "      --");
-				Write (o, ref written, names [0]);
-			}
-
-			for ( i = GetNextOptionIndex (names, i+1); 
-					i < names.Length; i = GetNextOptionIndex (names, i+1)) {
-				Write (o, ref written, ", ");
-				Write (o, ref written, names [i].Length == 1 ? "-" : "--");
-				Write (o, ref written, names [i]);
-			}
-
-			if (p.OptionValueType == OptionValueType.Optional ||
-					p.OptionValueType == OptionValueType.Required) {
-				if (p.OptionValueType == OptionValueType.Optional) {
-					Write (o, ref written, localizer ("["));
-				}
-				Write (o, ref written, localizer ("=" + GetArgumentName (0, p.MaxValueCount, p.Description)));
-				string sep = p.ValueSeparators != null && p.ValueSeparators.Length > 0 
-					? p.ValueSeparators [0]
-					: " ";
-				for (int c = 1; c < p.MaxValueCount; ++c) {
-					Write (o, ref written, localizer (sep + GetArgumentName (c, p.MaxValueCount, p.Description)));
-				}
-				if (p.OptionValueType == OptionValueType.Optional) {
-					Write (o, ref written, localizer ("]"));
-				}
-			}
-			return true;
-		}
-
-		static int GetNextOptionIndex (string[] names, int i)
-		{
-			while (i < names.Length && names [i] == "<>") {
-				++i;
-			}
-			return i;
-		}
-
-		static void Write (TextWriter o, ref int n, string s)
-		{
-			n += s.Length;
-			o.Write (s);
-		}
-
-		private static string GetArgumentName (int index, int maxIndex, string description)
-		{
-			if (description == null)
-				return maxIndex == 1 ? "VALUE" : "VALUE" + (index + 1);
-			string[] nameStart;
-			if (maxIndex == 1)
-				nameStart = new string[]{"{0:", "{"};
-			else
-				nameStart = new string[]{"{" + index + ":"};
-			for (int i = 0; i < nameStart.Length; ++i) {
-				int start, j = 0;
-				do {
-					start = description.IndexOf (nameStart [i], j);
-				} while (start >= 0 && j != 0 ? description [j++ - 1] == '{' : false);
-				if (start == -1)
-					continue;
-				int end = description.IndexOf ("}", start);
-				if (end == -1)
-					continue;
-				return description.Substring (start + nameStart [i].Length, end - start - nameStart [i].Length);
-			}
-			return maxIndex == 1 ? "VALUE" : "VALUE" + (index + 1);
-		}
-
-		private static string GetDescription (string description)
-		{
-			if (description == null)
-				return string.Empty;
-			StringBuilder sb = new StringBuilder (description.Length);
-			int start = -1;
-			for (int i = 0; i < description.Length; ++i) {
-				switch (description [i]) {
-					case '{':
-						if (i == start) {
-							sb.Append ('{');
-							start = -1;
-						}
-						else if (start < 0)
-							start = i + 1;
-						break;
-					case '}':
-						if (start < 0) {
-							if ((i+1) == description.Length || description [i+1] != '}')
-								throw new InvalidOperationException ("Invalid option description: " + description);
-							++i;
-							sb.Append ("}");
-						}
-						else {
-							sb.Append (description.Substring (start, i - start));
-							start = -1;
-						}
-						break;
-					case ':':
-						if (start < 0)
-							goto default;
-						start = i + 1;
-						break;
-					default:
-						if (start < 0)
-							sb.Append (description [i]);
-						break;
-				}
-			}
-			return sb.ToString ();
-		}
-
-		private static List<string> GetLines (string description)
-		{
-			List<string> lines = new List<string> ();
-			if (string.IsNullOrEmpty (description)) {
-				lines.Add (string.Empty);
-				return lines;
-			}
-			int length = 80 - OptionWidth - 2;
-			int start = 0, end;
-			do {
-				end = GetLineEnd (start, length, description);
-				bool cont = false;
-				if (end < description.Length) {
-					char c = description [end];
-					if (c == '-' || (char.IsWhiteSpace (c) && c != '\n'))
-						++end;
-					else if (c != '\n') {
-						cont = true;
-						--end;
-					}
-				}
-				lines.Add (description.Substring (start, end - start));
-				if (cont) {
-					lines [lines.Count-1] += "-";
-				}
-				start = end;
-				if (start < description.Length && description [start] == '\n')
-					++start;
-			} while (end < description.Length);
-			return lines;
-		}
-
-		private static int GetLineEnd (int start, int length, string description)
-		{
-			int end = Math.Min (start + length, description.Length);
-			int sep = -1;
-			for (int i = start; i < end; ++i) {
-				switch (description [i]) {
-					case ' ':
-					case '\t':
-					case '\v':
-					case '-':
-					case ',':
-					case '.':
-					case ';':
-						sep = i;
-						break;
-					case '\n':
-						return i;
-				}
-			}
-			if (sep == -1 || end == description.Length)
-				return end;
-			return sep;
-		}
-	}
-}
-
 
 // ----------------------------------------------------------------------
 // P2T.cs
@@ -21527,4 +17511,4179 @@ namespace Poly2Tri
 
     }
 }
+
+// ----------------------------------------------------------------------
+// TmxAnimation.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public partial class TmxAnimation
+    {
+        public List<TmxFrame> Frames { get; private set; }
+        public int TotalTimeMs { get; private set; }
+
+        public TmxAnimation()
+        {
+            this.Frames = new List<TmxFrame>();
+        }
+
+        public static TmxAnimation FromXml(XElement xml, uint globalStartId)
+        {
+            TmxAnimation tmxAnimation = new TmxAnimation();
+
+            foreach (var xmlFrame in xml.Elements("frame"))
+            {
+                TmxFrame tmxFrame = TmxFrame.FromXml(xmlFrame, globalStartId);
+                tmxAnimation.Frames.Add(tmxFrame);
+                tmxAnimation.TotalTimeMs += tmxFrame.DurationMs;
+            }
+
+            return tmxAnimation;
+        }
+
+        // Returns an single frame animation
+        public static TmxAnimation FromTileId(uint globalTileId)
+        {
+            TmxAnimation tmxAnimation = new TmxAnimation();
+
+            TmxFrame tmxFrame = TmxFrame.FromTileId(globalTileId);
+            tmxAnimation.Frames.Add(tmxFrame);
+
+            return tmxAnimation;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxException.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public class TmxException : Exception
+    {
+        public TmxException(string message)
+            : base(message)
+        {
+        }
+
+        public TmxException(string message, Exception inner)
+            : base(message, inner)
+        {
+        }
+
+        public static void ThrowFormat(string fmt, params object[] args)
+        {
+            string msg = String.Format(fmt, args);
+            throw new TmxException(msg);
+        }
+
+        public static void FromAttributeException(Exception inner, XElement element)
+        {
+            StringBuilder builder = new StringBuilder(inner.Message);
+            Array.ForEach(element.Attributes().ToArray(), a => builder.AppendFormat("\n  {0}", a.ToString()));
+            TmxException.ThrowFormat("Error parsing {0} attributes\n{1}", element.Name, builder.ToString());
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxFrame.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public partial class TmxFrame
+    {
+        public uint GlobalTileId { get; private set; }
+        public int DurationMs { get; private set; }
+
+        public static TmxFrame FromTileId(uint tileId)
+        {
+            TmxFrame tmxFrame = new TmxFrame();
+            tmxFrame.GlobalTileId = tileId;
+            tmxFrame.DurationMs = 0;
+
+            return tmxFrame;
+        }
+
+        public static TmxFrame FromXml(XElement xml, uint globalStartId)
+        {
+            TmxFrame tmxFrame = new TmxFrame();
+
+            uint localTileId = TmxHelper.GetAttributeAsUInt(xml, "tileid");
+            tmxFrame.GlobalTileId = localTileId + globalStartId;
+            tmxFrame.DurationMs = TmxHelper.GetAttributeAsInt(xml, "duration", 100);
+
+            return tmxFrame;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxHasPoints.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public interface TmxHasPoints
+    {
+        List<PointF> Points { get; set; }
+        bool ArePointsClosed();
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxHasProperties.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public interface TmxHasProperties
+    {
+        Tiled2Unity.TmxProperties Properties { get; }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxHelper.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Drawing.Drawing2D;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+
+namespace Tiled2Unity
+{
+    public class TmxHelper
+    {
+        public static string GetAttributeAsString(XElement elem, string attrName)
+        {
+            return elem.Attribute(attrName).Value;
+        }
+
+        public static string GetAttributeAsString(XElement elem, string attrName, string defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsString(elem, attrName);
+        }
+
+        public static int GetAttributeAsInt(XElement elem, string attrName)
+        {
+            return Convert.ToInt32(elem.Attribute(attrName).Value);
+        }
+
+        public static int GetAttributeAsInt(XElement elem, string attrName, int defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsInt(elem, attrName);
+        }
+
+        public static uint GetAttributeAsUInt(XElement elem, string attrName)
+        {
+            return Convert.ToUInt32(elem.Attribute(attrName).Value);
+        }
+
+        public static uint GetAttributeAsUInt(XElement elem, string attrName, uint defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsUInt(elem, attrName);
+        }
+
+        public static float GetAttributeAsFloat(XElement elem, string attrName)
+        {
+            return Convert.ToSingle(elem.Attribute(attrName).Value);
+        }
+
+        public static float GetAttributeAsFloat(XElement elem, string attrName, float defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsFloat(elem, attrName);
+        }
+
+        public static string GetAttributeAsFullPath(XElement elem, string attrName)
+        {
+            return Path.GetFullPath(elem.Attribute(attrName).Value);
+        }
+
+        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName)
+        {
+            string colorString = elem.Attribute(attrName).Value;
+            System.Drawing.Color color = TmxHelper.ColorFromHtml(colorString);
+            return color;
+        }
+
+        public static System.Drawing.Color GetAttributeAsColor(XElement elem, string attrName, System.Drawing.Color defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsColor(elem, attrName);
+        }
+
+        public static T GetStringAsEnum<T>(string enumString)
+        {
+            enumString = enumString.Replace("-", "_");
+
+            T value = default(T);
+            try
+            {
+                value = (T)Enum.Parse(typeof(T), enumString, true);
+            }
+            catch
+            {
+                StringBuilder msg = new StringBuilder();
+                msg.AppendFormat("Could not convert '{0}' to enum of type '{1}'\n", enumString, typeof(T).ToString());
+                msg.AppendFormat("Choices are:\n");
+
+                foreach (T t in Enum.GetValues(typeof(T)))
+                {
+                    msg.AppendFormat("  {0}\n", t.ToString());
+                }
+                TmxException.ThrowFormat(msg.ToString());
+            }
+
+            return value;
+        }
+
+        public static T GetAttributeAsEnum<T>(XElement elem, string attrName)
+        {
+            string enumString = elem.Attribute(attrName).Value.Replace("-", "_");
+            return GetStringAsEnum<T>(enumString);
+        }
+
+        public static T GetAttributeAsEnum<T>(XElement elem, string attrName, T defaultValue)
+        {
+            XAttribute attr = elem.Attribute(attrName);
+            if (attr == null)
+            {
+                return defaultValue;
+            }
+            return GetAttributeAsEnum<T>(elem, attrName);
+        }
+
+        public static TmxProperties GetPropertiesWithTypeDefaults(TmxHasProperties hasProperties, TmxObjectTypes objectTypes)
+        {
+            TmxProperties tmxProperties = new TmxProperties();
+
+            // Fill in all the default properties first
+            // (Note: At the moment, only TmxObject has default properties it inherits from TmxObjectType)
+            string objectTypeName = null;
+            if (hasProperties is TmxObject)
+            {
+                TmxObject tmxObject = hasProperties as TmxObject;
+                objectTypeName = tmxObject.Type;
+            }
+
+            // If an object type has been found then copy over all the default values for properties
+            TmxObjectType tmxObjectType = objectTypes.GetValueOrNull(objectTypeName);
+            if (tmxObjectType != null)
+            {
+                foreach (TmxObjectTypeProperty tmxTypeProp in tmxObjectType.Properties.Values)
+                {
+                    tmxProperties.PropertyMap[tmxTypeProp.Name] = new TmxProperty() { Name = tmxTypeProp.Name, Type = tmxTypeProp.Type, Value = tmxTypeProp.Default };
+                }
+            }
+
+            // Now add all the object properties (which may override some of the default properties)
+            foreach (TmxProperty tmxProp in hasProperties.Properties.PropertyMap.Values)
+            {
+                tmxProperties.PropertyMap[tmxProp.Name] = tmxProp;
+            }
+
+            return tmxProperties;
+        }
+
+        public static Color ColorFromHtml(string html)
+        {
+            // Trim any leading hash from the string
+            html = html.TrimStart('#');
+
+            // Put leading zeros into anything less than 6 characters
+            html = html.PadLeft(6, '0');
+
+            // Put leading F into anthing less than 8 characters to cover alpha
+            html = html.PadLeft(8, 'F');
+
+            // Convert the hex string into a number
+            try
+            {
+                int argb = Convert.ToInt32(html, 16);
+                return Color.FromArgb(argb);
+            }
+            catch
+            {
+                return Color.HotPink;
+            }
+        }
+
+        // Prefer 32bpp bitmaps as they are at least 2x faster at Graphics.DrawImage functions
+        // Note that 32bppPArgb is not properly supported on Mac builds.
+        public static Bitmap CreateBitmap32bpp(int width, int height)
+        {
+#if TILED2UNITY_MAC
+            return new Bitmap(width, height);
+#else
+            return new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+#endif
+        }
+
+        public static Bitmap FromFileBitmap32bpp(string file)
+        {
+            Bitmap bitmapRaw = (Bitmap)Bitmap.FromFile(file);
+
+#if TILED2UNITY_MAC
+            return bitmapRaw;
+#else
+            // Need to copy the bitmap into our 32bpp surface
+            Bitmap bitmapPArgb = TmxHelper.CreateBitmap32bpp(bitmapRaw.Width, bitmapRaw.Height);
+
+            using (Graphics g = Graphics.FromImage(bitmapPArgb))
+            {
+                g.DrawImage(bitmapRaw, 0, 0, bitmapPArgb.Width, bitmapPArgb.Height);
+            }
+
+            return bitmapPArgb;
+#endif
+        }
+
+#if !TILED_2_UNITY_LITE
+        // Helper function to create Layer collider brush. Note that Mac does not support Hatch brushes.
+        public static Brush CreateLayerColliderBrush(Color color)
+        {
+#if TILED2UNITY_MAC
+            // On Mac we can use a solid brush with some alpha
+            return new SolidBrush(Color.FromArgb(100, color));
+#else
+            return new HatchBrush(HatchStyle.Percent60, color, Color.Transparent);
+#endif
+        }
+#endif
+
+#if !TILED_2_UNITY_LITE
+        // Helper function to create Object collider brush. Note that Mac does not support Hatch brushes.
+        public static Brush CreateObjectColliderBrush(Color color)
+        {
+            Color secondary = Color.FromArgb(100, color);
+#if TILED2UNITY_MAC
+            // On Mac we can use a solid brush with some alpha
+            return new SolidBrush(secondary);
+#else
+            return new HatchBrush(HatchStyle.BackwardDiagonal, color, secondary);
+#endif
+        }
+#endif
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxImage.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public partial class TmxImage
+    {
+        public string AbsolutePath { get; private set; }
+        public Size Size { get; private set; }
+        public String TransparentColor { get; set; }
+
+#if !TILED_2_UNITY_LITE
+        public Bitmap ImageBitmap { get; private set; }
+#endif
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxImage.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    partial class TmxImage
+    {
+        public static TmxImage FromXml(XElement elemImage)
+        {
+            TmxImage tmxImage = new TmxImage();
+            tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
+
+#if TILED_2_UNITY_LITE
+            // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
+            int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+            int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+            tmxImage.Size = new System.Drawing.Size(width, height);
+#else
+            try
+            {
+                tmxImage.ImageBitmap = TmxHelper.FromFileBitmap32bpp(tmxImage.AbsolutePath);
+            }
+            catch (FileNotFoundException fnf)
+            {
+                string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
+                throw new TmxException(msg, fnf);
+
+                // Testing for when image files are missing. Just make up an image.
+                //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+                //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+                //tmxImage.ImageBitmap = new TmxHelper.CreateBitmap32bpp(width, height);
+                //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
+                //{
+                //    int color32 = tmxImage.AbsolutePath.GetHashCode();
+                //    Color color = Color.FromArgb(color32);
+                //    color = Color.FromArgb(255, color);
+                //    using (Brush brush = new SolidBrush(color))
+                //    {
+                //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
+                //    }
+                //}
+            }
+
+            tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
+#endif
+
+            // Some images use a transparency color key instead of alpha (blerg)
+            tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
+            if (!String.IsNullOrEmpty(tmxImage.TransparentColor))
+            {
+#if !TILED_2_UNITY_LITE
+                System.Drawing.Color transColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
+                tmxImage.ImageBitmap.MakeTransparent(transColor);
+#endif
+            }
+
+            return tmxImage;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxLayer.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public partial class TmxLayer : TmxLayerBase
+    {
+        public enum IgnoreSettings
+        {
+            False,      // Ingore nothing (layer fully-enabled)
+            True,       // Ignore everything (like layer doesn't exist)
+            Collision,  // Ignore collision on layer
+            Visual,     // Ignore visual on layer
+        };
+
+        public TmxMap TmxMap { get; private set; }
+        public string Name { get; private set; }
+        public bool Visible { get; private set; }
+        public float Opacity { get; private set; }
+        public PointF Offset { get; private set; }
+        public int Width { get; private set; }
+        public int Height { get; private set; }
+        public IgnoreSettings Ignore { get; private set; }
+        public uint[] TileIds { get; private set; }
+        public List<TmxMesh> Meshes { get; private set; }
+        public List<TmxLayer> CollisionLayers { get; private set; }
+
+        public TmxLayer(TmxMap map)
+        {
+            this.TmxMap = map;
+            this.Visible = true;
+            this.Opacity = 1.0f;
+            this.CollisionLayers = new List<TmxLayer>();
+        }
+
+        public uint GetTileIdAt(int x, int y)
+        {
+            uint tileId = GetRawTileIdAt(x, y);
+            return TmxMath.GetTileIdWithoutFlags(tileId);
+        }
+
+        public uint GetRawTileIdAt(int x, int y)
+        {
+            Debug.Assert(x < this.Width && y < this.Height);
+            Debug.Assert(x >= 0 && y >= 0);
+            int index = GetTileIndex(x, y);
+            return this.TileIds[index];
+        }
+
+        public int GetTileIndex(int x, int y)
+        {
+            return y * this.Width + x;
+        }
+
+        public bool IsExportingConvexPolygons()
+        {
+            // Always obey layer first
+            if (this.Properties.PropertyMap.ContainsKey("unity:convex"))
+            {
+                return this.Properties.GetPropertyValueAsBoolean("unity:convex", true);
+            }
+
+            // Use the map next
+            if (this.TmxMap.Properties.PropertyMap.ContainsKey("unity:convex"))
+            {
+                return this.TmxMap.Properties.GetPropertyValueAsBoolean("unity:convex", true);
+            }
+
+            // Use the program setting last
+            return Tiled2Unity.Settings.PreferConvexPolygons;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxLayer.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.IO;
+// using System.IO.Compression;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // Partial class methods for building layer data from xml strings or files
+    partial class TmxLayer
+    {
+        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap)
+        {
+            TmxLayer tmxLayer = new TmxLayer(tmxMap);
+
+            // Order within Xml file is import for layer types
+            tmxLayer.XmlElementIndex = elem.NodesBeforeSelf().Count();
+
+            // Have to decorate layer names in order to force them into being unique
+            // Also, can't have whitespace in the name because Unity will add underscores
+            tmxLayer.Name = TmxHelper.GetAttributeAsString(elem, "name");
+
+            tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
+            tmxLayer.Opacity = TmxHelper.GetAttributeAsFloat(elem, "opacity", 1);
+
+            PointF offset = new PointF(0, 0);
+            offset.X = TmxHelper.GetAttributeAsFloat(elem, "offsetx", 0);
+            offset.Y = TmxHelper.GetAttributeAsFloat(elem, "offsety", 0);
+            tmxLayer.Offset = offset;
+
+            // Set our properties
+            tmxLayer.Properties = TmxProperties.FromXml(elem);
+
+            // Set the "ignore" setting on this layer
+            tmxLayer.Ignore = tmxLayer.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
+
+            // We can build a layer from a "tile layer" (default) or an "image layer"
+            if (elem.Name == "layer")
+            {
+                tmxLayer.Width = TmxHelper.GetAttributeAsInt(elem, "width");
+                tmxLayer.Height = TmxHelper.GetAttributeAsInt(elem, "height");
+                tmxLayer.ParseData(elem.Element("data"));
+            }
+            else if (elem.Name == "imagelayer")
+            {
+                XElement xmlImage = elem.Element("image");
+                if (xmlImage == null)
+                {
+                    Logger.WriteWarning("Image Layer '{0}' is being ignored since it has no image.", tmxLayer.Name);
+                    tmxLayer.Ignore = IgnoreSettings.True;
+                    return tmxLayer;
+                }
+
+                // An image layer is sort of like an tile layer but with just one tile
+                tmxLayer.Width = 1;
+                tmxLayer.Height = 1;
+
+                // Find the "tile" that matches our image
+                string imagePath = TmxHelper.GetAttributeAsFullPath(elem.Element("image"), "source");
+                TmxTile tile = tmxMap.Tiles.First(t => t.Value.TmxImage.AbsolutePath == imagePath).Value;
+                tmxLayer.TileIds = new uint[1] { tile.GlobalId };
+
+                // The image layer needs to be tranlated in an interesting way when expressed as a tile layer
+                PointF translated = tmxLayer.Offset;
+
+                // Make up for height of a regular tile in the map
+                translated.Y -= (float)tmxMap.TileHeight;
+
+                // Make up for the height of this image
+                translated.Y += (float)tile.TmxImage.Size.Height;
+
+                // Correct for any orientation effects on the map (like isometric)
+                // (We essentially undo the translation via orientation here)
+                PointF orientation = TmxMath.TileCornerInScreenCoordinates(tmxMap, 0, 0);
+                translated.X -= orientation.X;
+                translated.Y -= orientation.Y;
+
+                // Translate by the x and y coordiantes
+                translated.X += TmxHelper.GetAttributeAsFloat(elem, "x", 0);
+                translated.Y += TmxHelper.GetAttributeAsFloat(elem, "y", 0);
+                tmxLayer.Offset = translated;
+            }
+
+            // Sometimes TMX files have "dead" tiles in them (tiles that were removed but are still referenced)
+            // Remove these tiles from the layer by replacing them with zero
+            for (int t = 0; t < tmxLayer.TileIds.Length; ++t)
+            {
+                uint tileId = tmxLayer.TileIds[t];
+                tileId = TmxMath.GetTileIdWithoutFlags(tileId);
+                if (!tmxMap.Tiles.ContainsKey(tileId))
+                {
+                    tmxLayer.TileIds[t] = 0;
+                }
+            }
+
+            // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
+            tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
+
+            // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
+            tmxLayer.UnityLayerOverrideName = tmxLayer.Properties.GetPropertyValueAsString("unity:layer", "");
+            tmxLayer.BuildCollisionLayers();
+
+            return tmxLayer;
+        }
+
+        private void ParseData(XElement elem)
+        {
+            Logger.WriteLine("Parse {0} layer data ...", this.Name);
+
+            string encoding = TmxHelper.GetAttributeAsString(elem, "encoding", "");
+            string compression = TmxHelper.GetAttributeAsString(elem, "compression", "");
+            if (elem.Element("tile") != null)
+            {
+                ParseTileDataAsXml(elem);
+            }
+            else if (encoding == "csv")
+            {
+                ParseTileDataAsCsv(elem);
+            }
+            else if (encoding == "base64" && String.IsNullOrEmpty(compression))
+            {
+                ParseTileDataAsBase64(elem);
+            }
+            else if (encoding == "base64" && compression == "gzip")
+            {
+                ParseTileDataAsBase64GZip(elem);
+            }
+            else if (encoding == "base64" && compression == "zlib")
+            {
+                ParseTileDataAsBase64Zlib(elem);
+            }
+            else
+            {
+                TmxException.ThrowFormat("Unsupported schema for {0} layer data", this.Name);
+            }
+        }
+
+        private void ParseTileDataAsXml(XElement elemData)
+        {
+            Logger.WriteLine("Parsing layer data as Xml elements ...");
+            var tiles = from t in elemData.Elements("tile")
+                        select TmxHelper.GetAttributeAsUInt(t, "gid");
+            this.TileIds = tiles.ToArray();
+        }
+
+        private void ParseTileDataAsCsv(XElement elem)
+        {
+            Logger.WriteLine("Parsing layer data as CSV ...");
+            List<uint> tileIds = new List<uint>();
+
+            // Splitting line-by-line reducues out-of-memory exceptions in x86 builds
+            string value = elem.Value;
+            StringReader reader = new StringReader(value);
+            string line = string.Empty;
+            do
+            {
+                line = reader.ReadLine();
+                if (!String.IsNullOrEmpty(line))
+                {
+                    var datum = from val in line.Split(',')
+                                where !String.IsNullOrEmpty(val)
+                                select Convert.ToUInt32(val);
+                    tileIds.AddRange(datum);
+                }
+
+            } while (line != null);
+
+            this.TileIds = tileIds.ToArray();
+        }
+
+        private void ParseTileDataAsBase64(XElement elem)
+        {
+            Logger.WriteLine("Parsing layer data as base64 string ...");
+            byte[] bytes = Convert.FromBase64String(elem.Value);
+            BytesToTiles(bytes);
+        }
+
+        private void ParseTileDataAsBase64GZip(XElement elem)
+        {
+            Logger.WriteLine("Parsing layer data as base64 gzip-compressed string ...");
+            byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
+
+            MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
+
+            // Now, decompress the bytes
+            using (MemoryStream streamDecompressed = new MemoryStream())
+            using (GZipStream deflateStream = new GZipStream(streamCompressed, CompressionMode.Decompress))
+            {
+                deflateStream.CopyTo(streamDecompressed);
+                byte[] bytesDecompressed = streamDecompressed.ToArray();
+                BytesToTiles(bytesDecompressed);
+            }
+        }
+
+        private void ParseTileDataAsBase64Zlib(XElement elem)
+        {
+            Logger.WriteLine("Parsing layer data as base64 zlib-compressed string ...");
+            byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
+
+            MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
+
+            // Nasty trick: Have to read past the zlib stream header
+            streamCompressed.ReadByte();
+            streamCompressed.ReadByte();
+
+            // Now, decompress the bytes
+            using (MemoryStream streamDecompressed = new MemoryStream())
+            using (DeflateStream deflateStream = new DeflateStream(streamCompressed, CompressionMode.Decompress))
+            {
+                deflateStream.CopyTo(streamDecompressed);
+                byte[] bytesDecompressed = streamDecompressed.ToArray();
+                BytesToTiles(bytesDecompressed);
+            }
+        }
+
+        private void BytesToTiles(byte[] bytes)
+        {
+            this.TileIds = new uint[bytes.Length / 4];
+            for (int i = 0; i < this.TileIds.Count(); ++i)
+            {
+                this.TileIds[i] = BitConverter.ToUInt32(bytes, i * 4);
+            }
+        }
+
+        private void BuildCollisionLayers()
+        {
+            this.CollisionLayers.Clear();
+
+            // Don't build collision layers if we're invisible
+            if (this.Visible == false)
+                return;
+
+            // Don't build collision layers if we're ignored
+            if (this.Ignore == IgnoreSettings.True)
+                return;
+
+            // Don't build collision layers if collision is ignored
+            if (this.Ignore == IgnoreSettings.Collision)
+                return;
+
+            // Are we using a unity-layer override? If so we have to put everything from this layer into it.
+            if (String.IsNullOrEmpty(this.UnityLayerOverrideName))
+            {
+                BuildBuildCollisionLayers_ByObjectType();
+            }
+            else
+            {
+                BuildBuildCollisionLayers_Override();
+            }
+        }
+
+        private void BuildBuildCollisionLayers_Override()
+        {
+            // Just make the layer the collision layer
+            this.CollisionLayers.Clear();
+            this.CollisionLayers.Add(this);
+        }
+
+        private void BuildBuildCollisionLayers_ByObjectType()
+        {
+            // Find all tiles with collisions on them and put them into a "Collision Layer" of the same type
+            for (int t = 0; t < this.TileIds.Length; ++t)
+            {
+                uint rawTileId = this.TileIds[t];
+                if (rawTileId == 0)
+                    continue;
+
+                uint tileId = TmxMath.GetTileIdWithoutFlags(rawTileId);
+                TmxTile tmxTile = this.TmxMap.Tiles[tileId];
+
+                foreach (TmxObject colliderObject in tmxTile.ObjectGroup.Objects)
+                {
+                    if ((colliderObject is TmxHasPoints) == false)
+                        continue;
+
+                    // We have a collider object on the tile
+                    // Add the tile to the Collision Layer of the matching type
+                    // Or, create a new Collision Layer of this type to add this tile to
+                    TmxLayer collisionLayer = this.CollisionLayers.Find(l => String.Compare(l.Name, colliderObject.Type, true) == 0);
+                    if (collisionLayer == null)
+                    {
+                        // Create a new Collision Layer
+                        collisionLayer = new TmxLayer(this.TmxMap);
+                        this.CollisionLayers.Add(collisionLayer);
+
+                        // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)
+                        collisionLayer.Name = colliderObject.Type;
+                        collisionLayer.TileIds = new uint[this.TileIds.Length];
+
+                        // Copy over some stuff from parent layer that we need for creating collisions
+                        collisionLayer.Offset = this.Offset;
+                        collisionLayer.Width = this.Width;
+                        collisionLayer.Height = this.Height;
+                        collisionLayer.Ignore = this.Ignore;
+                        collisionLayer.Properties = this.Properties;
+                    }
+
+                    // Add the tile to this collision layer
+                    collisionLayer.TileIds[t] = rawTileId;
+                }
+            }
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxLayerBase.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    // There are several different "layer" types in Tiled that share some behaviour (tile layer, object layer, image layer)
+    // (In Tiled2Unity we treat image layers as a special case of tile layer)
+    public class TmxLayerBase : TmxHasProperties
+    {
+        public TmxProperties Properties { get; protected set; }
+
+        public int XmlElementIndex { get; protected set; }
+
+        public string SortingLayerName { get; set; }
+        public int SortingOrder { get; set; }
+
+        public string UnityLayerOverrideName { get; protected set; }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxMap.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+
+
+namespace Tiled2Unity
+{
+    public partial class TmxMap : TmxHasProperties
+    {
+        public enum MapOrientation
+        {
+            Orthogonal,
+            Isometric,
+            Staggered,
+            Hexagonal,
+        }
+
+        public enum MapStaggerAxis
+        {
+            X,
+            Y,
+        }
+
+        public enum MapStaggerIndex
+        {
+            Odd,
+            Even,
+        }
+
+        public bool IsLoaded { get; private set; }
+
+        public string Name { get; private set; }
+        public MapOrientation Orientation { get; set; }
+        public MapStaggerAxis StaggerAxis { get; private set; }
+        public MapStaggerIndex StaggerIndex { get; private set; }
+        public int HexSideLength { get; set; }
+        public int DrawOrderHorizontal { get; private set; }
+        public int DrawOrderVertical { get; private set; }
+        public int Width { get; private set; }
+        public int Height { get; private set; }
+        public int TileWidth { get; private set; }
+        public int TileHeight { get; private set; }
+        public Color BackgroundColor { get; private set; }
+        public TmxProperties Properties { get; private set; }
+
+        public IDictionary<uint, TmxTile> Tiles = new Dictionary<uint, TmxTile>();
+
+        public IList<TmxLayer> Layers = new List<TmxLayer>();
+        public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
+
+        // The map may load object type data from another file
+        public TmxObjectTypes ObjectTypes = new TmxObjectTypes();
+
+        private uint nextUniqueId = 0;
+
+        public TmxMap()
+        {
+            this.IsLoaded = false;
+            this.Properties = new TmxProperties();
+        }
+
+        public string GetExportedFilename()
+        {
+            return String.Format("{0}.tiled2unity.xml", this.Name);
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{{ \"{6}\" size = {0}x{1}, tile size = {2}x{3}, # tiles = {4}, # layers = {5}, # obj groups = {6} }}",
+                this.Width,
+                this.Height,
+                this.TileWidth,
+                this.TileHeight,
+                this.Tiles.Count(),
+                this.Layers.Count(),
+                this.ObjectGroups.Count(),
+                this.Name);
+        }
+
+        public TmxTile GetTileFromTileId(uint tileId)
+        {
+            if (tileId == 0)
+                return null;
+
+            tileId = TmxMath.GetTileIdWithoutFlags(tileId);
+            return this.Tiles[tileId];
+        }
+
+        public Point GetMapPositionAt(int x, int y)
+        {
+            return TmxMath.TileCornerInScreenCoordinates(this, x, y);
+        }
+
+        public Point GetMapPositionAt(int x, int y, TmxTile tile)
+        {
+            Point point = GetMapPositionAt(x, y);
+
+            // The tile may have different dimensions than the cells of the map so correct for that
+            // In this case, the y-position needs to be adjusted
+            point.Y = (point.Y + this.TileHeight) - tile.TileSize.Height;
+
+            return point;
+        }
+
+        // Get a unique Id tied to this map instance.
+        public uint GetUniqueId()
+        {
+            return ++this.nextUniqueId;
+        }
+
+        public Size MapSizeInPixels()
+        {
+            // Takes the orientation of the map into account when calculating the size
+            if (this.Orientation == MapOrientation.Isometric)
+            {
+                Size size = Size.Empty;
+                size.Width = (this.Width + this.Height) * this.TileWidth / 2;
+                size.Height = (this.Width + this.Height) * this.TileHeight / 2;
+                return size;
+            }
+            else if (this.Orientation == MapOrientation.Staggered || this.Orientation == MapOrientation.Hexagonal)
+            {
+                int tileHeight = this.TileHeight & ~1;
+                int tileWidth = this.TileWidth & ~1;
+
+                if (this.StaggerAxis == MapStaggerAxis.Y)
+                {
+                    int halfHexLeftover = (tileHeight - this.HexSideLength) / 2;
+
+                    Size size = Size.Empty;
+                    size.Width = (tileWidth * this.Width) + tileWidth / 2;
+                    size.Height = (halfHexLeftover + this.HexSideLength) * this.Height + halfHexLeftover;
+                    return size;
+                }
+                else
+                {
+                    int halfHexLeftover = (tileWidth - this.HexSideLength) / 2;
+
+                    Size size = Size.Empty;
+                    size.Width = (halfHexLeftover + this.HexSideLength) * this.Width + halfHexLeftover;
+                    size.Height = (tileHeight * this.Height) + tileHeight / 2;
+                    return size;
+                }
+            }
+
+            // Default orientation (orthongonal)
+            return new Size(this.Width * this.TileWidth, this.Height * this.TileHeight);
+        }
+
+        // Get a unique list of all the tiles that are used as tile objects
+        public List<TmxMesh> GetUniqueListOfVisibleObjectTileMeshes()
+        {
+            var tiles = from objectGroup in this.ObjectGroups
+                        where objectGroup.Visible == true
+                        from tmxObject in objectGroup.Objects
+                        where tmxObject.Visible == true
+                        let tmxObjectTile = tmxObject as TmxObjectTile
+                        where tmxObjectTile != null
+                        from tmxMesh in tmxObjectTile.Tile.Meshes
+                        select tmxMesh;
+
+            // Make list unique based on mesh name
+            return tiles.GroupBy(m => m.UniqueMeshName).Select(g => g.First()).ToList();
+        }
+
+        // Load an Object Type Xml file for this map's objects to reference
+        public void LoadObjectTypeXml(string xmlPath)
+        {
+            Logger.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
+
+            try
+            {
+                this.ObjectTypes = TmxObjectTypes.FromXmlFile(xmlPath);
+            }
+            catch (FileNotFoundException)
+            {
+                Logger.WriteError("Object Type Xml file was not found: {0}", xmlPath);
+                this.ObjectTypes = new TmxObjectTypes();
+            }
+            catch (Exception e)
+            {
+                Logger.WriteError("Error parsing Object Type Xml file: {0}\n{1}", xmlPath, e.Message);
+                this.ObjectTypes = new TmxObjectTypes();
+            }
+
+            Logger.WriteLine("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
+        }
+
+        public void ClearObjectTypeXml()
+        {
+            Logger.WriteLine("Removing Object Types from map.");
+            this.ObjectTypes = new TmxObjectTypes();
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxMap.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // Partial class methods for creating TmxMap data from xml files/data
+    partial class TmxMap
+    {
+        public static TmxMap LoadFromFile(string tmxPath)
+        {
+            string fullTmxPath = Path.GetFullPath(tmxPath);
+            using (ChDir chdir = new ChDir(fullTmxPath))
+            {
+                TmxMap tmxMap = new TmxMap();
+                XDocument doc = tmxMap.LoadDocument(fullTmxPath);
+
+                tmxMap.Name = Path.GetFileNameWithoutExtension(fullTmxPath);
+                tmxMap.ParseMapXml(doc);
+
+                // We're done reading and parsing the tmx file
+                Logger.WriteLine("Map details: {0}", tmxMap.ToString());
+                Logger.WriteSuccess("Parsed: {0} ", fullTmxPath);
+
+                tmxMap.IsLoaded = true;
+                return tmxMap;
+            }
+        }
+
+        private XDocument LoadDocument(string xmlPath)
+        {
+            XDocument doc = null;
+            Logger.WriteLine("Opening {0} ...", xmlPath);
+            try
+            {
+                doc = XDocument.Load(xmlPath);
+            }
+            catch (FileNotFoundException fnf)
+            {
+                string msg = String.Format("File not found: {0}", fnf.FileName);
+                throw new TmxException(msg, fnf);
+            }
+            catch (XmlException xml)
+            {
+                string msg = String.Format("Xml error in {0}\n  {1}", xmlPath, xml.Message);
+                throw new TmxException(msg, xml);
+            }
+            return doc;
+        }
+
+        private void ParseMapXml(XDocument doc)
+        {
+            Logger.WriteLine("Parsing map root ...");
+
+            XElement map = doc.Element("map");
+            try
+            {
+                this.Orientation = TmxHelper.GetAttributeAsEnum<MapOrientation>(map, "orientation");
+                this.StaggerAxis = TmxHelper.GetAttributeAsEnum(map, "staggeraxis", MapStaggerAxis.Y);
+                this.StaggerIndex = TmxHelper.GetAttributeAsEnum(map, "staggerindex", MapStaggerIndex.Odd);
+                this.HexSideLength = TmxHelper.GetAttributeAsInt(map, "hexsidelength", 0);
+                this.DrawOrderHorizontal = TmxHelper.GetAttributeAsString(map, "renderorder", "right-down").Contains("right") ? 1 : -1;
+                this.DrawOrderVertical = TmxHelper.GetAttributeAsString(map, "renderorder", "right-down").Contains("down") ? 1 : -1;
+                this.Width = TmxHelper.GetAttributeAsInt(map, "width");
+                this.Height = TmxHelper.GetAttributeAsInt(map, "height");
+                this.TileWidth = TmxHelper.GetAttributeAsInt(map, "tilewidth");
+                this.TileHeight = TmxHelper.GetAttributeAsInt(map, "tileheight");
+                this.BackgroundColor = TmxHelper.GetAttributeAsColor(map, "backgroundcolor", Color.FromArgb(128, 128, 128));
+            }
+            catch (Exception e)
+            {
+                TmxException.FromAttributeException(e, map);
+            }
+
+            // Collect our map properties
+            this.Properties = TmxProperties.FromXml(map);
+
+            ParseAllTilesets(doc);
+            ParseAllLayers(doc);
+            ParseAllObjectGroups(doc);
+
+            // Once everything is loaded, take a moment to do additional plumbing
+            ParseCompleted();
+        }
+
+        private void ParseAllTilesets(XDocument doc)
+        {
+            Logger.WriteLine("Parsing tileset elements ...");
+            var tilesets = from item in doc.Descendants("tileset")
+                           select item;
+
+            foreach (var ts in tilesets)
+            {
+                ParseSingleTileset(ts);
+            }
+
+            // Treat images in imagelayers as tileset with a single entry
+            var imageLayers = from item in doc.Descendants("imagelayer") select item;
+            foreach (var il in imageLayers)
+            {
+                ParseTilesetFromImageLayer(il);
+            }
+        }
+
+        private void ParseSingleTileset(XElement elem)
+        {
+            // Parse the tileset data and populate the tiles from it
+            uint firstId = TmxHelper.GetAttributeAsUInt(elem, "firstgid");
+
+            // Does the element contain all tileset data or reference an external tileset?
+            XAttribute attrSource = elem.Attribute("source");
+            if (attrSource == null)
+            {
+                ParseInternalTileset(elem, firstId);
+            }
+            else
+            {
+                // Need to load the tileset data from an external file first
+                // Then we'll parse it as if it's internal data
+                ParseExternalTileset(attrSource.Value, firstId);
+            }
+        }
+
+        // This method is called eventually for external tilesets too
+        // Only the gid attribute has been consumed at this point for the tileset
+        private void ParseInternalTileset(XElement elemTileset, uint firstId)
+        {
+            string tilesetName = TmxHelper.GetAttributeAsString(elemTileset, "name");
+
+            Logger.WriteLine("Parse internal tileset '{0}' (gid = {1}) ...", tilesetName, firstId);
+
+            int tileWidth = TmxHelper.GetAttributeAsInt(elemTileset, "tilewidth");
+            int tileHeight = TmxHelper.GetAttributeAsInt(elemTileset, "tileheight");
+            int spacing = TmxHelper.GetAttributeAsInt(elemTileset, "spacing", 0);
+            int margin = TmxHelper.GetAttributeAsInt(elemTileset, "margin", 0);
+
+            PointF tileOffset = PointF.Empty;
+            XElement xmlTileOffset = elemTileset.Element("tileoffset");
+            if (xmlTileOffset != null)
+            {
+                tileOffset.X = TmxHelper.GetAttributeAsInt(xmlTileOffset, "x");
+                tileOffset.Y = TmxHelper.GetAttributeAsInt(xmlTileOffset, "y");
+            }
+
+            IList<TmxTile> tilesToAdd = new List<TmxTile>();
+
+            // Tilesets may have an image for all tiles within it, or it may have an image per tile
+            if (elemTileset.Element("image") != null)
+            {
+                TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"));
+
+                // Create all the tiles
+                // This is a bit complicated because of spacing and margin
+                // (Margin is ignored from Width and Height)
+                for (int end_y = margin + tileHeight; end_y <= tmxImage.Size.Height; end_y += spacing + tileHeight)
+                {
+                    for (int end_x = margin + tileWidth; end_x <= tmxImage.Size.Width; end_x += spacing + tileWidth)
+                    {
+                        uint localId = (uint) tilesToAdd.Count();
+                        uint globalId = firstId + localId;
+                        TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                        tile.Offset = tileOffset;
+                        tile.SetTileSize(tileWidth, tileHeight);
+                        tile.SetLocationOnSource(end_x - tileWidth, end_y - tileHeight);
+                        tilesToAdd.Add(tile);
+                    }
+                }
+            }
+            else
+            {
+                // Each tile will have it's own image
+                foreach (var t in elemTileset.Elements("tile"))
+                {
+                    TmxImage tmxImage = TmxImage.FromXml(t.Element("image"));
+
+                    uint localId = (uint)tilesToAdd.Count();
+
+                    // Local Id can be overridden by the tile element
+                    // This is because tiles can be removed from the tileset, so we won'd always have a zero-based index
+                    localId = TmxHelper.GetAttributeAsUInt(t, "id", localId);
+
+                    uint globalId = firstId + localId;
+                    TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                    tile.Offset = tileOffset;
+                    tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
+                    tile.SetLocationOnSource(0, 0);
+                    tilesToAdd.Add(tile);
+                }
+            }
+
+            StringBuilder builder = new StringBuilder();
+            foreach (TmxTile tile in tilesToAdd)
+            {
+                builder.AppendFormat("{0}", tile.ToString());
+                if (tile != tilesToAdd.Last()) builder.Append("\n");
+                this.Tiles[tile.GlobalId] = tile;
+            }
+            Logger.WriteLine("Added {0} tiles", tilesToAdd.Count);
+
+            // Add any extra data to tiles
+            foreach (var elemTile in elemTileset.Elements("tile"))
+            {
+                int localTileId = TmxHelper.GetAttributeAsInt(elemTile, "id");
+                var tiles = from t in this.Tiles
+                            where t.Value.GlobalId == localTileId + firstId
+                            select t.Value;
+
+                // Note that some old tile data may be sticking around
+                if (tiles.Count() == 0)
+                {
+                    Logger.WriteWarning("Tile '{0}' in tileset '{1}' does not exist but there is tile data for it.\n{2}", localTileId, tilesetName, elemTile.ToString());
+                }
+                else
+                {
+                    tiles.First().ParseTileXml(elemTile, this, firstId);
+                }
+            }
+        }
+
+        private void ParseExternalTileset(string tsxPath, uint firstId)
+        {
+            string fullTsxPath = Path.GetFullPath(tsxPath);
+            using (ChDir chdir = new ChDir(fullTsxPath))
+            {
+                XDocument tsx = LoadDocument(fullTsxPath);
+                ParseInternalTileset(tsx.Root, firstId);
+            }
+        }
+
+        private void ParseTilesetFromImageLayer(XElement elemImageLayer)
+        {
+            string tilesetName = TmxHelper.GetAttributeAsString(elemImageLayer, "name");
+
+            XElement xmlImage = elemImageLayer.Element("image");
+            if (xmlImage == null)
+            {
+                Logger.WriteWarning("Image Layer '{0}' has no image assigned.", tilesetName);
+                return;
+            }
+
+            TmxImage tmxImage = TmxImage.FromXml(xmlImage);
+
+            // The "firstId" is is always one more than all the tiles that we've already parsed (which may be zero)
+            uint firstId = 1;
+            if (this.Tiles.Count > 0)
+            {
+                firstId = this.Tiles.Max(t => t.Key) + 1;
+            }
+            
+            uint localId = 1;
+            uint globalId = firstId + localId;
+
+            TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+            tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
+            tile.SetLocationOnSource(0, 0);
+            this.Tiles[tile.GlobalId] = tile;
+        }
+
+        private void ParseAllLayers(XDocument doc)
+        {
+            Logger.WriteLine("Parsing layer elements ...");
+
+            // Parse "layer"s and "imagelayer"s
+            var layers = (from item in doc.Descendants()
+                          where (item.Name == "layer" || item.Name == "imagelayer")
+                          select item).ToList();
+
+            foreach (var lay in layers)
+            {
+                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this);
+
+                // Layers may be ignored
+                if (tmxLayer.Ignore == TmxLayer.IgnoreSettings.True)
+                {
+                    // We don't care about this layer
+                    Logger.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.Name);
+                    continue;
+                }
+
+                this.Layers.Add(tmxLayer);
+            }
+        }
+
+        private void ParseAllObjectGroups(XDocument doc)
+        {
+            Logger.WriteLine("Parsing objectgroup elements ...");
+            var groups = from item in doc.Root.Elements("objectgroup")
+                         select item;
+
+            foreach (var g in groups)
+            {
+                TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
+                this.ObjectGroups.Add(tmxObjectGroup);
+            }
+        }
+
+        private void ParseCompleted()
+        {
+            // Every "layer type" instance needs its sort ordering figured out
+            var layers = new List<TmxLayerBase>();
+            layers.AddRange(this.Layers);
+            layers.AddRange(this.ObjectGroups);
+
+            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
+            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
+
+            for (int i = 0; i < layers.Count(); ++i)
+            {
+                TmxLayerBase layer = layers[i];
+                layer.SortingLayerName = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
+                layer.SortingOrder = layer.Properties.GetPropertyValueAsInt("unity:sortingOrder", i);
+            }
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxMath.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+// Helper utitlities for performing math within a Tiled context
+namespace Tiled2Unity
+{
+    public class TmxMath
+    {
+        static public readonly uint FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
+        static public readonly uint FLIPPED_VERTICALLY_FLAG = 0x40000000;
+        static public readonly uint FLIPPED_DIAGONALLY_FLAG = 0x20000000;
+
+        static public uint GetTileIdWithoutFlags(uint tileId)
+        {
+            return tileId & ~(FLIPPED_HORIZONTALLY_FLAG | FLIPPED_VERTICALLY_FLAG | FLIPPED_DIAGONALLY_FLAG);
+        }
+
+        static public bool IsTileFlippedDiagonally(uint tileId)
+        {
+            return (tileId & FLIPPED_DIAGONALLY_FLAG) != 0;
+        }
+
+        static public bool IsTileFlippedHorizontally(uint tileId)
+        {
+            return (tileId & FLIPPED_HORIZONTALLY_FLAG) != 0;
+        }
+
+        static public bool IsTileFlippedVertically(uint tileId)
+        {
+            return (tileId & FLIPPED_VERTICALLY_FLAG) != 0;
+        }
+
+        static public void RotatePoints(PointF[] points, TmxObject tmxObject)
+        {
+            TranslatePoints(points, -tmxObject.Position.X, -tmxObject.Position.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix(-tmxObject.Rotation);
+            rotate.TransformPoints(points);
+
+            TranslatePoints(points, tmxObject.Position.X, tmxObject.Position.Y);
+        }
+
+        static public void TransformPoints(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
+        {
+            // Put the points into origin/local space
+            TranslatePoints(points, -origin.X, -origin.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix();
+
+            // Apply the flips/rotations (order matters)
+            if (horizontal)
+            {
+                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
+                rotate = TmxRotationMatrix.Multiply(h, rotate);
+            }
+            if (vertical)
+            {
+                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
+                rotate = TmxRotationMatrix.Multiply(v, rotate);
+            }
+            if (diagonal)
+            {
+                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
+                rotate = TmxRotationMatrix.Multiply(d, rotate);
+            }
+
+            // Apply the combined flip/rotate transformation
+            rotate.TransformPoints(points);
+
+            // Put points back into world space
+            TranslatePoints(points, origin.X, origin.Y);
+        }
+
+        // Hack function to do diaonal flip first in transformations
+        static public void TransformPoints_DiagFirst(PointF[] points, PointF origin, bool diagonal, bool horizontal, bool vertical)
+        {
+            // Put the points into origin/local space
+            TranslatePoints(points, -origin.X, -origin.Y);
+
+            TmxRotationMatrix rotate = new TmxRotationMatrix();
+
+            // Apply the flips/rotations (order matters)
+            if (diagonal)
+            {
+                TmxRotationMatrix d = new TmxRotationMatrix(0, 1, 1, 0);
+                rotate = TmxRotationMatrix.Multiply(d, rotate);
+            }
+            if (horizontal)
+            {
+                TmxRotationMatrix h = new TmxRotationMatrix(-1, 0, 0, 1);
+                rotate = TmxRotationMatrix.Multiply(h, rotate);
+            }
+            if (vertical)
+            {
+                TmxRotationMatrix v = new TmxRotationMatrix(1, 0, 0, -1);
+                rotate = TmxRotationMatrix.Multiply(v, rotate);
+            }
+
+            // Apply the combined flip/rotate transformation
+            rotate.TransformPoints(points);
+
+            // Put points back into world space
+            TranslatePoints(points, origin.X, origin.Y);
+        }
+
+        static public void TranslatePoints(PointF[] points, float tx, float ty)
+        {
+            TranslatePoints(points, new PointF(tx, ty));
+        }
+
+        static public void TranslatePoints(PointF[] points, PointF translate)
+        {
+            SizeF trans = new SizeF(translate.X, translate.Y);
+            for (int p = 0; p < points.Length; ++p)
+            {
+                points[p] = PointF.Add(points[p], trans);
+            }
+        }
+
+        static public bool DoStaggerX(TmxMap tmxMap, int x)
+        {
+            int staggerX = (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X) ? 1 : 0;
+            int staggerEven = (tmxMap.StaggerIndex == TmxMap.MapStaggerIndex.Even) ? 1 : 0;
+
+            return staggerX != 0 && ((x & 1) ^ staggerEven) != 0;
+        }
+
+        static public bool DoStaggerY(TmxMap tmxMap, int y)
+        {
+            int staggerX = (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X) ? 1 : 0;
+            int staggerEven = (tmxMap.StaggerIndex == TmxMap.MapStaggerIndex.Even) ? 1 : 0;
+
+            return staggerX == 0 && ((y & 1) ^ staggerEven) != 0;
+        }
+
+        static public Point TileCornerInGridCoordinates(TmxMap tmxMap, int x, int y)
+        {
+            // Support different map display types (orthographic, isometric, etc..)
+            // Note: simulates "tileToScreenCoords" function from Tiled source
+            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+            {
+                Point point = Point.Empty;
+
+                int origin_x = tmxMap.Height * tmxMap.TileWidth / 2;
+                point.X = (x - y) * tmxMap.TileWidth / 2 + origin_x;
+                point.Y = (x + y) * tmxMap.TileHeight / 2;
+
+                return point;
+            }
+            else if (tmxMap.Orientation == TmxMap.MapOrientation.Staggered || tmxMap.Orientation == TmxMap.MapOrientation.Hexagonal)
+            {
+                Point point = Point.Empty;
+
+                int tileWidth = tmxMap.TileWidth & ~1;
+                int tileHeight = tmxMap.TileHeight & ~1;
+
+                int sideLengthX = tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X ? tmxMap.HexSideLength : 0;
+                int sideLengthY = tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.Y ? tmxMap.HexSideLength : 0;
+
+                int sideOffsetX = (tileWidth - sideLengthX) / 2;
+                int sideOffsetY = (tileHeight - sideLengthY) / 2;
+
+                int columnWidth = sideOffsetX + sideLengthX;
+                int rowHeight = sideOffsetY + sideLengthY;
+
+                if (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X)
+                {
+                    point.Y = y * (tileHeight + sideLengthY);
+                    if (TmxMath.DoStaggerX(tmxMap, x))
+                    {
+                        point.Y += rowHeight;
+                    }
+
+                    point.X = x * columnWidth;
+                }
+                else
+                {
+                    point.X = x * (tileWidth + sideLengthX);
+                    if (TmxMath.DoStaggerY(tmxMap, y))
+                    {
+                        point.X += columnWidth;
+                    }
+
+                    point.Y = y * rowHeight;
+                }
+
+                point.Offset(tileWidth / 2, 0);
+                return point;
+            }
+
+            // Default orthographic orientation
+            return new Point(x * tmxMap.TileWidth, y * tmxMap.TileHeight);
+        }
+
+        static public Point TileCornerInScreenCoordinates(TmxMap tmxMap, int x, int y)
+        {
+            Point point = TileCornerInGridCoordinates(tmxMap, x, y);
+
+            if (tmxMap.Orientation != TmxMap.MapOrientation.Orthogonal)
+            {
+                point.Offset(-tmxMap.TileWidth / 2, 0);
+            }
+
+            return point;
+        }
+
+        static public PointF ObjectPointFToMapSpace(TmxMap tmxMap, float x, float y)
+        {
+            return ObjectPointFToMapSpace(tmxMap, new PointF(x, y));
+        }
+
+        static public PointF ObjectPointFToMapSpace(TmxMap tmxMap, PointF pt)
+        {
+            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+            {
+                PointF xf = PointF.Empty;
+
+                float origin_x = tmxMap.Height * tmxMap.TileWidth * 0.5f;
+                float tile_y = pt.Y / tmxMap.TileHeight;
+                float tile_x = pt.X / tmxMap.TileHeight;
+
+                xf.X = (tile_x - tile_y) * tmxMap.TileWidth * 0.5f + origin_x;
+                xf.Y = (tile_x + tile_y) * tmxMap.TileHeight * 0.5f;
+                return xf;
+            }
+
+            // Other maps types don't transform object points
+            return pt;
+        }
+
+
+        public static Point AddPoints(Point a, Point b)
+        {
+            return new Point(a.X + b.X, a.Y + b.Y);
+        }
+
+        public static PointF AddPoints(PointF a, PointF b)
+        {
+            return new PointF(a.X + b.X, a.Y + b.Y);
+        }
+
+        public static PointF ScalePoints(PointF p, float s)
+        {
+            return new PointF(p.X * s, p.Y * s);
+        }
+
+        public static List<PointF> GetPointsInMapSpace(TmxMap tmxMap, TmxHasPoints objectWithPoints)
+        {
+            PointF local = TmxMath.ObjectPointFToMapSpace(tmxMap, 0, 0);
+            local.X = -local.X;
+            local.Y = -local.Y;
+
+            List<PointF> xfPoints = objectWithPoints.Points.Select(pt => TmxMath.ObjectPointFToMapSpace(tmxMap, pt)).ToList();
+            xfPoints = xfPoints.Select(pt => TmxMath.AddPoints(pt, local)).ToList();
+            return xfPoints;
+        }
+
+        // We don't want ugly floating point issues. Take for granted that sanitized values can be rounded to nearest 1/256th of value
+        public static float Sanitize(float v)
+        {
+            return (float)Math.Round(v * 256) / 256.0f;
+        }
+
+        public static PointF Sanitize(PointF pt)
+        {
+            return new PointF(Sanitize(pt.X), Sanitize(pt.Y));
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxMesh.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    // There are no mesh components to a TMX file, this is for convenience in mesh-ifying Tiled layers
+    public class TmxMesh
+    {
+        // Unity meshes have a limit on the number of vertices they can contain (65534)
+        // Each face of a mesh has 4 vertices so we are limited to 65534 / 4 = 16383 faces
+        // Note: In some cases, Unity still splits up a mesh (incorrectly) into "1 parts" with 16383 faces so we go with 16382 faces to be extra safe.
+        private static readonly int MaxNumberOfTiles = 16382;
+
+        public string UniqueMeshName { get; private set; }
+        public string ObjectName { get; private set; }
+        public TmxImage TmxImage { get; private set; }
+        public uint[] TileIds { get; private set; }
+
+        public int StartingTileIndex { get; private set; }
+        public int NumberOfTiles { get; private set; }
+
+        // Animation properties
+        public int StartTimeMs { get; private set; }
+        public int DurationMs { get; private set; }
+        public int FullAnimationDurationMs { get; private set; }
+
+        public bool IsMeshFull()
+        {
+            return this.NumberOfTiles >= TmxMesh.MaxNumberOfTiles;
+        }
+
+        public uint GetTileIdAt(int tileIndex)
+        {
+            int fauxIndex = tileIndex - this.StartingTileIndex;
+            if (fauxIndex < 0 || fauxIndex >= this.TileIds.Length)
+            {
+                return 0;
+            }
+
+            return this.TileIds[fauxIndex];
+        }
+
+        private void AddTile(int index, uint tileId)
+        {
+            // Assumes non-zero tileIds
+            this.TileIds[index] = tileId;
+            this.NumberOfTiles++;
+
+            // Is the mesh "full" now
+            if (IsMeshFull())
+            {
+                List<uint> tiles = this.TileIds.ToList();
+
+                // Remove leading batch of zero tiles
+                int firstNonZero = tiles.FindIndex(t => t != 0);
+                if (firstNonZero > 0)
+                {
+                    this.StartingTileIndex = firstNonZero;
+                    tiles.RemoveRange(0, firstNonZero);
+                }
+                
+                // Remove the trailing batch of zero tiles
+                tiles.Reverse();
+                firstNonZero = tiles.FindIndex(t => t != 0);
+                if (firstNonZero > 0)
+                {
+                    tiles.RemoveRange(0, firstNonZero);
+                }
+
+                // Reverse the tiles back
+                tiles.Reverse();
+
+                this.TileIds = tiles.ToArray();
+            }
+        }
+
+        // Splits a layer into TmxMesh instances
+        public static List<TmxMesh> ListFromTmxLayer(TmxLayer layer)
+        {
+            List<TmxMesh> meshes = new List<TmxMesh>();
+
+            for (int i = 0; i < layer.TileIds.Count(); ++i)
+            {
+                // Copy the tile unto the mesh that uses the same image
+                // (In other words, we are grouping tiles by images into a mesh)
+                uint tileId = layer.TileIds[i];
+                TmxTile tile = layer.TmxMap.GetTileFromTileId(tileId);
+                if (tile == null)
+                    continue;
+
+                int timeMs = 0;
+                foreach (var frame in tile.Animation.Frames)
+                {
+                    uint frameTileId = frame.GlobalTileId;
+
+                    // Have to put any rotations/flipping from the source tile into this one
+                    frameTileId |= (tileId & TmxMath.FLIPPED_HORIZONTALLY_FLAG);
+                    frameTileId |= (tileId & TmxMath.FLIPPED_VERTICALLY_FLAG);
+                    frameTileId |= (tileId & TmxMath.FLIPPED_DIAGONALLY_FLAG);
+
+                    // Find a mesh to stick this tile into (if it exists)
+                    TmxMesh mesh = meshes.Find(m => m.CanAddFrame(tile, timeMs, frame.DurationMs));
+                    if (mesh == null)
+                    {
+                        // Create a new mesh and add it to our list
+                        mesh = new TmxMesh();
+                        mesh.TileIds = new uint[layer.TileIds.Count()];
+                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
+                        mesh.TmxImage = tile.TmxImage;
+
+                        // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
+                        mesh.StartTimeMs = timeMs;
+                        mesh.DurationMs = frame.DurationMs;
+                        mesh.FullAnimationDurationMs = tile.Animation.TotalTimeMs;
+
+                        mesh.ObjectName = Path.GetFileNameWithoutExtension(tile.TmxImage.AbsolutePath);
+                        if (mesh.DurationMs != 0)
+                        {
+                            // Decorate the name a bit with some animation details for the frame
+                            mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
+                        }
+
+                        meshes.Add(mesh);
+                    }
+
+                    // This mesh contains this tile
+                    mesh.AddTile(i, frameTileId);
+
+                    // Advance time
+                    timeMs += frame.DurationMs;
+                }
+            }
+
+            return meshes;
+        }
+
+        // Creates a TmxMesh from a tile (for tile objects)
+        public static List<TmxMesh> FromTmxTile(TmxTile tmxTile, TmxMap tmxMap)
+        {
+            List<TmxMesh> meshes = new List<TmxMesh>();
+
+            int timeMs = 0;
+            foreach (var frame in tmxTile.Animation.Frames)
+            {
+                uint frameTileId = frame.GlobalTileId;
+                TmxTile frameTile = tmxMap.Tiles[frameTileId];
+
+                TmxMesh mesh = new TmxMesh();
+                mesh.TileIds = new uint[1];
+                mesh.TileIds[0] = frameTileId;
+
+                mesh.UniqueMeshName = String.Format("mesh_tile_{0}", TmxMath.GetTileIdWithoutFlags(frameTileId).ToString("D4"));
+                mesh.TmxImage = frameTile.TmxImage;
+                mesh.ObjectName = "tile_obj";
+
+                // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
+                mesh.StartTimeMs = timeMs;
+                mesh.DurationMs = frame.DurationMs;
+                mesh.FullAnimationDurationMs = tmxTile.Animation.TotalTimeMs;
+
+                if (mesh.DurationMs != 0)
+                {
+                    // Decorate the name a bit with some animation details for the frame
+                    mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
+                }
+
+                // Advance time
+                timeMs += frame.DurationMs;
+
+                // Add the animation frame to our list of meshes
+                meshes.Add(mesh);
+            }
+
+            return meshes;
+        }
+
+        private bool CanAddFrame(TmxTile tile, int startMs, int durationMs)
+        {
+            if (IsMeshFull())
+                return false;
+
+            if (this.TmxImage != tile.TmxImage)
+                return false;
+
+            if (this.StartTimeMs != startMs)
+                return false;
+
+            if (this.DurationMs != durationMs)
+                return false;
+
+            return true;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObject.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public abstract partial class TmxObject : TmxHasProperties
+    {
+        public string Name { get; private set; }
+        public string Type { get; private set; }
+        public bool Visible { get; private set; }
+        public PointF Position { get; private set; }
+        public SizeF Size { get; private set; }
+        public float Rotation { get; private set; }
+        public TmxProperties Properties { get; private set; }
+        public TmxObjectGroup ParentObjectGroup { get; private set; }
+
+        public string GetNonEmptyName()
+        {
+            if (String.IsNullOrEmpty(this.Name))
+                return InternalGetDefaultName();
+            return this.Name;
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{0} {1} pos={2}, size={3} rot = {4}", GetType().Name, GetNonEmptyName(), this.Position, this.Size, this.Rotation);
+        }
+
+        public void BakeRotation()
+        {
+            // Rotate (0, 0)
+            PointF[] pointfs = new PointF[1] { PointF.Empty };
+            TmxMath.RotatePoints(pointfs, this);
+
+            // Bake that rotation into our position, sanitizing the result
+            float x = this.Position.X - pointfs[0].X;
+            float y = this.Position.Y - pointfs[0].Y;
+            this.Position = new PointF(x, y);
+            this.Position = TmxMath.Sanitize(this.Position);
+
+            // Null out our rotation
+            this.Rotation = 0;
+        }
+
+        static protected void CopyBaseProperties(TmxObject from, TmxObject to)
+        {
+            to.Name = from.Name;
+            to.Type = from.Type;
+            to.Visible = from.Visible;
+            to.Position = from.Position;
+            to.Size = from.Size;
+            to.Rotation = from.Rotation;
+            to.Properties = from.Properties;
+            to.ParentObjectGroup = from.ParentObjectGroup;
+        }
+
+        public abstract RectangleF GetWorldBounds();
+        protected abstract void InternalFromXml(XElement xml, TmxMap tmxMap);
+        protected abstract string InternalGetDefaultName();
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObject.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    partial class TmxObject
+    {
+        public static TmxObject FromXml(XElement xml, TmxObjectGroup tmxObjectGroup, TmxMap tmxMap)
+        {
+            Logger.WriteLine("Parsing object ...");
+
+            // What kind of TmxObject are we creating?
+            TmxObject tmxObject = null;
+
+            if (xml.Element("ellipse") != null)
+            {
+                tmxObject = new TmxObjectEllipse();
+            }
+            else if (xml.Element("polygon") != null)
+            {
+                tmxObject = new TmxObjectPolygon();
+            }
+            else if (xml.Element("polyline") != null)
+            {
+                tmxObject = new TmxObjectPolyline();
+            }
+            else if (xml.Attribute("gid") != null)
+            {
+                uint gid = TmxHelper.GetAttributeAsUInt(xml, "gid");
+                gid = TmxMath.GetTileIdWithoutFlags(gid);
+                if (tmxMap.Tiles.ContainsKey(gid))
+                {
+                    tmxObject = new TmxObjectTile();
+                }
+                else
+                {
+                    // For some reason, the tile is not in any of our tilesets
+                    // Warn the user and use a rectangle
+                    Logger.WriteWarning("Tile Id {0} not found in tilesets. Using a rectangle instead.\n{1}", gid, xml.ToString());
+                    tmxObject = new TmxObjectRectangle();
+                }
+            }
+            else
+            {
+                // Just a rectangle
+                tmxObject = new TmxObjectRectangle();
+            }
+
+            // Data found on every object type
+            tmxObject.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
+            tmxObject.Type = TmxHelper.GetAttributeAsString(xml, "type", "");
+            tmxObject.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
+            tmxObject.ParentObjectGroup = tmxObjectGroup;
+
+            float x = TmxHelper.GetAttributeAsFloat(xml, "x");
+            float y = TmxHelper.GetAttributeAsFloat(xml, "y");
+            float w = TmxHelper.GetAttributeAsFloat(xml, "width", 0);
+            float h = TmxHelper.GetAttributeAsFloat(xml, "height", 0);
+            float r = TmxHelper.GetAttributeAsFloat(xml, "rotation", 0);
+            tmxObject.Position = new System.Drawing.PointF(x, y);
+            tmxObject.Size = new System.Drawing.SizeF(w, h);
+            tmxObject.Rotation = r;
+
+            tmxObject.Properties = TmxProperties.FromXml(xml);
+
+            tmxObject.InternalFromXml(xml, tmxMap);
+
+            return tmxObject;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectEllipse.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectEllipse : TmxObject
+    {
+        public bool IsCircle()
+        {
+            return (this.Size.Width == this.Size.Height);
+        }
+
+        public float Radius
+        {
+            get
+            {
+                Debug.Assert(IsCircle());
+                return this.Size.Width * 0.5f;
+            }
+        }
+
+        public override System.Drawing.RectangleF GetWorldBounds()
+        {
+            return new System.Drawing.RectangleF(this.Position, this.Size);
+        }
+
+        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
+        {
+            // No extra data for ellipses
+        }
+
+        protected override string InternalGetDefaultName()
+        {
+            if (IsCircle())
+                return "CircleObject";
+            return "EllipseObject";
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectGroup.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public partial class TmxObjectGroup : TmxLayerBase
+    {
+        public string Name { get; private set; }
+        public bool Visible { get; private set; }
+        public List<TmxObject> Objects { get; private set; }
+        public Color Color { get; private set; }
+        public PointF Offset { get; private set; }
+
+        public TmxObjectGroup()
+        {
+            this.Objects = new List<TmxObject>();
+        }
+
+        public RectangleF GetWorldBounds(PointF translation)
+        {
+            RectangleF bounds = new RectangleF();
+            foreach (var obj in this.Objects)
+            {
+                RectangleF objBounds = obj.GetWorldBounds();
+                objBounds.Offset(translation);
+                bounds = RectangleF.Union(bounds, objBounds);
+            }
+            return bounds;
+        }
+
+        public RectangleF GetWorldBounds()
+        {
+            return GetWorldBounds(new PointF(0, 0));
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{{ ObjectGroup name={0}, numObjects={1} }}", this.Name, this.Objects.Count());
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectGroup.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public partial class TmxObjectGroup
+    {
+        public static TmxObjectGroup FromXml(XElement xml, TmxMap tmxMap)
+        {
+            Debug.Assert(xml.Name == "objectgroup");
+
+            TmxObjectGroup tmxObjectGroup = new TmxObjectGroup();
+
+            // Order within Xml file is import for layer types
+            tmxObjectGroup.XmlElementIndex = xml.NodesBeforeSelf().Count();
+
+            tmxObjectGroup.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
+            tmxObjectGroup.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
+            tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
+            tmxObjectGroup.Properties = TmxProperties.FromXml(xml);
+
+            PointF offset = new PointF(0, 0);
+            offset.X = TmxHelper.GetAttributeAsFloat(xml, "offsetx", 0);
+            offset.Y = TmxHelper.GetAttributeAsFloat(xml, "offsety", 0);
+            tmxObjectGroup.Offset = offset;
+
+            // Get all the objects
+            Logger.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
+            var objects = from obj in xml.Elements("object")
+                          select TmxObject.FromXml(obj, tmxObjectGroup, tmxMap);
+
+            tmxObjectGroup.Objects = objects.ToList();
+
+            // Are we using a unity:layer override?
+            tmxObjectGroup.UnityLayerOverrideName = tmxObjectGroup.Properties.GetPropertyValueAsString("unity:layer", "");
+
+            return tmxObjectGroup;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectPolygon.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectPolygon : TmxObject, TmxHasPoints
+    {
+        public List<PointF> Points { get; set; }
+
+        public TmxObjectPolygon()
+        {
+            this.Points = new List<PointF>();
+        }
+
+        public override RectangleF GetWorldBounds()
+        {
+            float xmin = float.MaxValue;
+            float xmax = float.MinValue;
+            float ymin = float.MaxValue;
+            float ymax = float.MinValue;
+
+            foreach (var p in this.Points)
+            {
+                xmin = Math.Min(xmin, p.X);
+                xmax = Math.Max(xmax, p.X);
+                ymin = Math.Min(ymin, p.Y);
+                ymax = Math.Max(ymax, p.Y);
+            }
+
+            RectangleF bounds = new RectangleF(xmin, ymin, xmax - xmin, ymax - ymin);
+            bounds.Offset(this.Position);
+            return bounds;
+        }
+
+        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
+        {
+            var points = from pt in xml.Element("polygon").Attribute("points").Value.Split(' ')
+                         let x = float.Parse(pt.Split(',')[0])
+                         let y = float.Parse(pt.Split(',')[1])
+                         select new PointF(x, y);
+
+            this.Points = points.ToList();
+
+            // Test if polygons are counter clocksise
+            // From: http://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order
+            float sum = 0.0f;
+            for (int i = 1; i < this.Points.Count(); i++)
+            {
+                var p1 = this.Points[i - 1];
+                var p2 = this.Points[i];
+
+                float v = (p2.X - p1.X) * -(p2.Y + p1.Y);
+                sum += v;
+            }
+
+            if (sum < 0)
+            {
+                // Winding of polygons is counter-clockwise. Reverse the list.
+                this.Points.Reverse();
+            }
+        }
+
+        protected override string InternalGetDefaultName()
+        {
+            return "PolygonObject";
+        }
+
+
+        public override string ToString()
+        {
+            StringBuilder pts = new StringBuilder();
+            if (this.Points == null)
+            {
+                pts.Append("<empty>");
+            }
+            else
+            {
+                foreach (var p in this.Points)
+                {
+                    pts.AppendFormat("({0}, {1})", p.X, p.Y);
+                    if (p != this.Points.Last())
+                    {
+                        pts.AppendFormat(", ");
+                    }
+                }
+            }
+
+            return String.Format("{0} {1} {2} points=({3})", GetType().Name, GetNonEmptyName(), this.Position, pts.ToString());
+        }
+
+        public bool ArePointsClosed()
+        {
+            return true;
+        }
+
+        static public TmxObjectPolygon FromRectangle(TmxMap tmxMap, TmxObjectRectangle tmxRectangle)
+        {
+            TmxObjectPolygon tmxPolygon = new TmxObjectPolygon();
+            TmxObject.CopyBaseProperties(tmxRectangle, tmxPolygon);
+
+            tmxPolygon.Points = tmxRectangle.Points;
+
+            return tmxPolygon;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectPolyline.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectPolyline : TmxObject, TmxHasPoints
+    {
+        public List<PointF> Points { get; set; }
+
+        public TmxObjectPolyline()
+        {
+            this.Points = new List<PointF>();
+        }
+
+        public override RectangleF GetWorldBounds()
+        {
+            float xmin = float.MaxValue;
+            float xmax = float.MinValue;
+            float ymin = float.MaxValue;
+            float ymax = float.MinValue;
+
+            foreach (var p in this.Points)
+            {
+                xmin = Math.Min(xmin, p.X);
+                xmax = Math.Max(xmax, p.X);
+                ymin = Math.Min(ymin, p.Y);
+                ymax = Math.Max(ymax, p.Y);
+            }
+
+            RectangleF bounds = new RectangleF(xmin, ymin, xmax - xmin, ymax - ymin);
+            bounds.Offset(this.Position);
+            return bounds;
+        }
+
+        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
+        {
+            Debug.Assert(xml.Name == "object");
+            Debug.Assert(xml.Element("polyline") != null);
+
+            var points = from pt in xml.Element("polyline").Attribute("points").Value.Split(' ')
+                         let x = float.Parse(pt.Split(',')[0])
+                         let y = float.Parse(pt.Split(',')[1])
+                         select new PointF(x, y);
+
+            this.Points = points.ToList();
+        }
+
+        protected override string InternalGetDefaultName()
+        {
+            return "PolylineObject";
+        }
+
+        public bool ArePointsClosed()
+        {
+            // Lines are open
+            return false;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectRectangle.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectRectangle : TmxObjectPolygon
+    {
+        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
+        {
+            this.Points = new List<System.Drawing.PointF>();
+            this.Points.Add(new PointF(0, 0));
+            this.Points.Add(new PointF(this.Size.Width, 0));
+            this.Points.Add(new PointF(this.Size.Width, this.Size.Height));
+            this.Points.Add(new PointF(0, this.Size.Height));
+
+            if (this.Size.Width == 0 || this.Size.Height == 0)
+            {
+                Logger.WriteWarning("Warning: Rectangle has zero width or height in object group\n{0}", xml.Parent.ToString());
+            }
+        }
+
+        protected override string InternalGetDefaultName()
+        {
+            return "RectangleObject";
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectTile.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectTile : TmxObject
+    {
+        public TmxTile Tile { get; private set; }
+        public bool FlippedHorizontal { get; private set; }
+        public bool FlippedVertical { get; private set; }
+
+        public string SortingLayerName { get; private set; }
+        public int? SortingOrder { get; private set; }
+
+        public TmxObjectTile()
+        {
+            this.SortingLayerName = null;
+        }
+
+        public override System.Drawing.RectangleF GetWorldBounds()
+        {
+            RectangleF myBounds = new RectangleF(this.Position.X, this.Position.Y - this.Size.Height, this.Size.Width, this.Size.Height);
+
+            RectangleF groupBounds = this.Tile.ObjectGroup.GetWorldBounds(this.Position);
+            if (groupBounds.IsEmpty)
+            {
+                return myBounds;
+            }
+            RectangleF combinedBounds = RectangleF.Union(myBounds, groupBounds);
+            return combinedBounds;
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{{ TmxObjectTile: name={0}, pos={1}, tile={2} }}", GetNonEmptyName(), this.Position, this.Tile);
+        }
+
+        public SizeF GetTileObjectScale()
+        {
+            float scaleX = this.Size.Width / this.Tile.TileSize.Width;
+            float scaleY = this.Size.Height / this.Tile.TileSize.Height;
+            return new SizeF(scaleX, scaleY);
+        }
+
+        protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
+        {
+            // Get the tile
+            uint gid = TmxHelper.GetAttributeAsUInt(xml, "gid");
+            this.FlippedHorizontal = TmxMath.IsTileFlippedHorizontally(gid);
+            this.FlippedVertical = TmxMath.IsTileFlippedVertically(gid);
+            uint rawTileId = TmxMath.GetTileIdWithoutFlags(gid);
+
+            this.Tile = tmxMap.Tiles[rawTileId];
+
+            // The tile needs to have a mesh on it.
+            // Note: The tile may already be referenced by another TmxObjectTile instance, and as such will have its mesh data already made
+            if (this.Tile.Meshes.Count() == 0)
+            {
+                this.Tile.Meshes = TmxMesh.FromTmxTile(this.Tile, tmxMap);
+            }
+
+            // Check properties for layer placement
+            if (this.Properties.PropertyMap.ContainsKey("unity:sortingLayerName"))
+            {
+                this.SortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName");
+            }
+            if (this.Properties.PropertyMap.ContainsKey("unity:sortingOrder"))
+            {
+                this.SortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
+            }
+        }
+
+        protected override string InternalGetDefaultName()
+        {
+            return "TileObject";
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectType.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // Has data for a single object type
+    public class TmxObjectType
+    {
+        public string Name { get; private set; }
+        public Color Color { get; private set; }
+        public Dictionary<string, TmxObjectTypeProperty> Properties { get; private set; }
+
+        public TmxObjectType()
+        {
+            this.Name = "";
+            this.Color = Color.Gray;
+            this.Properties = new Dictionary<string, TmxObjectTypeProperty>();
+        }
+
+        public static TmxObjectType FromXml(XElement xml)
+        {
+            TmxObjectType tmxObjectType = new TmxObjectType();
+
+            tmxObjectType.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
+            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.Gray);
+            tmxObjectType.Properties = TmxObjectTypeProperty.FromObjectTypeXml(xml);
+
+            return tmxObjectType;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectTypeProperty.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public class TmxObjectTypeProperty
+    {
+        public string Name { get; private set; }
+        public TmxPropertyType Type { get; private set; }
+        public string Default { get; set; }
+
+        // Create a dictionary collection of Object Type Property instances from the parent xml element
+        public static Dictionary<string, TmxObjectTypeProperty> FromObjectTypeXml(XElement xmlObjectType)
+        {
+            Dictionary<string, TmxObjectTypeProperty> tmxObjectTypeProperties = new Dictionary<string, TmxObjectTypeProperty>();
+
+            foreach (var xmlProperty in xmlObjectType.Elements("property"))
+            {
+                TmxObjectTypeProperty tmxObjectTypeProperty = new TmxObjectTypeProperty();
+
+                tmxObjectTypeProperty.Name = TmxHelper.GetAttributeAsString(xmlProperty, "name", "");
+                tmxObjectTypeProperty.Type = TmxHelper.GetAttributeAsEnum(xmlProperty, "type", TmxPropertyType.String);
+                tmxObjectTypeProperty.Default = TmxHelper.GetAttributeAsString(xmlProperty, "default", "");
+
+                tmxObjectTypeProperties.Add(tmxObjectTypeProperty.Name, tmxObjectTypeProperty);
+            }
+
+            return tmxObjectTypeProperties;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxObjectTypes.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.IO;
+// using System.Linq;
+// using System.Text;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // The "objecttypes.xml" file has project-specific data to be used with the TmxObject instances
+    public class TmxObjectTypes
+    {
+        public Dictionary<string, TmxObjectType> TmxObjectTypeMapping { get; private set; }
+
+        public TmxObjectTypes()
+        {
+            this.TmxObjectTypeMapping = new Dictionary<string, TmxObjectType>(StringComparer.InvariantCultureIgnoreCase);
+        }
+
+        public TmxObjectType GetValueOrDefault(string key)
+        {
+            if (this.TmxObjectTypeMapping.ContainsKey(key))
+            {
+                return this.TmxObjectTypeMapping[key];
+            }
+
+            return new TmxObjectType();
+        }
+
+        public TmxObjectType GetValueOrNull(string key)
+        {
+            if (key != null && this.TmxObjectTypeMapping.ContainsKey(key))
+            {
+                return this.TmxObjectTypeMapping[key];
+            }
+
+            return null;
+        }
+
+
+        public static TmxObjectTypes FromXmlFile(string xmlPath)
+        {
+            TmxObjectTypes xmlObjectTypes = new TmxObjectTypes();
+
+            XDocument doc = XDocument.Load(xmlPath);
+
+            foreach (var xml in doc.Element("objecttypes").Elements("objecttype"))
+            {
+                TmxObjectType tmxObjectType = TmxObjectType.FromXml(xml);
+                xmlObjectTypes.TmxObjectTypeMapping[tmxObjectType.Name] = tmxObjectType;
+            }
+
+            return xmlObjectTypes;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxProperties.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public partial class TmxProperties
+    {
+        public IDictionary<string, TmxProperty> PropertyMap { get; private set; }
+
+        public TmxProperties()
+        {
+            this.PropertyMap = new Dictionary<string, TmxProperty>(StringComparer.InvariantCultureIgnoreCase);
+        }
+
+        public string GetPropertyValueAsString(string name)
+        {
+            return this.PropertyMap[name].Value;
+        }
+
+        public string GetPropertyValueAsString(string name, string defaultValue)
+        {
+            if (this.PropertyMap.ContainsKey(name))
+                return this.PropertyMap[name].Value;
+            return defaultValue;
+        }
+
+        public int GetPropertyValueAsInt(string name)
+        {
+            try
+            {
+                return Convert.ToInt32(this.PropertyMap[name].Value);
+            }
+            catch (System.FormatException inner)
+            {
+                string message = String.Format("Error evaulating property '{0}={1}'\n  '{1}' is not an integer", name, this.PropertyMap[name].Value);
+                throw new TmxException(message, inner);
+            }
+        }
+
+        public int GetPropertyValueAsInt(string name, int defaultValue)
+        {
+            if (this.PropertyMap.ContainsKey(name))
+                return GetPropertyValueAsInt(name);
+            return defaultValue;
+        }
+
+        public bool GetPropertyValueAsBoolean(string name)
+        {
+            bool asBoolean = false;
+            try
+            {
+                asBoolean = Convert.ToBoolean(this.PropertyMap[name].Value);
+            }
+            catch (FormatException)
+            {
+                Logger.WriteWarning("Property '{0}' value '{1}' cannot be converted to a boolean.", name, this.PropertyMap[name].Value);
+            }
+
+            return asBoolean;
+        }
+
+        public bool GetPropertyValueAsBoolean(string name, bool defaultValue)
+        {
+            if (this.PropertyMap.ContainsKey(name))
+                return GetPropertyValueAsBoolean(name);
+            return defaultValue;
+        }
+
+        public T GetPropertyValueAsEnum<T>(string name)
+        {
+            return TmxHelper.GetStringAsEnum<T>(this.PropertyMap[name].Value);
+        }
+
+        public T GetPropertyValueAsEnum<T>(string name, T defaultValue)
+        {
+            if (this.PropertyMap.ContainsKey(name))
+                return GetPropertyValueAsEnum<T>(name);
+            return defaultValue;
+        }
+
+    } // end class
+} // end namespace
+
+// ----------------------------------------------------------------------
+// TmxProperties.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    public partial class TmxProperties
+    {
+        public static TmxProperties FromXml(XElement elem)
+        {
+            TmxProperties tmxProps = new TmxProperties();
+
+            var props = from elem1 in elem.Elements("properties")
+                        from elem2 in elem1.Elements("property")
+                        select new
+                        {
+                            Name = TmxHelper.GetAttributeAsString(elem2, "name"),
+                            Type = TmxHelper.GetAttributeAsEnum(elem2, "type", TmxPropertyType.String),
+
+                            // Value may be attribute or inner text
+                            Value = TmxHelper.GetAttributeAsString(elem2, "value", null) ?? elem2.Value,
+                        };
+
+            if (props.Count() > 0)
+            {
+                Logger.WriteLine("Parse properites ...");
+            }
+
+            foreach (var p in props)
+            {
+                tmxProps.PropertyMap[p.Name] = new TmxProperty { Name = p.Name, Type = p.Type, Value = p.Value };
+            }
+
+            return tmxProps;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxProperty.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public class TmxProperty
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+        public TmxPropertyType Type { get; set; }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxPropertyType.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public enum TmxPropertyType
+    {
+        String,
+        Int,
+        Float,
+        Bool,
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxRotationMatrix.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+// This is a working man's rotation matrix
+// This keeps us from invoking the .NET GDI+ Matrix which causes issues on Mac builds
+namespace Tiled2Unity
+{
+    class TmxRotationMatrix
+    {
+        private float[,] m = new float[2,2] { { 1, 0 },
+                                              { 0, 1 } };
+
+        public TmxRotationMatrix()
+        {
+        }
+
+        public TmxRotationMatrix(float degrees)
+        {
+            double rads = degrees * Math.PI / 180.0f;
+            float cos = (float)Math.Cos(rads);
+            float sin = (float)Math.Sin(rads);
+
+            m[0, 0] = cos;
+            m[0, 1] = -sin;
+            m[1, 0] = sin;
+            m[1, 1] = cos;
+        }
+
+        public TmxRotationMatrix(float m00, float m01, float m10, float m11)
+        {
+            m[0, 0] = m00;
+            m[0, 1] = m01;
+            m[1, 0] = m10;
+            m[1, 1] = m11;
+        }
+
+        public float this[int i, int j]
+        {
+            get { return m[i, j]; }
+            set { m[i, j] = value; }
+        }
+
+        static public TmxRotationMatrix Multiply(TmxRotationMatrix M1, TmxRotationMatrix M2)
+        {
+            float m00 = M1[0, 0] * M2[0, 0] + M1[0, 1] * M2[1, 0];
+            float m01 = M1[0, 0] * M2[0, 1] + M1[0, 1] * M2[1, 1];
+            float m10 = M1[1, 0] * M2[0, 0] + M1[1, 1] * M2[1, 0];
+            float m11 = M1[1, 0] * M2[0, 1] + M1[1, 1] * M2[1, 1];
+            return new TmxRotationMatrix(m00, m01, m10, m11);
+        }
+
+        public void TransformPoint(ref PointF pt)
+        {
+            float x = pt.X * m[0, 0] + pt.Y * m[1, 0];
+            float y = pt.X * m[0, 1] + pt.Y * m[1, 1];
+            pt.X = x;
+            pt.Y = y;
+        }
+
+        public void TransformPoints(PointF[] points)
+        {
+            for (int i = 0; i < points.Length; ++i)
+            {
+                TransformPoint(ref points[i]);
+            }
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxTile.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+namespace Tiled2Unity
+{
+    public partial class TmxTile : TmxHasProperties
+    {
+        public uint GlobalId { get; private set; }
+        public uint LocalId { get; private set; }
+        public Size TileSize { get; private set; }
+        public PointF Offset { get; set; }
+        public TmxImage TmxImage { get; private set; }
+        public Point LocationOnSource { get; private set; }
+        public TmxProperties Properties { get; private set; }
+        public TmxObjectGroup ObjectGroup { get; private set; }
+        public TmxAnimation Animation { get; private set; }
+
+        // Some tiles may be represented as a mesh for tile objects (a list is needed for animations)
+        public List<TmxMesh> Meshes { get; set; }
+
+
+        public TmxTile(uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
+        {
+            this.GlobalId = globalId;
+            this.LocalId = localId;
+            this.TmxImage = tmxImage;
+            this.Properties = new TmxProperties();
+            this.ObjectGroup = new TmxObjectGroup();
+            this.Animation = TmxAnimation.FromTileId(globalId);
+            this.Meshes = new List<TmxMesh>();
+        }
+
+        public bool IsEmpty
+        {
+            get
+            {
+                return this.GlobalId == 0 && this.LocalId == 0;
+            }
+        }
+
+        public void SetTileSize(int width, int height)
+        {
+            this.TileSize = new Size(width, height);
+        }
+
+        public void SetLocationOnSource(int x, int y)
+        {
+            this.LocationOnSource = new Point(x, y);
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{{id = {0}, source({1})}}", this.GlobalId, this.LocationOnSource);
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxTile.Xml.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Xml;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // partial class methods that build tile data from xml
+    partial class TmxTile
+    {
+        public void ParseTileXml(XElement elem, TmxMap tmxMap, uint firstId)
+        {
+            Logger.WriteLine("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
+
+            this.Properties = TmxProperties.FromXml(elem);
+
+            // Do we have an object group for this tile?
+            XElement elemObjectGroup = elem.Element("objectgroup");
+            if (elemObjectGroup != null)
+            {
+                this.ObjectGroup = TmxObjectGroup.FromXml(elemObjectGroup, tmxMap);
+                FixTileColliderObjects(tmxMap);
+            }
+
+            // Is this an animated tile?
+            XElement elemAnimation = elem.Element("animation");
+            if (elemAnimation != null)
+            {
+                this.Animation = TmxAnimation.FromXml(elemAnimation, firstId);
+            }
+        }
+
+        private void FixTileColliderObjects(TmxMap tmxMap)
+        {
+            // Objects inside of tiles are colliders that will be merged with the colliders on neighboring tiles.
+            // In order to promote this merging we have to perform the following clean up operations ...
+            // - All rectangles objects are made into polygon objects
+            // - All polygon objects will have their rotations burned into the polygon points (and Rotation set to zero)
+            // - All cooridinates will be "sanitized" to make up for floating point errors due to rotation and poor placement of colliders
+            // (The sanitation will round all numbers to the nearest 1/256th)
+
+            // Replace rectangles with polygons
+            for (int i = 0; i < this.ObjectGroup.Objects.Count; i++)
+            {
+                TmxObject tmxObject = this.ObjectGroup.Objects[i];
+                if (tmxObject is TmxObjectRectangle)
+                {
+                    TmxObjectPolygon tmxObjectPolygon = TmxObjectPolygon.FromRectangle(tmxMap, tmxObject as TmxObjectRectangle);
+                    this.ObjectGroup.Objects[i] = tmxObjectPolygon;
+                }
+            }
+
+            // Burn rotation into all polygon points, sanitizing the point locations as we go
+            foreach (TmxObject tmxObject in this.ObjectGroup.Objects)
+            {
+                TmxHasPoints tmxHasPoints = tmxObject as TmxHasPoints;
+                if (tmxHasPoints != null)
+                {
+                    var pointfs = tmxHasPoints.Points.ToArray();
+
+                    // Rotate our points by the rotation and position in the object
+                    TmxMath.RotatePoints(pointfs, tmxObject);
+
+                    // Sanitize our points to make up for floating point precision errors
+                    pointfs = pointfs.Select(TmxMath.Sanitize).ToArray();
+
+                    // Set the points back into the object
+                    tmxHasPoints.Points = pointfs.ToList();
+
+                    // Zero out our rotation
+                    tmxObject.BakeRotation();
+                }
+            }
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// Options.cs
+
+//
+// Options.cs
+//
+// Authors:
+//  Jonathan Pryor <jpryor@novell.com>
+//
+// Copyright (C) 2008 Novell (http://www.novell.com)
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+// 
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//
+
+// Compile With:
+//   gmcs -debug+ -r:System.Core Options.cs -o:NDesk.Options.dll
+//   gmcs -debug+ -d:LINQ -r:System.Core Options.cs -o:NDesk.Options.dll
+//
+// The LINQ version just changes the implementation of
+// OptionSet.Parse(IEnumerable<string>), and confers no semantic changes.
+
+//
+// A Getopt::Long-inspired option parsing library for C#.
+//
+// NDesk.Options.OptionSet is built upon a key/value table, where the
+// key is a option format string and the value is a delegate that is 
+// invoked when the format string is matched.
+//
+// Option format strings:
+//  Regex-like BNF Grammar: 
+//    name: .+
+//    type: [=:]
+//    sep: ( [^{}]+ | '{' .+ '}' )?
+//    aliases: ( name type sep ) ( '|' name type sep )*
+// 
+// Each '|'-delimited name is an alias for the associated action.  If the
+// format string ends in a '=', it has a required value.  If the format
+// string ends in a ':', it has an optional value.  If neither '=' or ':'
+// is present, no value is supported.  `=' or `:' need only be defined on one
+// alias, but if they are provided on more than one they must be consistent.
+//
+// Each alias portion may also end with a "key/value separator", which is used
+// to split option values if the option accepts > 1 value.  If not specified,
+// it defaults to '=' and ':'.  If specified, it can be any character except
+// '{' and '}' OR the *string* between '{' and '}'.  If no separator should be
+// used (i.e. the separate values should be distinct arguments), then "{}"
+// should be used as the separator.
+//
+// Options are extracted either from the current option by looking for
+// the option name followed by an '=' or ':', or is taken from the
+// following option IFF:
+//  - The current option does not contain a '=' or a ':'
+//  - The current option requires a value (i.e. not a Option type of ':')
+//
+// The `name' used in the option format string does NOT include any leading
+// option indicator, such as '-', '--', or '/'.  All three of these are
+// permitted/required on any named option.
+//
+// Option bundling is permitted so long as:
+//   - '-' is used to start the option group
+//   - all of the bundled options are a single character
+//   - at most one of the bundled options accepts a value, and the value
+//     provided starts from the next character to the end of the string.
+//
+// This allows specifying '-a -b -c' as '-abc', and specifying '-D name=value'
+// as '-Dname=value'.
+//
+// Option processing is disabled by specifying "--".  All options after "--"
+// are returned by OptionSet.Parse() unchanged and unprocessed.
+//
+// Unprocessed options are returned from OptionSet.Parse().
+//
+// Examples:
+//  int verbose = 0;
+//  OptionSet p = new OptionSet ()
+//    .Add ("v", v => ++verbose)
+//    .Add ("name=|value=", v => Console.WriteLine (v));
+//  p.Parse (new string[]{"-v", "--v", "/v", "-name=A", "/name", "B", "extra"});
+//
+// The above would parse the argument string array, and would invoke the
+// lambda expression three times, setting `verbose' to 3 when complete.  
+// It would also print out "A" and "B" to standard output.
+// The returned array would contain the string "extra".
+//
+// C# 3.0 collection initializers are supported and encouraged:
+//  var p = new OptionSet () {
+//    { "h|?|help", v => ShowHelp () },
+//  };
+//
+// System.ComponentModel.TypeConverter is also supported, allowing the use of
+// custom data types in the callback type; TypeConverter.ConvertFromString()
+// is used to convert the value option to an instance of the specified
+// type:
+//
+//  var p = new OptionSet () {
+//    { "foo=", (Foo f) => Console.WriteLine (f.ToString ()) },
+//  };
+//
+// Random other tidbits:
+//  - Boolean options (those w/o '=' or ':' in the option format string)
+//    are explicitly enabled if they are followed with '+', and explicitly
+//    disabled if they are followed with '-':
+//      string a = null;
+//      var p = new OptionSet () {
+//        { "a", s => a = s },
+//      };
+//      p.Parse (new string[]{"-a"});   // sets v != null
+//      p.Parse (new string[]{"-a+"});  // sets v != null
+//      p.Parse (new string[]{"-a-"});  // sets v == null
+//
+
+// using System;
+// using System.Collections;
+// using System.Collections.Generic;
+// using System.Collections.ObjectModel;
+// using System.ComponentModel;
+// using System.Globalization;
+// using System.IO;
+// using System.Runtime.Serialization;
+// using System.Security.Permissions;
+// using System.Text;
+// using System.Text.RegularExpressions;
+
+#if LINQ
+// using System.Linq;
+#endif
+
+#if TEST
+// using NDesk.Options;
+#endif
+
+namespace NDesk.Options {
+
+	public class OptionValueCollection : IList, IList<string> {
+
+		List<string> values = new List<string> ();
+		OptionContext c;
+
+		internal OptionValueCollection (OptionContext c)
+		{
+			this.c = c;
+		}
+
+		#region ICollection
+		void ICollection.CopyTo (Array array, int index)  {(values as ICollection).CopyTo (array, index);}
+		bool ICollection.IsSynchronized                   {get {return (values as ICollection).IsSynchronized;}}
+		object ICollection.SyncRoot                       {get {return (values as ICollection).SyncRoot;}}
+		#endregion
+
+		#region ICollection<T>
+		public void Add (string item)                       {values.Add (item);}
+		public void Clear ()                                {values.Clear ();}
+		public bool Contains (string item)                  {return values.Contains (item);}
+		public void CopyTo (string[] array, int arrayIndex) {values.CopyTo (array, arrayIndex);}
+		public bool Remove (string item)                    {return values.Remove (item);}
+		public int Count                                    {get {return values.Count;}}
+		public bool IsReadOnly                              {get {return false;}}
+		#endregion
+
+		#region IEnumerable
+		IEnumerator IEnumerable.GetEnumerator () {return values.GetEnumerator ();}
+		#endregion
+
+		#region IEnumerable<T>
+		public IEnumerator<string> GetEnumerator () {return values.GetEnumerator ();}
+		#endregion
+
+		#region IList
+		int IList.Add (object value)                {return (values as IList).Add (value);}
+		bool IList.Contains (object value)          {return (values as IList).Contains (value);}
+		int IList.IndexOf (object value)            {return (values as IList).IndexOf (value);}
+		void IList.Insert (int index, object value) {(values as IList).Insert (index, value);}
+		void IList.Remove (object value)            {(values as IList).Remove (value);}
+		void IList.RemoveAt (int index)             {(values as IList).RemoveAt (index);}
+		bool IList.IsFixedSize                      {get {return false;}}
+		object IList.this [int index]               {get {return this [index];} set {(values as IList)[index] = value;}}
+		#endregion
+
+		#region IList<T>
+		public int IndexOf (string item)            {return values.IndexOf (item);}
+		public void Insert (int index, string item) {values.Insert (index, item);}
+		public void RemoveAt (int index)            {values.RemoveAt (index);}
+
+		private void AssertValid (int index)
+		{
+			if (c.Option == null)
+				throw new InvalidOperationException ("OptionContext.Option is null.");
+			if (index >= c.Option.MaxValueCount)
+				throw new ArgumentOutOfRangeException ("index");
+			if (c.Option.OptionValueType == OptionValueType.Required &&
+					index >= values.Count)
+				throw new OptionException (string.Format (
+							c.OptionSet.MessageLocalizer ("Missing required value for option '{0}'."), c.OptionName), 
+						c.OptionName);
+		}
+
+		public string this [int index] {
+			get {
+				AssertValid (index);
+				return index >= values.Count ? null : values [index];
+			}
+			set {
+				values [index] = value;
+			}
+		}
+		#endregion
+
+		public List<string> ToList ()
+		{
+			return new List<string> (values);
+		}
+
+		public string[] ToArray ()
+		{
+			return values.ToArray ();
+		}
+
+		public override string ToString ()
+		{
+			return string.Join (", ", values.ToArray ());
+		}
+	}
+
+	public class OptionContext {
+		private Option                option;
+		private string                name;
+		private int                   index;
+		private OptionSet             set;
+		private OptionValueCollection c;
+
+		public OptionContext (OptionSet set)
+		{
+			this.set = set;
+			this.c   = new OptionValueCollection (this);
+		}
+
+		public Option Option {
+			get {return option;}
+			set {option = value;}
+		}
+
+		public string OptionName { 
+			get {return name;}
+			set {name = value;}
+		}
+
+		public int OptionIndex {
+			get {return index;}
+			set {index = value;}
+		}
+
+		public OptionSet OptionSet {
+			get {return set;}
+		}
+
+		public OptionValueCollection OptionValues {
+			get {return c;}
+		}
+	}
+
+	public enum OptionValueType {
+		None, 
+		Optional,
+		Required,
+	}
+
+	public abstract class Option {
+		string prototype, description;
+		string[] names;
+		OptionValueType type;
+		int count;
+		string[] separators;
+
+		protected Option (string prototype, string description)
+			: this (prototype, description, 1)
+		{
+		}
+
+		protected Option (string prototype, string description, int maxValueCount)
+		{
+			if (prototype == null)
+				throw new ArgumentNullException ("prototype");
+			if (prototype.Length == 0)
+				throw new ArgumentException ("Cannot be the empty string.", "prototype");
+			if (maxValueCount < 0)
+				throw new ArgumentOutOfRangeException ("maxValueCount");
+
+			this.prototype   = prototype;
+			this.names       = prototype.Split ('|');
+			this.description = description;
+			this.count       = maxValueCount;
+			this.type        = ParsePrototype ();
+
+			if (this.count == 0 && type != OptionValueType.None)
+				throw new ArgumentException (
+						"Cannot provide maxValueCount of 0 for OptionValueType.Required or " +
+							"OptionValueType.Optional.",
+						"maxValueCount");
+			if (this.type == OptionValueType.None && maxValueCount > 1)
+				throw new ArgumentException (
+						string.Format ("Cannot provide maxValueCount of {0} for OptionValueType.None.", maxValueCount),
+						"maxValueCount");
+			if (Array.IndexOf (names, "<>") >= 0 && 
+					((names.Length == 1 && this.type != OptionValueType.None) ||
+					 (names.Length > 1 && this.MaxValueCount > 1)))
+				throw new ArgumentException (
+						"The default option handler '<>' cannot require values.",
+						"prototype");
+		}
+
+		public string           Prototype       {get {return prototype;}}
+		public string           Description     {get {return description;}}
+		public OptionValueType  OptionValueType {get {return type;}}
+		public int              MaxValueCount   {get {return count;}}
+
+		public string[] GetNames ()
+		{
+			return (string[]) names.Clone ();
+		}
+
+		public string[] GetValueSeparators ()
+		{
+			if (separators == null)
+				return new string [0];
+			return (string[]) separators.Clone ();
+		}
+
+		protected static T Parse<T> (string value, OptionContext c)
+		{
+			TypeConverter conv = TypeDescriptor.GetConverter (typeof (T));
+			T t = default (T);
+			try {
+				if (value != null)
+					t = (T) conv.ConvertFromString (value);
+			}
+			catch (Exception e) {
+				throw new OptionException (
+						string.Format (
+							c.OptionSet.MessageLocalizer ("Could not convert string `{0}' to type {1} for option `{2}'."),
+							value, typeof (T).Name, c.OptionName),
+						c.OptionName, e);
+			}
+			return t;
+		}
+
+		internal string[] Names           {get {return names;}}
+		internal string[] ValueSeparators {get {return separators;}}
+
+		static readonly char[] NameTerminator = new char[]{'=', ':'};
+
+		private OptionValueType ParsePrototype ()
+		{
+			char type = '\0';
+			List<string> seps = new List<string> ();
+			for (int i = 0; i < names.Length; ++i) {
+				string name = names [i];
+				if (name.Length == 0)
+					throw new ArgumentException ("Empty option names are not supported.", "prototype");
+
+				int end = name.IndexOfAny (NameTerminator);
+				if (end == -1)
+					continue;
+				names [i] = name.Substring (0, end);
+				if (type == '\0' || type == name [end])
+					type = name [end];
+				else 
+					throw new ArgumentException (
+							string.Format ("Conflicting option types: '{0}' vs. '{1}'.", type, name [end]),
+							"prototype");
+				AddSeparators (name, end, seps);
+			}
+
+			if (type == '\0')
+				return OptionValueType.None;
+
+			if (count <= 1 && seps.Count != 0)
+				throw new ArgumentException (
+						string.Format ("Cannot provide key/value separators for Options taking {0} value(s).", count),
+						"prototype");
+			if (count > 1) {
+				if (seps.Count == 0)
+					this.separators = new string[]{":", "="};
+				else if (seps.Count == 1 && seps [0].Length == 0)
+					this.separators = null;
+				else
+					this.separators = seps.ToArray ();
+			}
+
+			return type == '=' ? OptionValueType.Required : OptionValueType.Optional;
+		}
+
+		private static void AddSeparators (string name, int end, ICollection<string> seps)
+		{
+			int start = -1;
+			for (int i = end+1; i < name.Length; ++i) {
+				switch (name [i]) {
+					case '{':
+						if (start != -1)
+							throw new ArgumentException (
+									string.Format ("Ill-formed name/value separator found in \"{0}\".", name),
+									"prototype");
+						start = i+1;
+						break;
+					case '}':
+						if (start == -1)
+							throw new ArgumentException (
+									string.Format ("Ill-formed name/value separator found in \"{0}\".", name),
+									"prototype");
+						seps.Add (name.Substring (start, i-start));
+						start = -1;
+						break;
+					default:
+						if (start == -1)
+							seps.Add (name [i].ToString ());
+						break;
+				}
+			}
+			if (start != -1)
+				throw new ArgumentException (
+						string.Format ("Ill-formed name/value separator found in \"{0}\".", name),
+						"prototype");
+		}
+
+		public void Invoke (OptionContext c)
+		{
+			OnParseComplete (c);
+			c.OptionName  = null;
+			c.Option      = null;
+			c.OptionValues.Clear ();
+		}
+
+		protected abstract void OnParseComplete (OptionContext c);
+
+		public override string ToString ()
+		{
+			return Prototype;
+		}
+	}
+
+	[Serializable]
+	public class OptionException : Exception {
+		private string option;
+
+		public OptionException ()
+		{
+		}
+
+		public OptionException (string message, string optionName)
+			: base (message)
+		{
+			this.option = optionName;
+		}
+
+		public OptionException (string message, string optionName, Exception innerException)
+			: base (message, innerException)
+		{
+			this.option = optionName;
+		}
+
+		protected OptionException (SerializationInfo info, StreamingContext context)
+			: base (info, context)
+		{
+			this.option = info.GetString ("OptionName");
+		}
+
+		public string OptionName {
+			get {return this.option;}
+		}
+
+		[SecurityPermission (SecurityAction.LinkDemand, SerializationFormatter = true)]
+		public override void GetObjectData (SerializationInfo info, StreamingContext context)
+		{
+			base.GetObjectData (info, context);
+			info.AddValue ("OptionName", option);
+		}
+	}
+
+	public delegate void OptionAction<TKey, TValue> (TKey key, TValue value);
+
+	public class OptionSet : KeyedCollection<string, Option>
+	{
+		public OptionSet ()
+			: this (delegate (string f) {return f;})
+		{
+		}
+
+		public OptionSet (Converter<string, string> localizer)
+		{
+			this.localizer = localizer;
+		}
+
+		Converter<string, string> localizer;
+
+		public Converter<string, string> MessageLocalizer {
+			get {return localizer;}
+		}
+
+		protected override string GetKeyForItem (Option item)
+		{
+			if (item == null)
+				throw new ArgumentNullException ("option");
+			if (item.Names != null && item.Names.Length > 0)
+				return item.Names [0];
+			// This should never happen, as it's invalid for Option to be
+			// constructed w/o any names.
+			throw new InvalidOperationException ("Option has no names!");
+		}
+
+		[Obsolete ("Use KeyedCollection.this[string]")]
+		protected Option GetOptionForName (string option)
+		{
+			if (option == null)
+				throw new ArgumentNullException ("option");
+			try {
+				return base [option];
+			}
+			catch (KeyNotFoundException) {
+				return null;
+			}
+		}
+
+		protected override void InsertItem (int index, Option item)
+		{
+			base.InsertItem (index, item);
+			AddImpl (item);
+		}
+
+		protected override void RemoveItem (int index)
+		{
+			base.RemoveItem (index);
+			Option p = Items [index];
+			// KeyedCollection.RemoveItem() handles the 0th item
+			for (int i = 1; i < p.Names.Length; ++i) {
+				Dictionary.Remove (p.Names [i]);
+			}
+		}
+
+		protected override void SetItem (int index, Option item)
+		{
+			base.SetItem (index, item);
+			RemoveItem (index);
+			AddImpl (item);
+		}
+
+		private void AddImpl (Option option)
+		{
+			if (option == null)
+				throw new ArgumentNullException ("option");
+			List<string> added = new List<string> (option.Names.Length);
+			try {
+				// KeyedCollection.InsertItem/SetItem handle the 0th name.
+				for (int i = 1; i < option.Names.Length; ++i) {
+					Dictionary.Add (option.Names [i], option);
+					added.Add (option.Names [i]);
+				}
+			}
+			catch (Exception) {
+				foreach (string name in added)
+					Dictionary.Remove (name);
+				throw;
+			}
+		}
+
+		public new OptionSet Add (Option option)
+		{
+			base.Add (option);
+			return this;
+		}
+
+		sealed class ActionOption : Option {
+			Action<OptionValueCollection> action;
+
+			public ActionOption (string prototype, string description, int count, Action<OptionValueCollection> action)
+				: base (prototype, description, count)
+			{
+				if (action == null)
+					throw new ArgumentNullException ("action");
+				this.action = action;
+			}
+
+			protected override void OnParseComplete (OptionContext c)
+			{
+				action (c.OptionValues);
+			}
+		}
+
+		public OptionSet Add (string prototype, Action<string> action)
+		{
+			return Add (prototype, null, action);
+		}
+
+		public OptionSet Add (string prototype, string description, Action<string> action)
+		{
+			if (action == null)
+				throw new ArgumentNullException ("action");
+			Option p = new ActionOption (prototype, description, 1, 
+					delegate (OptionValueCollection v) { action (v [0]); });
+			base.Add (p);
+			return this;
+		}
+
+		public OptionSet Add (string prototype, OptionAction<string, string> action)
+		{
+			return Add (prototype, null, action);
+		}
+
+		public OptionSet Add (string prototype, string description, OptionAction<string, string> action)
+		{
+			if (action == null)
+				throw new ArgumentNullException ("action");
+			Option p = new ActionOption (prototype, description, 2, 
+					delegate (OptionValueCollection v) {action (v [0], v [1]);});
+			base.Add (p);
+			return this;
+		}
+
+		sealed class ActionOption<T> : Option {
+			Action<T> action;
+
+			public ActionOption (string prototype, string description, Action<T> action)
+				: base (prototype, description, 1)
+			{
+				if (action == null)
+					throw new ArgumentNullException ("action");
+				this.action = action;
+			}
+
+			protected override void OnParseComplete (OptionContext c)
+			{
+				action (Parse<T> (c.OptionValues [0], c));
+			}
+		}
+
+		sealed class ActionOption<TKey, TValue> : Option {
+			OptionAction<TKey, TValue> action;
+
+			public ActionOption (string prototype, string description, OptionAction<TKey, TValue> action)
+				: base (prototype, description, 2)
+			{
+				if (action == null)
+					throw new ArgumentNullException ("action");
+				this.action = action;
+			}
+
+			protected override void OnParseComplete (OptionContext c)
+			{
+				action (
+						Parse<TKey> (c.OptionValues [0], c),
+						Parse<TValue> (c.OptionValues [1], c));
+			}
+		}
+
+		public OptionSet Add<T> (string prototype, Action<T> action)
+		{
+			return Add (prototype, null, action);
+		}
+
+		public OptionSet Add<T> (string prototype, string description, Action<T> action)
+		{
+			return Add (new ActionOption<T> (prototype, description, action));
+		}
+
+		public OptionSet Add<TKey, TValue> (string prototype, OptionAction<TKey, TValue> action)
+		{
+			return Add (prototype, null, action);
+		}
+
+		public OptionSet Add<TKey, TValue> (string prototype, string description, OptionAction<TKey, TValue> action)
+		{
+			return Add (new ActionOption<TKey, TValue> (prototype, description, action));
+		}
+
+		protected virtual OptionContext CreateOptionContext ()
+		{
+			return new OptionContext (this);
+		}
+
+#if LINQ
+		public List<string> Parse (IEnumerable<string> arguments)
+		{
+			bool process = true;
+			OptionContext c = CreateOptionContext ();
+			c.OptionIndex = -1;
+			var def = GetOptionForName ("<>");
+			var unprocessed = 
+				from argument in arguments
+				where ++c.OptionIndex >= 0 && (process || def != null)
+					? process
+						? argument == "--" 
+							? (process = false)
+							: !Parse (argument, c)
+								? def != null 
+									? Unprocessed (null, def, c, argument) 
+									: true
+								: false
+						: def != null 
+							? Unprocessed (null, def, c, argument)
+							: true
+					: true
+				select argument;
+			List<string> r = unprocessed.ToList ();
+			if (c.Option != null)
+				c.Option.Invoke (c);
+			return r;
+		}
+#else
+		public List<string> Parse (IEnumerable<string> arguments)
+		{
+			OptionContext c = CreateOptionContext ();
+			c.OptionIndex = -1;
+			bool process = true;
+			List<string> unprocessed = new List<string> ();
+			Option def = Contains ("<>") ? this ["<>"] : null;
+			foreach (string argument in arguments) {
+				++c.OptionIndex;
+				if (argument == "--") {
+					process = false;
+					continue;
+				}
+				if (!process) {
+					Unprocessed (unprocessed, def, c, argument);
+					continue;
+				}
+				if (!Parse (argument, c))
+					Unprocessed (unprocessed, def, c, argument);
+			}
+			if (c.Option != null)
+				c.Option.Invoke (c);
+			return unprocessed;
+		}
+#endif
+
+		private static bool Unprocessed (ICollection<string> extra, Option def, OptionContext c, string argument)
+		{
+			if (def == null) {
+				extra.Add (argument);
+				return false;
+			}
+			c.OptionValues.Add (argument);
+			c.Option = def;
+			c.Option.Invoke (c);
+			return false;
+		}
+
+		private readonly Regex ValueOption = new Regex (
+			@"^(?<flag>--|-|/)(?<name>[^:=]+)((?<sep>[:=])(?<value>.*))?$");
+
+		protected bool GetOptionParts (string argument, out string flag, out string name, out string sep, out string value)
+		{
+			if (argument == null)
+				throw new ArgumentNullException ("argument");
+
+			flag = name = sep = value = null;
+			Match m = ValueOption.Match (argument);
+			if (!m.Success) {
+				return false;
+			}
+			flag  = m.Groups ["flag"].Value;
+			name  = m.Groups ["name"].Value;
+			if (m.Groups ["sep"].Success && m.Groups ["value"].Success) {
+				sep   = m.Groups ["sep"].Value;
+				value = m.Groups ["value"].Value;
+			}
+			return true;
+		}
+
+		protected virtual bool Parse (string argument, OptionContext c)
+		{
+			if (c.Option != null) {
+				ParseValue (argument, c);
+				return true;
+			}
+
+			string f, n, s, v;
+			if (!GetOptionParts (argument, out f, out n, out s, out v))
+				return false;
+
+			Option p;
+			if (Contains (n)) {
+				p = this [n];
+				c.OptionName = f + n;
+				c.Option     = p;
+				switch (p.OptionValueType) {
+					case OptionValueType.None:
+						c.OptionValues.Add (n);
+						c.Option.Invoke (c);
+						break;
+					case OptionValueType.Optional:
+					case OptionValueType.Required: 
+						ParseValue (v, c);
+						break;
+				}
+				return true;
+			}
+			// no match; is it a bool option?
+			if (ParseBool (argument, n, c))
+				return true;
+			// is it a bundled option?
+			if (ParseBundledValue (f, string.Concat (n + s + v), c))
+				return true;
+
+			return false;
+		}
+
+		private void ParseValue (string option, OptionContext c)
+		{
+			if (option != null)
+				foreach (string o in c.Option.ValueSeparators != null 
+						? option.Split (c.Option.ValueSeparators, StringSplitOptions.None)
+						: new string[]{option}) {
+					c.OptionValues.Add (o);
+				}
+			if (c.OptionValues.Count == c.Option.MaxValueCount || 
+					c.Option.OptionValueType == OptionValueType.Optional)
+				c.Option.Invoke (c);
+			else if (c.OptionValues.Count > c.Option.MaxValueCount) {
+				throw new OptionException (localizer (string.Format (
+								"Error: Found {0} option values when expecting {1}.", 
+								c.OptionValues.Count, c.Option.MaxValueCount)),
+						c.OptionName);
+			}
+		}
+
+		private bool ParseBool (string option, string n, OptionContext c)
+		{
+			Option p;
+			string rn;
+			if (n.Length >= 1 && (n [n.Length-1] == '+' || n [n.Length-1] == '-') &&
+					Contains ((rn = n.Substring (0, n.Length-1)))) {
+				p = this [rn];
+				string v = n [n.Length-1] == '+' ? option : null;
+				c.OptionName  = option;
+				c.Option      = p;
+				c.OptionValues.Add (v);
+				p.Invoke (c);
+				return true;
+			}
+			return false;
+		}
+
+		private bool ParseBundledValue (string f, string n, OptionContext c)
+		{
+			if (f != "-")
+				return false;
+			for (int i = 0; i < n.Length; ++i) {
+				Option p;
+				string opt = f + n [i].ToString ();
+				string rn = n [i].ToString ();
+				if (!Contains (rn)) {
+					if (i == 0)
+						return false;
+					throw new OptionException (string.Format (localizer (
+									"Cannot bundle unregistered option '{0}'."), opt), opt);
+				}
+				p = this [rn];
+				switch (p.OptionValueType) {
+					case OptionValueType.None:
+						Invoke (c, opt, n, p);
+						break;
+					case OptionValueType.Optional:
+					case OptionValueType.Required: {
+						string v     = n.Substring (i+1);
+						c.Option     = p;
+						c.OptionName = opt;
+						ParseValue (v.Length != 0 ? v : null, c);
+						return true;
+					}
+					default:
+						throw new InvalidOperationException ("Unknown OptionValueType: " + p.OptionValueType);
+				}
+			}
+			return true;
+		}
+
+		private static void Invoke (OptionContext c, string name, string value, Option option)
+		{
+			c.OptionName  = name;
+			c.Option      = option;
+			c.OptionValues.Add (value);
+			option.Invoke (c);
+		}
+
+		private const int OptionWidth = 29;
+
+		public void WriteOptionDescriptions (TextWriter o)
+		{
+			foreach (Option p in this) {
+				int written = 0;
+				if (!WriteOptionPrototype (o, p, ref written))
+					continue;
+
+				if (written < OptionWidth)
+					o.Write (new string (' ', OptionWidth - written));
+				else {
+					o.WriteLine ();
+					o.Write (new string (' ', OptionWidth));
+				}
+
+				List<string> lines = GetLines (localizer (GetDescription (p.Description)));
+				o.WriteLine (lines [0]);
+				string prefix = new string (' ', OptionWidth+2);
+				for (int i = 1; i < lines.Count; ++i) {
+					o.Write (prefix);
+					o.WriteLine (lines [i]);
+				}
+			}
+		}
+
+		bool WriteOptionPrototype (TextWriter o, Option p, ref int written)
+		{
+			string[] names = p.Names;
+
+			int i = GetNextOptionIndex (names, 0);
+			if (i == names.Length)
+				return false;
+
+			if (names [i].Length == 1) {
+				Write (o, ref written, "  -");
+				Write (o, ref written, names [0]);
+			}
+			else {
+				Write (o, ref written, "      --");
+				Write (o, ref written, names [0]);
+			}
+
+			for ( i = GetNextOptionIndex (names, i+1); 
+					i < names.Length; i = GetNextOptionIndex (names, i+1)) {
+				Write (o, ref written, ", ");
+				Write (o, ref written, names [i].Length == 1 ? "-" : "--");
+				Write (o, ref written, names [i]);
+			}
+
+			if (p.OptionValueType == OptionValueType.Optional ||
+					p.OptionValueType == OptionValueType.Required) {
+				if (p.OptionValueType == OptionValueType.Optional) {
+					Write (o, ref written, localizer ("["));
+				}
+				Write (o, ref written, localizer ("=" + GetArgumentName (0, p.MaxValueCount, p.Description)));
+				string sep = p.ValueSeparators != null && p.ValueSeparators.Length > 0 
+					? p.ValueSeparators [0]
+					: " ";
+				for (int c = 1; c < p.MaxValueCount; ++c) {
+					Write (o, ref written, localizer (sep + GetArgumentName (c, p.MaxValueCount, p.Description)));
+				}
+				if (p.OptionValueType == OptionValueType.Optional) {
+					Write (o, ref written, localizer ("]"));
+				}
+			}
+			return true;
+		}
+
+		static int GetNextOptionIndex (string[] names, int i)
+		{
+			while (i < names.Length && names [i] == "<>") {
+				++i;
+			}
+			return i;
+		}
+
+		static void Write (TextWriter o, ref int n, string s)
+		{
+			n += s.Length;
+			o.Write (s);
+		}
+
+		private static string GetArgumentName (int index, int maxIndex, string description)
+		{
+			if (description == null)
+				return maxIndex == 1 ? "VALUE" : "VALUE" + (index + 1);
+			string[] nameStart;
+			if (maxIndex == 1)
+				nameStart = new string[]{"{0:", "{"};
+			else
+				nameStart = new string[]{"{" + index + ":"};
+			for (int i = 0; i < nameStart.Length; ++i) {
+				int start, j = 0;
+				do {
+					start = description.IndexOf (nameStart [i], j);
+				} while (start >= 0 && j != 0 ? description [j++ - 1] == '{' : false);
+				if (start == -1)
+					continue;
+				int end = description.IndexOf ("}", start);
+				if (end == -1)
+					continue;
+				return description.Substring (start + nameStart [i].Length, end - start - nameStart [i].Length);
+			}
+			return maxIndex == 1 ? "VALUE" : "VALUE" + (index + 1);
+		}
+
+		private static string GetDescription (string description)
+		{
+			if (description == null)
+				return string.Empty;
+			StringBuilder sb = new StringBuilder (description.Length);
+			int start = -1;
+			for (int i = 0; i < description.Length; ++i) {
+				switch (description [i]) {
+					case '{':
+						if (i == start) {
+							sb.Append ('{');
+							start = -1;
+						}
+						else if (start < 0)
+							start = i + 1;
+						break;
+					case '}':
+						if (start < 0) {
+							if ((i+1) == description.Length || description [i+1] != '}')
+								throw new InvalidOperationException ("Invalid option description: " + description);
+							++i;
+							sb.Append ("}");
+						}
+						else {
+							sb.Append (description.Substring (start, i - start));
+							start = -1;
+						}
+						break;
+					case ':':
+						if (start < 0)
+							goto default;
+						start = i + 1;
+						break;
+					default:
+						if (start < 0)
+							sb.Append (description [i]);
+						break;
+				}
+			}
+			return sb.ToString ();
+		}
+
+		private static List<string> GetLines (string description)
+		{
+			List<string> lines = new List<string> ();
+			if (string.IsNullOrEmpty (description)) {
+				lines.Add (string.Empty);
+				return lines;
+			}
+			int length = 80 - OptionWidth - 2;
+			int start = 0, end;
+			do {
+				end = GetLineEnd (start, length, description);
+				bool cont = false;
+				if (end < description.Length) {
+					char c = description [end];
+					if (c == '-' || (char.IsWhiteSpace (c) && c != '\n'))
+						++end;
+					else if (c != '\n') {
+						cont = true;
+						--end;
+					}
+				}
+				lines.Add (description.Substring (start, end - start));
+				if (cont) {
+					lines [lines.Count-1] += "-";
+				}
+				start = end;
+				if (start < description.Length && description [start] == '\n')
+					++start;
+			} while (end < description.Length);
+			return lines;
+		}
+
+		private static int GetLineEnd (int start, int length, string description)
+		{
+			int end = Math.Min (start + length, description.Length);
+			int sep = -1;
+			for (int i = start; i < end; ++i) {
+				switch (description [i]) {
+					case ' ':
+					case '\t':
+					case '\v':
+					case '-':
+					case ',':
+					case '.':
+					case ';':
+						sep = i;
+						break;
+					case '\n':
+						return i;
+				}
+			}
+			if (sep == -1 || end == description.Length)
+				return end;
+			return sep;
+		}
+	}
+}
+
 

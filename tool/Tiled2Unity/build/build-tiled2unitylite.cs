@@ -48,17 +48,12 @@ namespace Tiled2UnityLite_Builder
             // If the filename contains this string in its path then it is ignored and not part of Tiled2UnityLite
             List<string> ignoreFiles = new List<string>();
             ignoreFiles.Add("AssemblyInfo");
-            ignoreFiles.Add("DataGridView");
-            ignoreFiles.Add("PerLayerColorData");
-            ignoreFiles.Add("Form.cs");
-            ignoreFiles.Add("Viewer.cs");
-            ignoreFiles.Add("About.cs");
-            ignoreFiles.Add("ThemeColor");
-            ignoreFiles.Add("Designer.cs");
             ignoreFiles.Add("TemporaryGeneratedFile_");
+            ignoreFiles.Add("Info.cs");
+            ignoreFiles.Add("PreviewImage.cs");
 
             List<string> keepers = new List<string>();
-            foreach (string file in Directory.GetFiles("../src/", "*.cs", SearchOption.AllDirectories))
+            foreach (string file in Directory.GetFiles("../Tiled2UnityLib/", "*.cs", SearchOption.AllDirectories))
             {
                 if (!ignoreFiles.Any(i => file.Contains(i)))
                 {
@@ -66,16 +61,19 @@ namespace Tiled2UnityLite_Builder
                 }
             }
 
+            // Add NDesk.Options source from Windows GUI version of Tiled2Unity
+            keepers.Add("../src/ThirdParty/NDesk/Options.cs");
+
             // Ignore some library references
             List<string> ignoreReferences = new List<string>();
             ignoreReferences.Add("PresentationCore");
             ignoreReferences.Add("Microsoft.");
-            ignoreReferences.Add("Windows.Forms");
             ignoreReferences.Add("System.Deployment");
+            ignoreReferences.Add("NDesk.Options");
 
             // Need to crack open the project file to find all the library refences used
             List<string> references = new List<string>();
-            XDocument xmlDoc = XDocument.Load("../src/Tiled2Unity.csproj");
+            XDocument xmlDoc = XDocument.Load("../Tiled2UnityLib/Tiled2UnityLib.csproj");
             XNamespace ns = xmlDoc.Root.Name.Namespace;
             foreach (XElement reference in xmlDoc.Descendants(ns + "Reference"))
             {
@@ -92,8 +90,7 @@ namespace Tiled2UnityLite_Builder
             // Ignore "using [namespace]" for these
             List<string> ignoreUsers = new List<string>();
             ignoreUsers.Add("NDesk.Options");
-            ignoreUsers.Add("System.Windows.Forms");
-            ignoreUsers.Add("System.Windows.Media");
+            ignoreUsers.Add("System.Drawing.Drawing2D");            
 
             // Start collecting lines/data for our generated script file
             List<string> defines = new List<string>();
@@ -172,8 +169,8 @@ namespace Tiled2UnityLite_Builder
             }
             t2uWriter.WriteLine();
 
-            // Write out our version function
-            WriteGetVersionFunction(t2uWriter, version);
+            // Write out our "main"
+            WriteMainProgramFile(t2uWriter, version);
 
             // Write the body out
             t2uWriter.WriteLine(body.ToString());
@@ -187,27 +184,45 @@ namespace Tiled2UnityLite_Builder
         static public string GetTiled2UnityVersion()
         {
             // Get the version from the exe
-            FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(@"..\src\bin\Release\Tiled2Unity.exe");
+            FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(@"..\src\bin\x64\Release\Tiled2Unity.exe");
             return versionInfo.ProductVersion;            
         }
 
-        static public void WriteGetVersionFunction(StringWriter writer, string version)
+        static public void WriteMainProgramFile(StringWriter writer, string version)
         {
-            string function =
+            string program =
 @"
 namespace Tiled2Unity
 {{
-    static partial class Program
+    static class Program
     {{
+        public static int Main(string[] args)
+        {{
+            return Tiled2Unity.Tiled2UnityLite.Run(args);
+        }}
+    }}
+
+    static class Info
+    {{
+        public static string GetLibraryName()
+        {{
+            return ""Tiled2UnityLite"";
+        }}
+
         public static string GetVersion()
         {{
             return ""{0}"";
         }}
+
+        public static string GetPlatform()
+        {{
+            return ""CSScript"";
+        }}
     }}
 }}
 ";
-            function = string.Format(function, version);
-            writer.WriteLine(function);
+            program = string.Format(program, version);
+            writer.WriteLine(program);
         }
     }
 }

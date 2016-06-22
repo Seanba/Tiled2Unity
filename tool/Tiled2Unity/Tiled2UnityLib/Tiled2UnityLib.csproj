@@ -1,0 +1,246 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{ECC813B3-0A2D-4173-B16A-8C026247302C}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Tiled2Unity</RootNamespace>
+    <AssemblyName>Tiled2UnityLib</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG;fo</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'DebugMac|AnyCPU'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\DebugMac\</OutputPath>
+    <DefineConstants>TRACE;DEBUG;fo</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'DebugMac|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\DebugMac\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'DebugMac|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\DebugMac\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'ReleaseMac|AnyCPU'">
+    <OutputPath>bin\ReleaseMac\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'ReleaseMac|x86'">
+    <OutputPath>bin\x86\ReleaseMac\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'ReleaseMac|x64'">
+    <OutputPath>bin\x64\ReleaseMac\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="NDesk.Options, Version=0.2.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NDesk.Options.0.2.1\lib\NDesk.Options.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ChDir.cs" />
+    <Compile Include="ConvexPolygonSet.cs" />
+    <Compile Include="ExportClasses\TiledMapExporter.AssignMaterials.cs" />
+    <Compile Include="ExportClasses\TiledMapExporter.Clipper.cs" />
+    <Compile Include="ExportClasses\TiledMapExporter.cs" />
+    <Compile Include="ExportClasses\TiledMapExporter.ImportFiles.cs" />
+    <Compile Include="ExportClasses\TiledMapExporter.Obj.cs" />
+    <Compile Include="ExportClasses\TiledMapExporter.Prefab.cs" />
+    <Compile Include="HashIndexOf.cs" />
+    <Compile Include="Info.cs" />
+    <Compile Include="LayerClipper.cs" />
+    <Compile Include="Logger.cs" />
+    <Compile Include="PolylineReduction.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Session.Args.cs" />
+    <Compile Include="Session.cs" />
+    <Compile Include="Settings.cs" />
+    <Compile Include="SummaryReport.cs" />
+    <Compile Include="ThirdParty\Algorithmia\MultiValueDictionary.cs" />
+    <Compile Include="ThirdParty\Clipper\clipper.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\P2T.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Orientation.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Utility\FixedArray3.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Utility\MathUtil.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Utility\Point2D.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Utility\Point2DList.cs" />
+    <Compile Include="ThirdParty\Poly2Tri\Utility\Rect2D.cs" />
+    <Compile Include="Tiled2UnityLite.Main.cs" />
+    <Compile Include="TmxClasses\TmxAnimation.cs" />
+    <Compile Include="TmxClasses\TmxException.cs" />
+    <Compile Include="TmxClasses\TmxFrame.cs" />
+    <Compile Include="TmxClasses\TmxHasPoints.cs" />
+    <Compile Include="TmxClasses\TmxHasProperties.cs" />
+    <Compile Include="TmxClasses\TmxHelper.cs" />
+    <Compile Include="TmxClasses\TmxImage.cs" />
+    <Compile Include="TmxClasses\TmxImage.Xml.cs" />
+    <Compile Include="TmxClasses\TmxLayer.cs" />
+    <Compile Include="TmxClasses\TmxLayer.Xml.cs" />
+    <Compile Include="TmxClasses\TmxLayerBase.cs" />
+    <Compile Include="TmxClasses\TmxMap.cs" />
+    <Compile Include="TmxClasses\TmxMap.Xml.cs" />
+    <Compile Include="TmxClasses\TmxMath.cs" />
+    <Compile Include="TmxClasses\TmxMesh.cs" />
+    <Compile Include="TmxClasses\TmxObject.cs" />
+    <Compile Include="TmxClasses\TmxObject.Xml.cs" />
+    <Compile Include="TmxClasses\TmxObjectEllipse.cs" />
+    <Compile Include="TmxClasses\TmxObjectGroup.cs" />
+    <Compile Include="TmxClasses\TmxObjectGroup.Xml.cs" />
+    <Compile Include="TmxClasses\TmxObjectPolygon.cs" />
+    <Compile Include="TmxClasses\TmxObjectPolyline.cs" />
+    <Compile Include="TmxClasses\TmxObjectRectangle.cs" />
+    <Compile Include="TmxClasses\TmxObjectTile.cs" />
+    <Compile Include="TmxClasses\TmxObjectType.cs" />
+    <Compile Include="TmxClasses\TmxObjectTypeProperty.cs" />
+    <Compile Include="TmxClasses\TmxObjectTypes.cs" />
+    <Compile Include="TmxClasses\TmxProperties.cs" />
+    <Compile Include="TmxClasses\TmxProperties.Xml.cs" />
+    <Compile Include="TmxClasses\TmxProperty.cs" />
+    <Compile Include="TmxClasses\TmxPropertyType.cs" />
+    <Compile Include="TmxClasses\TmxRotationMatrix.cs" />
+    <Compile Include="TmxClasses\TmxTile.cs" />
+    <Compile Include="TmxClasses\TmxTile.Xml.cs" />
+    <Compile Include="Viewer\PreviewImage.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="ThirdParty\Clipper\License.txt" />
+    <Content Include="ThirdParty\Poly2Tri\License.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

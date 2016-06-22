@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectTypeGuids>{A3F8F2AB-B479-4A4A-A458-A89E7DC349F1};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <ProjectGuid>{5847689A-008D-4933-8524-0C5CAC5B9829}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Tiled2UnityMac</RootNamespace>
+    <MonoMacResourcePrefix>Resources</MonoMacResourcePrefix>
+    <AssemblyName>Tiled2UnityMac</AssemblyName>
+    <UseXamMacFullFramework>true</UseXamMacFullFramework>
+    <ReleaseVersion>1.0.0.0</ReleaseVersion>
+    <Description>Tiled2Unity Utility (Mac OSX version)</Description>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug</OutputPath>
+    <DefineConstants>DEBUG;TILED2UNITY_MAC</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <ConsolePause>false</ConsolePause>
+    <Profiling>false</Profiling>
+    <UseRefCounting>true</UseRefCounting>
+    <UseSGen>true</UseSGen>
+    <IncludeMonoRuntime>false</IncludeMonoRuntime>
+    <CreatePackage>true</CreatePackage>
+    <CodeSigningKey>Mac Developer</CodeSigningKey>
+    <EnableCodeSigning>false</EnableCodeSigning>
+    <EnablePackageSigning>false</EnablePackageSigning>
+    <XamMacArch>x86_64</XamMacArch>
+    <Commandlineparameters>this is my list of args</Commandlineparameters>
+    <EnvironmentVariables>
+      <EnvironmentVariables>
+        <Variable name="TILED2UNITY_TMXPATH" value="My tmx path goes here" />
+        <Variable name="TILED2UNITY_UNITYDIR" value="My unity dir goes here" />
+      </EnvironmentVariables>
+    </EnvironmentVariables>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release</OutputPath>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <ConsolePause>false</ConsolePause>
+    <Profiling>false</Profiling>
+    <UseRefCounting>true</UseRefCounting>
+    <UseSGen>true</UseSGen>
+    <IncludeMonoRuntime>true</IncludeMonoRuntime>
+    <CreatePackage>false</CreatePackage>
+    <CodeSigningKey>Developer ID Application</CodeSigningKey>
+    <EnableCodeSigning>false</EnableCodeSigning>
+    <EnablePackageSigning>false</EnablePackageSigning>
+    <DefineConstants>TILED2UNITY_MAC</DefineConstants>
+    <XamMacArch>x86_64</XamMacArch>
+    <PackageSigningKey>Developer ID Installer</PackageSigningKey>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="Xamarin.Mac" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="NDesk.Options">
+      <HintPath>..\packages\NDesk.Options.0.2.1\lib\NDesk.Options.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK">
+      <HintPath>..\..\..\..\..\..\..\..\Library\Frameworks\Xamarin.Mac.framework\Versions\2.4.2.3\lib\reference\net_4_5\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Drawing">
+      <HintPath>ThirdParty\System.Drawing.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\Contents.json" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-128%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-16.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-16%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-256.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-256%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-32.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-32%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-512.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-512%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-128.png">
+      <DeployService-Deploy>True</DeployService-Deploy>
+    </ImageAsset>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Info.plist" />
+    <None Include="..\..\Tiled2UnityLib\ThirdParty\Clipper\License.txt">
+      <Link>Tiled2UnityLib\ThirdParty\Clipper\License.txt</Link>
+    </None>
+    <None Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\License.txt">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\License.txt</Link>
+    </None>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Main.cs" />
+    <Compile Include="AppDelegate.cs" />
+    <Compile Include="ViewController.cs" />
+    <Compile Include="ViewController.designer.cs">
+      <DependentUpon>ViewController.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Tiled2UnityWindowController.cs" />
+    <Compile Include="Tiled2UnityWindowController.designer.cs">
+      <DependentUpon>Tiled2UnityWindowController.cs</DependentUpon>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Session.cs">
+      <Link>Tiled2UnityLib\Session.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ChDir.cs">
+      <Link>Tiled2UnityLib\ChDir.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ConvexPolygonSet.cs">
+      <Link>Tiled2UnityLib\ConvexPolygonSet.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\HashIndexOf.cs">
+      <Link>Tiled2UnityLib\HashIndexOf.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Info.cs">
+      <Link>Tiled2UnityLib\Info.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\LayerClipper.cs">
+      <Link>Tiled2UnityLib\LayerClipper.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Logger.cs">
+      <Link>Tiled2UnityLib\Logger.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\PolylineReduction.cs">
+      <Link>Tiled2UnityLib\PolylineReduction.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Session.Args.cs">
+      <Link>Tiled2UnityLib\Session.Args.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Settings.cs">
+      <Link>Tiled2UnityLib\Settings.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\SummaryReport.cs">
+      <Link>Tiled2UnityLib\SummaryReport.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ExportClasses\TiledMapExporter.AssignMaterials.cs">
+      <Link>Tiled2UnityLib\ExportClasses\TiledMapExporter.AssignMaterials.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ExportClasses\TiledMapExporter.Clipper.cs">
+      <Link>Tiled2UnityLib\ExportClasses\TiledMapExporter.Clipper.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ExportClasses\TiledMapExporter.ImportFiles.cs">
+      <Link>Tiled2UnityLib\ExportClasses\TiledMapExporter.ImportFiles.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ExportClasses\TiledMapExporter.Obj.cs">
+      <Link>Tiled2UnityLib\ExportClasses\TiledMapExporter.Obj.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ExportClasses\TiledMapExporter.Prefab.cs">
+      <Link>Tiled2UnityLib\ExportClasses\TiledMapExporter.Prefab.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ExportClasses\TiledMapExporter.cs">
+      <Link>Tiled2UnityLib\ExportClasses\TiledMapExporter.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Algorithmia\MultiValueDictionary.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Algorithmia\MultiValueDictionary.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Clipper\clipper.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Clipper\clipper.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\P2T.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\P2T.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Orientation.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Orientation.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedArray3.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedArray3.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\MathUtil.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\MathUtil.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2D.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2D.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2DList.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2DList.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Rect2D.cs">
+      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Rect2D.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxAnimation.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxAnimation.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxException.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxException.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxFrame.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxFrame.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxHasPoints.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxHasPoints.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxHasProperties.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxHasProperties.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxHelper.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxHelper.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxImage.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxImage.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxImage.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxImage.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayer.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxLayer.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayer.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxLayer.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayerBase.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxLayerBase.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxMap.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxMap.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxMap.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxMap.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxMath.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxMath.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxMesh.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxMesh.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObject.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObject.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObject.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObject.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectEllipse.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectEllipse.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectGroup.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectGroup.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectGroup.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectGroup.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectPolygon.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectPolygon.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectPolyline.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectPolyline.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectRectangle.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectRectangle.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectTile.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectTile.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectType.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectType.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectTypeProperty.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectTypeProperty.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxObjectTypes.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxObjectTypes.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxProperties.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxProperties.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxProperties.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxProperties.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxProperty.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxProperty.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxPropertyType.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxPropertyType.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxRotationMatrix.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxRotationMatrix.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxTile.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxTile.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxTile.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxTile.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Viewer\PreviewImage.cs">
+      <Link>Tiled2UnityLib\Viewer\PreviewImage.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Tiled2UnityLite.Main.cs">
+      <Link>Tiled2UnityLib\Tiled2UnityLite.Main.cs</Link>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <InterfaceDefinition Include="Main.storyboard" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Xamarin\Mac\Xamarin.Mac.CSharp.targets" />
+  <ItemGroup>
+    <BundleResource Include="Resources\Tiled2Unity.unitypackage">
+      <DeployService-Deploy>True</DeployService-Deploy>
+    </BundleResource>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\LaunchTipMac.rtf" />
+  </ItemGroup>
+</Project>
