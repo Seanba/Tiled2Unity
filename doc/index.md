@@ -10,5 +10,4 @@
 
 Tiled2Unity (and variants) are availble for download on my [game development blog](http://www.seanba.com/tiled2unity).
 
-## Using Tiled2Unity
 
