@@ -1,0 +1,6 @@
+# Tiled2Unity
+
+Tiled2Unity is made up of two parts:
+- The [utility](tool/Tiled2Unity) that exports TMX files into Unity.
+- The [Unity scripts](unity/Tiled2Unity) that import the output of the Tiled2Unity Utility.
+
