@@ -18,7 +18,7 @@ namespace Tiled2Unity
         private static readonly string Tiled2UnityObjectTypesXmlFilter = "Tiled Object Types XML|*.xml";
 
         private Tiled2Unity.Session tmxSession = new Session();
-
+        private String tmxFileName = "";
         public Tiled2UnityForm()
         {
             InitializeComponent();
@@ -170,6 +170,7 @@ namespace Tiled2Unity
 
         private void buttonViewer_Click(object sender, EventArgs e)
         {
+            this.tmxSession.LoadTmxFile(this.tmxFileName);
             if (this.tmxSession.TmxMap.IsLoaded)
             {
                 Tiled2UnityViewer viewer = new Tiled2UnityViewer(this.tmxSession.TmxMap);
@@ -183,6 +184,7 @@ namespace Tiled2Unity
 
         private void buttonExport_Click(object sender, EventArgs e)
         {
+            this.tmxSession.LoadTmxFile(this.tmxFileName);
             this.tmxSession.ExportTmxMap();
         }
 
@@ -199,7 +201,8 @@ namespace Tiled2Unity
             {
                 Properties.Settings.Default.LastOpenDirectory = Path.GetDirectoryName(dialog.FileName);
                 Properties.Settings.Default.Save();
-                this.tmxSession.LoadTmxFile(dialog.FileName);
+                this.tmxFileName = dialog.FileName;
+                
             }
         }
 
@@ -333,6 +336,23 @@ namespace Tiled2Unity
             this.tmxSession.TmxMap.ClearObjectTypeXml();
         }
 
+        private void button1_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog();
+            dialog.InitialDirectory = Properties.Settings.Default.LastOpenDirectory;
+            dialog.Title = "Open Tiled (*.tmx) File";
+            dialog.Filter = "TMX files (*.tmx)|*.tmx";
+            dialog.RestoreDirectory = true;
+            dialog.Multiselect = false;
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                Properties.Settings.Default.LastOpenDirectory = Path.GetDirectoryName(dialog.FileName);
+                Properties.Settings.Default.Save();
+                this.tmxFileName = dialog.FileName;
+                
+            }
+        }
     }
 }
 
