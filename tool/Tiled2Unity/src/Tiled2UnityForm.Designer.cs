@@ -282,6 +282,7 @@
             this.textBoxExportFolder.Size = new System.Drawing.Size(828, 22);
             this.textBoxExportFolder.TabIndex = 8;
             this.textBoxExportFolder.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
+            this.textBoxExportFolder.TextChanged += new System.EventHandler(this.textBoxExportFolder_TextChanged);
             // 
             // checkBoxPreferConvexPolygons
             // 
@@ -433,9 +434,9 @@
             this.labelScaleDescription.Location = new System.Drawing.Point(137, 7);
             this.labelScaleDescription.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.labelScaleDescription.Name = "labelScaleDescription";
-            this.labelScaleDescription.Size = new System.Drawing.Size(432, 17);
+            this.labelScaleDescription.Size = new System.Drawing.Size(428, 17);
             this.labelScaleDescription.TabIndex = 7;
-            this.labelScaleDescription.Text = "Scale is inverse of Unity\'s \"Pixels Per Unit\" Texture Importer setting.";
+            this.labelScaleDescription.Text = "Use Tile Height or Unity\'s Pixels Per Unit setting (Sprite properties)";
             // 
             // tableLayoutPanelObjectTypes
             // 
@@ -552,17 +553,18 @@
             // tmxFileTextBox
             // 
             this.tmxFileTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.tmxFileTextBox.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastExportDirectory", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            //this.tmxFileTextBox.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::Tiled2Unity.Properties.Settings.Default, "LastExportDirectory", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
             this.tmxFileTextBox.Location = new System.Drawing.Point(208, 87);
             this.tmxFileTextBox.Margin = new System.Windows.Forms.Padding(4);
             this.tmxFileTextBox.Name = "tmxFileTextBox";
             this.tmxFileTextBox.ReadOnly = true;
             this.tmxFileTextBox.Size = new System.Drawing.Size(828, 22);
-            this.tmxFileTextBox.TabIndex = 19;
-            this.tmxFileTextBox.Text = global::Tiled2Unity.Properties.Settings.Default.LastExportDirectory;
+            this.tmxFileTextBox.TabIndex = 2;
+            this.tmxFileTextBox.Text = "";
             // 
             // Tiled2UnityForm
             // 
+            this.AllowDrop = true;
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.ControlLightLight;
@@ -581,6 +583,8 @@
             this.MinimumSize = new System.Drawing.Size(1117, 633);
             this.Name = "Tiled2UnityForm";
             this.Text = "Tiled2Unity";
+            this.DragDrop += new System.Windows.Forms.DragEventHandler(this.Tiled2UnityForm_DragDrop);
+            this.DragEnter += new System.Windows.Forms.DragEventHandler(this.Tiled2UnityForm_DragEnter);
             this.menuStrip.ResumeLayout(false);
             this.menuStrip.PerformLayout();
             this.groupBoxAdvancedOptions.ResumeLayout(false);
