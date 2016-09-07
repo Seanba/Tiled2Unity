@@ -14,6 +14,7 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 
+
 # =========================
 # Operating System Files
 # =========================
@@ -41,3 +42,55 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+#Junk Files
+*.DS_Store
+[Tt]humbs.db
+
+#Visual Studio Files
+[Oo]bj
+[Bb]in
+[Dd]ebug
+[Bb]uild/
+*.user
+*.suo
+*.exe
+*.pdb
+*.aps
+*_i.c
+*_p.c
+*.ncb
+*.tlb
+*.tlh
+*.[Cc]ache
+*.bak
+*.ncb
+*.ilk
+*.log
+*.lib
+*.sbr
+*.sdf
+ipch/ 
+*.dbmdl
+*.csproj.user
+*.cache
+*.swp
+*.vspscc
+*.vssscc
+*.bak.*
+*.bak
+
+#Tools
+_ReSharper.*
+_ReSharper*/
+*.resharper
+*.resharper.user
+[Nn][Dd]epend[Oo]ut*/
+Ankh.NoLoad
+
+#Other
+.svn
+
+# Include DLLs if they're in the NuGet packages directory
+!/packages/*/lib/*.dll
+!/packages/*/lib/*/*.dll
