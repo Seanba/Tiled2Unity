@@ -18,7 +18,7 @@ namespace Tiled2Unity
         private static readonly string Tiled2UnityObjectTypesXmlFilter = "Tiled Object Types XML|*.xml";
 
         private Tiled2Unity.Session tmxSession = new Session();
-
+        
         public Tiled2UnityForm()
         {
             InitializeComponent();
@@ -170,6 +170,12 @@ namespace Tiled2Unity
 
         private void buttonViewer_Click(object sender, EventArgs e)
         {
+            if(this.tmxFileTextBox.Text.Contains(";"))
+            {
+                MessageBox.Show("Cannot preview multiple tile maps.");
+                return;
+            }
+            this.tmxSession.LoadTmxFile(this.tmxFileTextBox.Text);
             if (this.tmxSession.TmxMap.IsLoaded)
             {
                 Tiled2UnityViewer viewer = new Tiled2UnityViewer(this.tmxSession.TmxMap);
@@ -183,7 +189,24 @@ namespace Tiled2Unity
 
         private void buttonExport_Click(object sender, EventArgs e)
         {
-            this.tmxSession.ExportTmxMap();
+            if (this.tmxFileTextBox.Text.Contains(";"))
+            {
+                if (DialogResult.Cancel == MessageBox.Show("About to export multiple tile maps. Proceed?", "Confirm export", MessageBoxButtons.OKCancel))
+                {
+                    return;
+                }
+                String[] mapfiles = this.tmxFileTextBox.Text.Split(';');
+                for (int i = 0; i < mapfiles.Length; i++)
+                {
+                    this.tmxSession.LoadTmxFile(mapfiles[i]);
+                    this.tmxSession.ExportTmxMap();
+                }
+            } else
+            {
+                this.tmxSession.LoadTmxFile(this.tmxFileTextBox.Text);
+                this.tmxSession.ExportTmxMap();
+            }
+
         }
 
         private void openTiledFileToolStripMenuItem_Click(object sender, EventArgs e)
@@ -199,7 +222,9 @@ namespace Tiled2Unity
             {
                 Properties.Settings.Default.LastOpenDirectory = Path.GetDirectoryName(dialog.FileName);
                 Properties.Settings.Default.Save();
-                this.tmxSession.LoadTmxFile(dialog.FileName);
+                this.tmxFileTextBox.Text = dialog.FileName;
+                
+
             }
         }
 
@@ -333,6 +358,56 @@ namespace Tiled2Unity
             this.tmxSession.TmxMap.ClearObjectTypeXml();
         }
 
+        private void button1_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog();
+            dialog.InitialDirectory = Properties.Settings.Default.LastOpenDirectory;
+            dialog.Title = "Open Tiled (*.tmx) File";
+            dialog.Filter = "TMX files (*.tmx)|*.tmx";
+            dialog.RestoreDirectory = true;
+            dialog.Multiselect = false;
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                Properties.Settings.Default.LastOpenDirectory = Path.GetDirectoryName(dialog.FileName);
+                Properties.Settings.Default.Save();
+                this.tmxFileTextBox.Text = dialog.FileName;
+                
+            }
+        }
+
+        private void Tiled2UnityForm_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                  e.Effect = DragDropEffects.Copy;
+
+        }
+
+        private void Tiled2UnityForm_DragDrop(object sender, DragEventArgs e)
+        {
+            var dropped = ((string[])e.Data.GetData(DataFormats.FileDrop));
+            var files = dropped.ToList();
+            List<String> fileList = new List<String>();
+            if (!files.Any())
+                return;
+
+            foreach (string drop in dropped)
+                if (Directory.Exists(drop))
+                    files.AddRange(Directory.GetFiles(drop, "*.tmx", SearchOption.AllDirectories));
+
+            foreach (string file in files)
+            {
+                if (!fileList.Contains(file) && file.ToLower().EndsWith(".tmx"))
+                    fileList.Add(file);
+            }
+            this.tmxFileTextBox.Text = String.Join(";", fileList.ToArray());
+            
+        }
+
+        private void textBoxExportFolder_TextChanged(object sender, EventArgs e)
+        {
+
+        }
     }
 }
 
