@@ -122,6 +122,8 @@ namespace Tiled2Unity
                         foreach (var collisionLayer in layer.CollisionLayers)
                         {
                             var collisionElements = CreateCollisionElementForLayer(collisionLayer);
+                            AssignUnityProperties(collisionLayer, collisionElements, PrefabContext.TiledLayer);
+                            AssignTiledProperties(collisionLayer, collisionElements);
                             layerElement.Add(collisionElements);
                         }
                     }
