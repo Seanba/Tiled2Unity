@@ -41,6 +41,30 @@ namespace Tiled2Unity
             }
         }
 
+        public bool IsSingleColor
+        {
+            get
+            {
+                if (IsEmpty) return true;
+                if (TmxImage == null) return true;
+                if (TileSize.Height == 0 || TileSize.Width == 0) return true;
+                var startColor = TmxImage.ImageBitmap.GetPixel((int)Offset.X, (int)Offset.Y);
+                for (int x = 0; x < TileSize.Width; ++x)
+                {
+                    for (int y = 0; y < TileSize.Height; ++y)
+                    {
+                        int xx = x + (int)Offset.X;
+                        int yy = y + (int)Offset.Y;
+                        if (TmxImage.ImageBitmap.GetPixel(xx, yy) != startColor)
+                        {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
         public void SetTileSize(int width, int height)
         {
             this.TileSize = new Size(width, height);

@@ -14,6 +14,9 @@ namespace Tiled2Unity
         // Note: In some cases, Unity still splits up a mesh (incorrectly) into "1 parts" with 16383 faces so we go with 16382 faces to be extra safe.
         private static readonly int MaxNumberOfTiles = 16382;
 
+        // Reference back to the layer.
+        public TmxLayer Layer { get; private set; }
+
         public string UniqueMeshName { get; private set; }
         public string ObjectName { get; private set; }
         public TmxImage TmxImage { get; private set; }
@@ -107,6 +110,7 @@ namespace Tiled2Unity
                     {
                         // Create a new mesh and add it to our list
                         mesh = new TmxMesh();
+                        mesh.Layer = layer;
                         mesh.TileIds = new uint[layer.TileIds.Count()];
                         mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
                         mesh.TmxImage = tile.TmxImage;

@@ -55,8 +55,6 @@ namespace Tiled2Unity
             HashIndexOf<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
 
-            float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-
             // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
             int groupCount = 0;
             StringBuilder faceBuilder = new StringBuilder();
@@ -72,54 +70,11 @@ namespace Tiled2Unity
                 ++groupCount;
 
                 // Enumerate over the tiles in the direction given by the draw order of the map
-                var verticalRange = (this.tmxMap.DrawOrderVertical == 1) ? Enumerable.Range(0, layer.Height) : Enumerable.Range(0, layer.Height).Reverse();
-                var horizontalRange = (this.tmxMap.DrawOrderHorizontal == 1) ? Enumerable.Range(0, layer.Width) : Enumerable.Range(0, layer.Width).Reverse();
 
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
-                    Logger.WriteLine("Writing '{0}' mesh group", mesh.UniqueMeshName);
-                    faceBuilder.AppendFormat("\ng {0}\n", mesh.UniqueMeshName);
-
-                    foreach (int y in verticalRange)
-                    {
-                        foreach (int x in horizontalRange)
-                        {
-                            int tileIndex = layer.GetTileIndex(x, y);
-                            uint tileId = mesh.GetTileIdAt(tileIndex);
-
-                            // Skip blank tiles
-                            if (tileId == 0)
-                                continue;
-
-                            TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
-                            
-                            // What are the vertex and texture coorindates of this face on the mesh?
-                            var position = this.tmxMap.GetMapPositionAt(x, y);
-                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight, tile.Offset);
-
-                            // If we're using depth shaders then we'll need to set a depth value of this face
-                            float depth_z = 0.0f;
-                            if (Tiled2Unity.Settings.DepthBufferEnabled)
-                            {
-                                depth_z = position.Y / mapLogicalHeight * -1.0f;
-                            }
-
-                            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
-
-                            // Is the tile being flipped or rotated (needed for texture cooridinates)
-                            bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
-                            bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
-                            bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
-                            var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
-
-                            // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
-                            faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
-                        }
-                    }
+                    var meshWriter = new MeshWriter(faceBuilder, vertexDatabase, uvDatabase, mesh);
+                    meshWriter.Execute();
                 }
             }
 
