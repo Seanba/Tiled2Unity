@@ -13,7 +13,7 @@ namespace Tiled2Unity
 
         public StringBuilder Builder = null;
 
-        public HashIndexOf<TiledMapExporter.Vertex3> PositionDatabase = null;
+        public HashIndexOf<Vertex3> PositionDatabase = null;
 
         public HashIndexOf<PointF> TexcoordDatabase = null;
 
@@ -23,7 +23,7 @@ namespace Tiled2Unity
 
         public MeshWriter(
             StringBuilder builder, 
-            HashIndexOf<TiledMapExporter.Vertex3> positionDatabase, 
+            HashIndexOf<Vertex3> positionDatabase, 
             HashIndexOf<PointF> texcoordDatabase, 
             TmxMesh mesh)
         {
@@ -55,41 +55,17 @@ namespace Tiled2Unity
             Logger.WriteLine("Writing '{0}' mesh group", Mesh.UniqueMeshName);
             Builder.AppendFormat("\ng {0}\n", Mesh.UniqueMeshName);
 
+            FaceVertices faceVertices;
+            PointF[] uvs;
+
             foreach (int y in verticalRange)
             {
                 foreach (int x in horizontalRange)
                 {
-                    // Is this tile already part of the mesh?
-                    if (mTileUsed.Get(x, y))
-                        continue;
-
-                    int tileIndex = layer.GetTileIndex(x, y);
-                    uint tileId = Mesh.GetTileIdAt(tileIndex);
-
-                    // Skip blank tiles
-                    if (tileId == 0)
-                        continue;
-
-                    TmxTile tile = map.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
-
-                    // What are the vertex and texture coorindates of this face on the mesh?
-                    var position = map.GetMapPositionAt(x, y);
-                    var vertices = CalculateFaceVertices(position, tile.TileSize, map.TileHeight, tile.Offset);
-
-                    // If we're using depth shaders then we'll need to set a depth value of this face
-                    float depth_z = 0.0f;
-                    if (Tiled2Unity.Settings.DepthBufferEnabled)
+                    if (!DetermineQuad(x, y, out faceVertices, out uvs))
                     {
-                        depth_z = position.Y / mapLogicalHeight * -1.0f;
+                        continue;
                     }
-
-                    var faceVertices = new TiledMapExporter.FaceVertices { Vertices = vertices, Depth_z = depth_z };
-
-                    // Is the tile being flipped or rotated (needed for texture cooridinates)
-                    bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
-                    bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
-                    bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
-                    var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
 
                     // Adds vertices and uvs to the database as we build the face strings
                     string v0 = String.Format("{0}/{1}/1", PositionDatabase.Add(faceVertices.V0) + 1, TexcoordDatabase.Add(uvs[0]) + 1);
@@ -102,6 +78,54 @@ namespace Tiled2Unity
             return 0;
         }
 
+        private bool DetermineQuad(int x, int y, out FaceVertices positions, out PointF[] texcoords)
+        {
+            // Is this tile already part of the mesh?
+            if (mTileUsed.Get(x, y))
+            {
+                positions = new FaceVertices { };
+                texcoords = null;
+                return false;
+            }
+
+            var layer = Mesh.Layer;
+            var map = layer.TmxMap;
+            int tileIndex = layer.GetTileIndex(x, y);
+            uint tileId = Mesh.GetTileIdAt(tileIndex);
+
+            // Skip blank tiles
+            if (tileId == 0)
+            {
+                positions = new FaceVertices { };
+                texcoords = null;
+                return false;
+            }
+            var tile = map.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
+            bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
+            bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
+            bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
+
+            var position = map.GetMapPositionAt(x, y);
+
+            // If we're using depth shaders then we'll need to set a depth value of this face
+            float depth_z = 0.0f;
+            if (Tiled2Unity.Settings.DepthBufferEnabled)
+            {
+                depth_z = position.Y / map.MapSizeInPixels().Height * -1.0f;
+            }
+
+            if (tile.IsSingleColor)
+            {
+                Logger.WriteLine("Found single-color tile with ID {0}", tileId);
+            }
+
+            var pos2 = CalculateFaceVertices(position, tile.TileSize, map.TileHeight, tile.Offset);
+
+            positions = new FaceVertices { Vertices = pos2, Depth_z = depth_z };
+            texcoords = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
+
+            return true;
+        }
 
         private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, PointF offset)
         {

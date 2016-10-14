@@ -144,6 +144,7 @@
     <Compile Include="ExportClasses\TiledMapExporter.ImportFiles.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.Obj.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.Prefab.cs" />
+    <Compile Include="FaceVertices.cs" />
     <Compile Include="HashIndexOf.cs" />
     <Compile Include="Info.cs" />
     <Compile Include="LayerClipper.cs" />
@@ -228,6 +229,7 @@
     <Compile Include="TmxClasses\TmxRotationMatrix.cs" />
     <Compile Include="TmxClasses\TmxTile.cs" />
     <Compile Include="TmxClasses\TmxTile.Xml.cs" />
+    <Compile Include="Vertex3.cs" />
     <Compile Include="Viewer\PreviewImage.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -10,44 +10,6 @@ namespace Tiled2Unity
     // Partial class that concentrates on creating the Wavefront Mesh (.obj) string
     partial class TiledMapExporter
     {
-        // Working man's vertex
-        public struct Vertex3
-        {
-            public float X { get; set; }
-            public float Y { get; set; }
-            public float Z { get; set; }
-
-            public static Vertex3 FromPointF(PointF point, float depth)
-            {
-                return new Vertex3 { X = point.X, Y = point.Y, Z = depth };
-            }
-        }
-
-        public struct FaceVertices
-        {
-            public PointF[] Vertices { get; set; }
-            public float Depth_z { get; set; }
-
-            public Vertex3 V0
-            {
-                get { return Vertex3.FromPointF(Vertices[0], this.Depth_z); }
-            }
-
-            public Vertex3 V1
-            {
-                get { return Vertex3.FromPointF(Vertices[1], this.Depth_z); }
-            }
-
-            public Vertex3 V2
-            {
-                get { return Vertex3.FromPointF(Vertices[2], this.Depth_z); }
-            }
-
-            public Vertex3 V3
-            {
-                get { return Vertex3.FromPointF(Vertices[3], this.Depth_z); }
-            }
-        }
 
         // Creates the text for a Wavefront OBJ file for the TmxMap
         private StringWriter BuildObjString()
