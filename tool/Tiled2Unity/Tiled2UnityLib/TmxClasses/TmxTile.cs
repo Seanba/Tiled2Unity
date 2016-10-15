@@ -41,6 +41,14 @@ namespace Tiled2Unity
             }
         }
 
+        public Color TopLeftColor
+        {
+            get
+            {
+                return TmxImage.ImageBitmap.GetPixel(LocationOnSource.X, LocationOnSource.Y);
+            }
+        }
+
         public bool IsSingleColor
         {
             get
@@ -48,13 +56,13 @@ namespace Tiled2Unity
                 if (IsEmpty) return true;
                 if (TmxImage == null) return true;
                 if (TileSize.Height == 0 || TileSize.Width == 0) return true;
-                var startColor = TmxImage.ImageBitmap.GetPixel((int)Offset.X, (int)Offset.Y);
+                var startColor = TopLeftColor;
                 for (int x = 0; x < TileSize.Width; ++x)
                 {
                     for (int y = 0; y < TileSize.Height; ++y)
                     {
-                        int xx = x + (int)Offset.X;
-                        int yy = y + (int)Offset.Y;
+                        int xx = x + LocationOnSource.X;
+                        int yy = y + LocationOnSource.Y;
                         if (TmxImage.ImageBitmap.GetPixel(xx, yy) != startColor)
                         {
                             return false;

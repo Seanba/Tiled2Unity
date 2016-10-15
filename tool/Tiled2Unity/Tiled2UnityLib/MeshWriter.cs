@@ -33,6 +33,10 @@ namespace Tiled2Unity
             Mesh = mesh;
         }
 
+        /// <summary>
+        /// Execute the MeshWriter.
+        /// </summary>
+        /// <returns>0 for success, some other number for failure.</returns>
         public int Execute()
         {
             if (Mesh == null || 
@@ -78,6 +82,16 @@ namespace Tiled2Unity
             return 0;
         }
 
+        /// <summary>
+        /// For the given coordinate (x,y) in the layer, attempts to find the largest
+        /// possible valid quad.
+        /// </summary>
+        /// <param name="x">The x-coordinate of the tile in the layer.</param>
+        /// <param name="y">The y-coordinate of the tile in the layer.</param>
+        /// <param name="positions">The positions array of the quad.</param>
+        /// <param name="texcoords">The texture coordinates array of the quad.</param>
+        /// <returns>True if a quad is found and should be written out, false if no
+        /// quad should be written out.</returns>
         private bool DetermineQuad(int x, int y, out FaceVertices positions, out PointF[] texcoords)
         {
             // Is this tile already part of the mesh?
@@ -87,58 +101,272 @@ namespace Tiled2Unity
                 texcoords = null;
                 return false;
             }
+            
+            bool flipDiagonal, flipHorizontal, flipVertical;
+            var tile = GetTile(x, y, out flipDiagonal, out flipHorizontal, out flipVertical);
+            if (tile == null)
+            {
+                // This means we have a blank tile. Skip this one.
+                positions = new FaceVertices { };
+                texcoords = null;
+                return false;
+            }
+            else if (flipDiagonal || flipHorizontal || flipVertical)
+            {
+                // The tile has a non-trivial rotation matrix, so we're not
+                // gonna do our optimizations. Export this as a single tile.
 
-            var layer = Mesh.Layer;
-            var map = layer.TmxMap;
-            int tileIndex = layer.GetTileIndex(x, y);
+                var position = Mesh.Layer.TmxMap.GetMapPositionAt(x, y);
+                // If we're using depth shaders then we'll need to set a depth value of this face
+                float depth_z = 0.0f;
+                if (Tiled2Unity.Settings.DepthBufferEnabled)
+                {
+                    depth_z = position.Y / Mesh.Layer.TmxMap.MapSizeInPixels().Height * -1.0f;
+                }
+
+
+                if (tile.IsSingleColor)
+                {
+                    Logger.WriteLine("Found single-color tile with ID {0}", tile.LocalId);
+                }
+
+                var pos2 = CalculateFaceVertices(position, tile.TileSize, Mesh.Layer.TmxMap.TileHeight, tile.Offset);
+
+                positions = new FaceVertices { Vertices = pos2, Depth_z = depth_z };
+                texcoords = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
+
+                return true;
+            }
+            else
+            {
+                var position = Mesh.Layer.TmxMap.GetMapPositionAt(x, y);
+                // If we're using depth shaders then we'll need to set a depth value of this face
+                float depth_z = 0.0f;
+                if (Tiled2Unity.Settings.DepthBufferEnabled)
+                {
+                    depth_z = position.Y / Mesh.Layer.TmxMap.MapSizeInPixels().Height * -1.0f;
+                }
+
+                // No null tile, unflipped in any possible direction.
+                // Here's the point where we do the optimization.
+                var singleColorRect = DoSingleColorHeuristic(x, y);
+                singleColorRect.Location = position;
+                var pos2 = CalculateFaceVertices(singleColorRect, tile.TileSize, Mesh.Layer.TmxMap.TileHeight, tile.Offset);
+                positions = new FaceVertices { Vertices = pos2, Depth_z = depth_z };
+                texcoords = CalculateFaceTextureCoordinatesForSingleColorHeuristic(singleColorRect, tile);
+                mTileUsed.Set(singleColorRect, true);
+
+                //var stackingRect = DoStackingHeuristic(x, y);
+                //if (singleColorRect.GetArea() < stackingRect.GetArea())
+                //{
+                //    CommitRectangle(singleColorRect, out positions, out texcoords);
+                //}
+                //else
+                //{
+                //    CommitRectangle(stackingRect, out positions, out texcoords);
+                //}
+                return true;
+            }
+        }
+
+        private void CommitRectangle(Rectangle rect, out FaceVertices positions, out PointF[] texcoords)
+        {
+            // We have a computed rect and we want to build positions and texcoords out of it.
+            // We also write the rect to the mTileUsed BitPlane so that we're not gonna
+            // write the same quad multiple times.
+            throw new NotImplementedException();
+        }
+
+        private Rectangle DoStackingHeuristic(int x, int y)
+        {
+            throw new NotImplementedException();
+        }
+
+        private Rectangle DoSingleColorHeuristic(int x, int y)
+        {
+            var rect = new Rectangle(x, y, 0, 0);
+            DoSingleColorHeuristic(ref rect);
+            return rect;
+        }
+
+        private void DoSingleColorHeuristic(ref Rectangle rect)
+        {
+            bool flip0, flip1, flip2;
+            bool continueInHorDir = true;
+            bool continueInVertDir = true;
+            int horDir = Mesh.Layer.TmxMap.DrawOrderHorizontal;
+            int verDir = Mesh.Layer.TmxMap.DrawOrderVertical;
+            var startTile = GetTile(rect.Location, out flip0, out flip1, out flip2);
+            if (startTile == null || flip0 || flip1 || flip2)
+            {
+                // Abandon ship!
+                return;
+            }
+            var startColor = startTile.TopLeftColor;
+            while (continueInHorDir || continueInVertDir)
+            {
+                if (continueInHorDir)
+                {
+                    if (horDir == 1)
+                    {
+                        continueInHorDir = CheckFrontierForSameColor(startColor, rect.GetRightFrontier());
+                    }
+                    else // HorDir == -1
+                    {
+                        continueInHorDir = CheckFrontierForSameColor(startColor, rect.GetLeftFrontier());
+                    }
+                    
+                }
+                if (continueInVertDir)
+                {
+                    if (verDir == 1)
+                    {
+                        continueInVertDir = CheckFrontierForSameColor(startColor, rect.GetBottomFrontier());
+                    }
+                    else // verDir == -1
+                    {
+                        continueInVertDir = CheckFrontierForSameColor(startColor, rect.GetTopFrontier());
+                    }
+                }
+                if (continueInHorDir && continueInVertDir)
+                {
+                    int x = horDir == 1 ? rect.Right + 1 : rect.Left - 1;
+                    int y = verDir == 1 ? rect.Bottom + 1 : rect.Top - 1;
+                    var diagTile = GetTile(x, y, out flip0, out flip1, out flip2);
+                    if (diagTile == null ||
+                        flip0 ||
+                        flip1 ||
+                        flip2 ||
+                        diagTile.IsSingleColor == false ||
+                        diagTile.TopLeftColor != startColor)
+                    {
+                        // Here we're making a choice. Do we continue in the bottom
+                        // or continue to the right? What is wise?
+                        continueInVertDir = true;
+                        continueInHorDir = false;
+                        if (verDir == 1)
+                        {
+                            RectangleUtils.EnlargeBottom(ref rect);
+                        }
+                        else // verDir == -1
+                        {
+                            RectangleUtils.EnlargeTop(ref rect);
+                        }
+                    }
+                    else
+                    {
+                        if (horDir == 1)
+                        {
+                            RectangleUtils.EnlargeRight(ref rect);
+                        }
+                        else // horDir == -1
+                        {
+                            RectangleUtils.EnlargeLeft(ref rect);
+                        }
+                        if (verDir == 1)
+                        {
+                            RectangleUtils.EnlargeBottom(ref rect);
+                        }
+                        else // verDir == -1
+                        {
+                            RectangleUtils.EnlargeTop(ref rect);
+                        }
+                    }
+                }
+                else
+                {
+                    if (continueInHorDir)
+                    {
+                        if (horDir == 1)
+                        {
+                            RectangleUtils.EnlargeRight(ref rect);
+                        }
+                        else // horDir == -1
+                        {
+                            RectangleUtils.EnlargeLeft(ref rect);
+                        }
+                    }
+                    if (continueInVertDir)
+                    {
+                        if (verDir == 1)
+                        {
+                            RectangleUtils.EnlargeBottom(ref rect);
+                        }
+                        else // verDir == -1
+                        {
+                            RectangleUtils.EnlargeTop(ref rect);
+                        }
+                    }
+                }
+
+                if (rect.Width == Mesh.Layer.Width)
+                {
+                    continueInHorDir = false;
+                }
+                if (rect.Height == Mesh.Layer.Height)
+                {
+                    continueInVertDir = false;
+                }
+                
+            }
+        }
+
+        private bool CheckFrontierForSameColor(Color startColor, RectangleFrontierProxy frontier)
+        {
+            bool flip0, flip1, flip2;
+            foreach (var pt in frontier)
+            {
+                var tile = GetTile(pt, out flip0, out flip1, out flip2);
+                if (tile == null ||
+                    flip0 ||
+                    flip1 ||
+                    flip2 ||
+                    tile.IsSingleColor == false ||
+                    tile.TopLeftColor != startColor)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private TmxTile GetTile(int x, int y, out bool flipDiagonal, out bool flipHorizontal, out bool flipVertical)
+        {
+            int tileIndex = Mesh.Layer.GetTileIndex(x, y);
             uint tileId = Mesh.GetTileIdAt(tileIndex);
 
             // Skip blank tiles
             if (tileId == 0)
             {
-                positions = new FaceVertices { };
-                texcoords = null;
-                return false;
+                flipDiagonal = flipHorizontal = flipVertical = false;
+                return null;
             }
-            var tile = map.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
-            bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
-            bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
-            bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
+            var tile = Mesh.Layer.TmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
+            flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
+            flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
+            flipVertical = TmxMath.IsTileFlippedVertically(tileId);
 
-            var position = map.GetMapPositionAt(x, y);
-
-            // If we're using depth shaders then we'll need to set a depth value of this face
-            float depth_z = 0.0f;
-            if (Tiled2Unity.Settings.DepthBufferEnabled)
-            {
-                depth_z = position.Y / map.MapSizeInPixels().Height * -1.0f;
-            }
-
-            if (tile.IsSingleColor)
-            {
-                Logger.WriteLine("Found single-color tile with ID {0}", tileId);
-            }
-
-            var pos2 = CalculateFaceVertices(position, tile.TileSize, map.TileHeight, tile.Offset);
-
-            positions = new FaceVertices { Vertices = pos2, Depth_z = depth_z };
-            texcoords = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
-
-            return true;
+            return tile;
         }
 
-        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, PointF offset)
+        private TmxTile GetTile(Point point, out bool flipDiagonal, out bool flipHorizontal, out bool flipVertical)
         {
+            return GetTile(point.X, point.Y, out flipDiagonal, out flipHorizontal, out flipVertical);
+        }
+
+        private PointF[] CalculateFaceVertices(Rectangle rect, Size tileSize, int mapTileHeight, PointF offset)
+        {
+            var mapLocation = rect.Location;
+
             // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
             mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
 
             PointF pt0 = mapLocation;
-            PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
-            PointF pt2 = PointF.Add(mapLocation, tileSize);
-            PointF pt3 = PointF.Add(mapLocation, new Size(0, tileSize.Height));
+            PointF pt1 = PointF.Add(mapLocation, new Size((rect.Width + 1) * tileSize.Width, 0));
+            PointF pt2 = PointF.Add(mapLocation, new Size((rect.Width + 1) * tileSize.Width, (rect.Height + 1) * tileSize.Height));
+            PointF pt3 = PointF.Add(mapLocation, new Size(0, (rect.Height + 1) * tileSize.Height));
 
             // Apply the tile offset
-
             pt0 = TmxMath.AddPoints(pt0, offset);
             pt1 = TmxMath.AddPoints(pt1, offset);
             pt2 = TmxMath.AddPoints(pt2, offset);
@@ -151,6 +379,33 @@ namespace Tiled2Unity
             vertices[1] = TiledMapExporter.PointFToObjVertex(pt2);
             vertices[0] = TiledMapExporter.PointFToObjVertex(pt3);
             return vertices;
+        }
+
+        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, PointF offset)
+        {
+            return CalculateFaceVertices(new Rectangle(mapLocation, Size.Empty), tileSize, mapTileHeight, offset);
+            // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
+            //mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
+
+            //PointF pt0 = mapLocation;
+            //PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
+            //PointF pt2 = PointF.Add(mapLocation, tileSize);
+            //PointF pt3 = PointF.Add(mapLocation, new Size(0, tileSize.Height));
+
+            //// Apply the tile offset
+
+            //pt0 = TmxMath.AddPoints(pt0, offset);
+            //pt1 = TmxMath.AddPoints(pt1, offset);
+            //pt2 = TmxMath.AddPoints(pt2, offset);
+            //pt3 = TmxMath.AddPoints(pt3, offset);
+
+            //// We need to use ccw winding for Wavefront objects
+            //PointF[] vertices = new PointF[4];
+            //vertices[3] = TiledMapExporter.PointFToObjVertex(pt0);
+            //vertices[2] = TiledMapExporter.PointFToObjVertex(pt1);
+            //vertices[1] = TiledMapExporter.PointFToObjVertex(pt2);
+            //vertices[0] = TiledMapExporter.PointFToObjVertex(pt3);
+            //return vertices;
         }
 
         private PointF[] CalculateFaceVertices_TileObject(Size tileSize, PointF offset)
@@ -177,6 +432,27 @@ namespace Tiled2Unity
             vertices[1] = TiledMapExporter.PointFToObjVertex(pt2);
             vertices[0] = TiledMapExporter.PointFToObjVertex(pt3);
             return vertices;
+        }
+
+        private PointF[] CalculateFaceTextureCoordinatesForSingleColorHeuristic(Rectangle rect, TmxTile tile)
+        {
+            var imageLocation = tile.LocationOnSource;
+            var tileSize = tile.TileSize;
+            var imageSize = tile.TmxImage.Size;
+
+            var points = new PointF[4];
+            points[0] = imageLocation;
+            points[1] = imageLocation;
+            points[2] = imageLocation;
+            points[3] = imageLocation;
+
+            var coordinates = new PointF[4];
+            coordinates[3] = TiledMapExporter.PointToTextureCoordinate(points[0], imageSize);
+            coordinates[2] = TiledMapExporter.PointToTextureCoordinate(points[1], imageSize);
+            coordinates[1] = TiledMapExporter.PointToTextureCoordinate(points[2], imageSize);
+            coordinates[0] = TiledMapExporter.PointToTextureCoordinate(points[3], imageSize);
+
+            return coordinates;
         }
 
         private PointF[] CalculateFaceTextureCoordinates(TmxTile tmxTile, bool flipDiagonal, bool flipHorizontal, bool flipVertical)

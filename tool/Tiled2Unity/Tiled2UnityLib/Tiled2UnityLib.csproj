@@ -152,6 +152,10 @@
     <Compile Include="MeshWriter.cs" />
     <Compile Include="PolylineReduction.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RectangleUtils.cs" />
+    <Compile Include="RectangleFrontierHorizontalProxy.cs" />
+    <Compile Include="RectangleFrontierProxy.cs" />
+    <Compile Include="RectangleFrontierVerticalProxy.cs" />
     <Compile Include="Session.Args.cs" />
     <Compile Include="Session.cs" />
     <Compile Include="Settings.cs" />

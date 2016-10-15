@@ -37,7 +37,7 @@ namespace Tiled2Unity
         public BitPlane(int width, int height)
         {
             Width = width;
-            Width = height;
+            Height = height;
             if (width * height <= 0)
             {
                 throw new System.ArgumentOutOfRangeException(
@@ -60,6 +60,17 @@ namespace Tiled2Unity
         public void SetAll(bool value)
         {
             mBits.SetAll(value);
+        }
+
+        public void Set(System.Drawing.Rectangle rect, bool value)
+        {
+            for (int i = rect.X; i < rect.Right + 1; ++i)
+            {
+                for (int j = rect.Y; j < rect.Bottom + 1; ++j)
+                {
+                    Set(i, j, value);
+                }
+            }
         }
 
         public void CopyTo(Array array, int index)
