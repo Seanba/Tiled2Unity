@@ -90,7 +90,7 @@ namespace Tiled2Unity
                 // Copy the tile unto the mesh that uses the same image
                 // (In other words, we are grouping tiles by images into a mesh)
                 uint tileId = layer.TileIds[i];
-                TmxTile tile = layer.TmxMap.GetTileFromTileId(tileId);
+                TmxTile tile = layer.Map.GetTileFromTileId(tileId);
                 if (tile == null)
                     continue;
 
@@ -112,7 +112,7 @@ namespace Tiled2Unity
                         mesh = new TmxMesh();
                         mesh.Layer = layer;
                         mesh.TileIds = new uint[layer.TileIds.Count()];
-                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
+                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.Map.GetUniqueId().ToString("D4"));
                         mesh.TmxImage = tile.TmxImage;
 
                         // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)

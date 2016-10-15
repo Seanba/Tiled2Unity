@@ -270,7 +270,7 @@ namespace Tiled2Unity
                     continue;
 
                 uint tileId = TmxMath.GetTileIdWithoutFlags(rawTileId);
-                TmxTile tmxTile = this.TmxMap.Tiles[tileId];
+                TmxTile tmxTile = this.Map.Tiles[tileId];
 
                 foreach (TmxObject colliderObject in tmxTile.ObjectGroup.Objects)
                 {
@@ -284,7 +284,7 @@ namespace Tiled2Unity
                     if (collisionLayer == null)
                     {
                         // Create a new Collision Layer
-                        collisionLayer = new TmxLayer(this.TmxMap);
+                        collisionLayer = new TmxLayer(this.Map);
                         this.CollisionLayers.Add(collisionLayer);
 
                         // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)

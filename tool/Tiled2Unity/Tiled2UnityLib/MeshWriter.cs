@@ -47,7 +47,7 @@ namespace Tiled2Unity
                 return -1;
             }
             var layer = Mesh.Layer;
-            var map = layer.TmxMap;
+            var map = layer.Map;
             //var vertexDatabase = new HashIndexOf<TiledMapExporter.Vertex3>();
             //var uvDatabase = new HashIndexOf<PointF>();
             float mapLogicalHeight = map.MapSizeInPixels().Height;
@@ -116,12 +116,12 @@ namespace Tiled2Unity
                 // The tile has a non-trivial rotation matrix, so we're not
                 // gonna do our optimizations. Export this as a single tile.
 
-                var position = Mesh.Layer.TmxMap.GetMapPositionAt(x, y);
+                var position = Mesh.Layer.Map.GetMapPositionAt(x, y);
                 // If we're using depth shaders then we'll need to set a depth value of this face
                 float depth_z = 0.0f;
                 if (Tiled2Unity.Settings.DepthBufferEnabled)
                 {
-                    depth_z = position.Y / Mesh.Layer.TmxMap.MapSizeInPixels().Height * -1.0f;
+                    depth_z = position.Y / Mesh.Layer.Map.MapSizeInPixels().Height * -1.0f;
                 }
 
 
@@ -130,7 +130,7 @@ namespace Tiled2Unity
                     Logger.WriteLine("Found single-color tile with ID {0}", tile.LocalId);
                 }
 
-                var pos2 = CalculateFaceVertices(position, tile.TileSize, Mesh.Layer.TmxMap.TileHeight, tile.Offset);
+                var pos2 = CalculateFaceVertices(position, tile.TileSize, Mesh.Layer.Map.TileHeight, tile.Offset);
 
                 positions = new FaceVertices { Vertices = pos2, Depth_z = depth_z };
                 texcoords = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
@@ -139,19 +139,19 @@ namespace Tiled2Unity
             }
             else
             {
-                var position = Mesh.Layer.TmxMap.GetMapPositionAt(x, y);
+                var position = Mesh.Layer.Map.GetMapPositionAt(x, y);
                 // If we're using depth shaders then we'll need to set a depth value of this face
                 float depth_z = 0.0f;
                 if (Tiled2Unity.Settings.DepthBufferEnabled)
                 {
-                    depth_z = position.Y / Mesh.Layer.TmxMap.MapSizeInPixels().Height * -1.0f;
+                    depth_z = position.Y / Mesh.Layer.Map.MapSizeInPixels().Height * -1.0f;
                 }
 
                 // No null tile, unflipped in any possible direction.
                 // Here's the point where we do the optimization.
                 var singleColorRect = DoSingleColorHeuristic(x, y);
                 singleColorRect.Location = position;
-                var pos2 = CalculateFaceVertices(singleColorRect, tile.TileSize, Mesh.Layer.TmxMap.TileHeight, tile.Offset);
+                var pos2 = CalculateFaceVertices(singleColorRect, tile.TileSize, Mesh.Layer.Map.TileHeight, tile.Offset);
                 positions = new FaceVertices { Vertices = pos2, Depth_z = depth_z };
                 texcoords = CalculateFaceTextureCoordinatesForSingleColorHeuristic(singleColorRect, tile);
                 mTileUsed.Set(singleColorRect, true);
@@ -194,8 +194,8 @@ namespace Tiled2Unity
             bool flip0, flip1, flip2;
             bool continueInHorDir = true;
             bool continueInVertDir = true;
-            int horDir = Mesh.Layer.TmxMap.DrawOrderHorizontal;
-            int verDir = Mesh.Layer.TmxMap.DrawOrderVertical;
+            int horDir = Mesh.Layer.Map.DrawOrderHorizontal;
+            int verDir = Mesh.Layer.Map.DrawOrderVertical;
             var startTile = GetTile(rect.Location, out flip0, out flip1, out flip2);
             if (startTile == null || flip0 || flip1 || flip2)
             {
@@ -341,7 +341,7 @@ namespace Tiled2Unity
                 flipDiagonal = flipHorizontal = flipVertical = false;
                 return null;
             }
-            var tile = Mesh.Layer.TmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
+            var tile = Mesh.Layer.Map.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
             flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
             flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
             flipVertical = TmxMath.IsTileFlippedVertically(tileId);
