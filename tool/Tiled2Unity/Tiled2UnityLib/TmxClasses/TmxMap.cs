@@ -30,6 +30,10 @@ namespace Tiled2Unity
             Even,
         }
 
+        static public readonly uint FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
+        static public readonly uint FLIPPED_VERTICALLY_FLAG = 0x40000000;
+        static public readonly uint FLIPPED_DIAGONALLY_FLAG = 0x20000000;
+
         public bool IsLoaded { get; private set; }
 
         public string Name { get; private set; }
@@ -83,10 +87,14 @@ namespace Tiled2Unity
         public TmxTile GetTileFromTileId(uint tileId)
         {
             if (tileId == 0)
+            {
                 return null;
+            }
 
-            tileId = TmxMath.GetTileIdWithoutFlags(tileId);
-            return this.Tiles[tileId];
+            tileId = tileId & ~(FLIPPED_HORIZONTALLY_FLAG | FLIPPED_VERTICALLY_FLAG | FLIPPED_DIAGONALLY_FLAG);
+            TmxTile tile;
+            Tiles.TryGetValue(tileId, out tile);
+            return tile;
         }
 
         public Point GetMapPositionAt(int x, int y)

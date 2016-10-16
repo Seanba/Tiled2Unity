@@ -44,7 +44,8 @@ namespace Tiled2Unity
             public bool MoveNext()
             {
                 ++mCurrent;
-                return mSelf.Begin.Y + mCurrent != mSelf.End.Y;
+                // Inclusive, closed interval iteration.
+                return mSelf.Begin.Y + mCurrent != mSelf.End.Y + 1;
             }
 
             public void Reset()

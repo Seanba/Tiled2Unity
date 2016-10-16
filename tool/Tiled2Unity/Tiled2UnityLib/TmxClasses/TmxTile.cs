@@ -51,6 +51,7 @@ namespace Tiled2Unity
 
         public bool IsSingleColor
         {
+            // Probably a good idea to cache this.
             get
             {
                 if (IsEmpty) return true;
