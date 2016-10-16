@@ -303,7 +303,7 @@ namespace Tiled2Unity
             bool flip0, flip1, flip2;
             foreach (var pt in frontier)
             {
-                if (pt.X >= mTileUsed.Width || pt.Y >= mTileUsed.Height) return false;
+                if (pt.X >= mTileUsed.Width || pt.Y >= mTileUsed.Height || pt.X < 0 || pt.Y < 0) return false;
                 if (mTileUsed.Get(pt.X, pt.Y)) return false;
                 var tile = GetTile(pt, out flip0, out flip1, out flip2);
                 if (tile == null ||
@@ -345,28 +345,37 @@ namespace Tiled2Unity
 
         private PointF[] CalculateFaceVertices(Rectangle rect, Size tileSize, int mapTileHeight, PointF offset)
         {
+            PointF[] vertices = new PointF[4];
             var mapLocation = rect.Location;
 
             // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
             mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
 
-            PointF pt0 = mapLocation;
-            PointF pt1 = PointF.Add(mapLocation, new Size((rect.Width + 1) * tileSize.Width, 0));
-            PointF pt2 = PointF.Add(mapLocation, new Size((rect.Width + 1) * tileSize.Width, (rect.Height + 1) * tileSize.Height));
-            PointF pt3 = PointF.Add(mapLocation, new Size(0, (rect.Height + 1) * tileSize.Height));
+            var width = new Size(tileSize.Width * (rect.Width + 1), 0);
+            var height = new Size(0, tileSize.Height * (rect.Height + 1));
+            var upOffset = new Point(0, -rect.Height * tileSize.Height);
+            var leftOffset = new Point(-rect.Width * tileSize.Width, 0);
+
+            vertices[3] = mapLocation;
+            vertices[2] = PointF.Add(vertices[3], width);
+            vertices[1] = PointF.Add(vertices[3], Size.Add(width, height));
+            vertices[0] = PointF.Add(vertices[3], height);
 
             // Apply the tile offset
-            pt0 = TmxMath.AddPoints(pt0, offset);
-            pt1 = TmxMath.AddPoints(pt1, offset);
-            pt2 = TmxMath.AddPoints(pt2, offset);
-            pt3 = TmxMath.AddPoints(pt3, offset);
+            for (int i = 0; i < 4; ++i) vertices[i] = TmxMath.AddPoints(vertices[i], offset);
+
+            // Need to account for draw order.
+            if (Mesh.Layer.Map.DrawOrderVertical == -1)
+            {
+                for (int i = 0; i < 4; ++i) vertices[i] = TmxMath.AddPoints(vertices[i], upOffset);
+            }
+            if (Mesh.Layer.Map.DrawOrderHorizontal == -1)
+            {
+                for (int i = 0; i < 4; ++i) vertices[i] = TmxMath.AddPoints(vertices[i], leftOffset);
+            }
 
             // We need to use ccw winding for Wavefront objects
-            PointF[] vertices = new PointF[4];
-            vertices[3] = TiledMapExporter.PointFToObjVertex(pt0);
-            vertices[2] = TiledMapExporter.PointFToObjVertex(pt1);
-            vertices[1] = TiledMapExporter.PointFToObjVertex(pt2);
-            vertices[0] = TiledMapExporter.PointFToObjVertex(pt3);
+            for (int i = 0; i < 4; ++i) vertices[i] = TiledMapExporter.PointFToObjVertex(vertices[i]);
             return vertices;
         }
 
@@ -420,13 +429,6 @@ namespace Tiled2Unity
             points[2] = TiledMapExporter.PointToTextureCoordinate(imageLocation, imageSize);
             points[1] = TiledMapExporter.PointToTextureCoordinate(imageLocation, imageSize);
             points[0] = TiledMapExporter.PointToTextureCoordinate(imageLocation, imageSize);
-
-            //var coordinates = new PointF[4];
-            //coordinates[3] = TiledMapExporter.PointToTextureCoordinate(points[0], imageSize);
-            //coordinates[2] = TiledMapExporter.PointToTextureCoordinate(points[1], imageSize);
-            //coordinates[1] = TiledMapExporter.PointToTextureCoordinate(points[2], imageSize);
-            //coordinates[0] = TiledMapExporter.PointToTextureCoordinate(points[3], imageSize);
-
             return points;
         }
 
