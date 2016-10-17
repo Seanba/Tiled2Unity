@@ -14,6 +14,9 @@ namespace Tiled2Unity
         // Note: In some cases, Unity still splits up a mesh (incorrectly) into "1 parts" with 16383 faces so we go with 16382 faces to be extra safe.
         private static readonly int MaxNumberOfTiles = 16382;
 
+        // Reference back to the layer.
+        public TmxLayer Layer { get; private set; }
+
         public string UniqueMeshName { get; private set; }
         public string ObjectName { get; private set; }
         public TmxImage TmxImage { get; private set; }
@@ -87,7 +90,7 @@ namespace Tiled2Unity
                 // Copy the tile unto the mesh that uses the same image
                 // (In other words, we are grouping tiles by images into a mesh)
                 uint tileId = layer.TileIds[i];
-                TmxTile tile = layer.TmxMap.GetTileFromTileId(tileId);
+                TmxTile tile = layer.Map.GetTileFromTileId(tileId);
                 if (tile == null)
                     continue;
 
@@ -107,8 +110,9 @@ namespace Tiled2Unity
                     {
                         // Create a new mesh and add it to our list
                         mesh = new TmxMesh();
+                        mesh.Layer = layer;
                         mesh.TileIds = new uint[layer.TileIds.Count()];
-                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
+                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.Map.GetUniqueId().ToString("D4"));
                         mesh.TmxImage = tile.TmxImage;
 
                         // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)

@@ -160,8 +160,8 @@ namespace Tiled2Unity
                 // Set scale and rotation *after* children are added otherwise Unity will have child+parent transform cancel each other out
                 float sx = ImportUtils.GetAttributeAsFloat(goXml, "scaleX", 1.0f);
                 float sy = ImportUtils.GetAttributeAsFloat(goXml, "scaleY", 1.0f);
-                child.transform.localScale = new Vector3(sx, sy, 1.0f);
-
+                child.transform.localScale = Vector3.Scale(child.transform.localScale, new Vector3(sx, sy, 1.0f));
+                
                 // Set the rotation
                 // Use negative rotation on the z component because of change in coordinate systems between Tiled and Unity
                 Vector3 localRotation = new Vector3();

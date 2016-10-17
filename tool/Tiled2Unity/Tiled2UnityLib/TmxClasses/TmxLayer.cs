@@ -17,7 +17,7 @@ namespace Tiled2Unity
             Visual,     // Ignore visual on layer
         };
 
-        public TmxMap TmxMap { get; private set; }
+        public TmxMap Map { get; private set; }
         public string Name { get; private set; }
         public bool Visible { get; private set; }
         public float Opacity { get; private set; }
@@ -31,7 +31,7 @@ namespace Tiled2Unity
 
         public TmxLayer(TmxMap map)
         {
-            this.TmxMap = map;
+            this.Map = map;
             this.Visible = true;
             this.Opacity = 1.0f;
             this.CollisionLayers = new List<TmxLayer>();
@@ -65,9 +65,9 @@ namespace Tiled2Unity
             }
 
             // Use the map next
-            if (this.TmxMap.Properties.PropertyMap.ContainsKey("unity:convex"))
+            if (this.Map.Properties.PropertyMap.ContainsKey("unity:convex"))
             {
-                return this.TmxMap.Properties.GetPropertyValueAsBoolean("unity:convex", true);
+                return this.Map.Properties.GetPropertyValueAsBoolean("unity:convex", true);
             }
 
             // Use the program setting last

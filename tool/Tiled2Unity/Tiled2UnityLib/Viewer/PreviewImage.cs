@@ -468,7 +468,7 @@ namespace Tiled2Unity.Viewer
             LayerClipper.TransformPointFunc xfFunc = (x, y) => new ClipperLib.IntPoint(x, y);
             LayerClipper.ProgressFunc progFunc = (prog) => { }; // do nothing
 
-            ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(tmxLayer.TmxMap, tmxLayer, xfFunc, progFunc);
+            ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(tmxLayer.Map, tmxLayer, xfFunc, progFunc);
 
             float inverseScale = 1.0f / scale;
             if (inverseScale > 1)
