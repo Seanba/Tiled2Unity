@@ -36,7 +36,14 @@ namespace Tiled2Unity
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
                     var meshWriter = new MeshWriter(faceBuilder, vertexDatabase, uvDatabase, mesh);
-                    meshWriter.Execute();
+                    try
+                    {
+                        meshWriter.Execute();
+                    }
+                    catch (Exception exception)
+                    {
+                        Logger.WriteError(exception.ToString());
+                    }
                 }
             }
 

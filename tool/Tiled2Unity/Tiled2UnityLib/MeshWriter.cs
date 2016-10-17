@@ -1,23 +1,48 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Tiled2Unity
 {
     public class MeshWriter
     {
-        private BitPlane mTileUsed = null;
+        #region Datamembers
 
+        /// <summary>
+        /// A reference to the string builder.
+        /// </summary>
         public StringBuilder Builder = null;
 
+        /// <summary>
+        /// A reference to the position database.
+        /// </summary>
         public HashIndexOf<Vertex3> PositionDatabase = null;
 
+        /// <summary>
+        /// A reference to the texture coordinate database.
+        /// </summary>
         public HashIndexOf<PointF> TexcoordDatabase = null;
 
+        /// <summary>
+        /// A reference to the mesh that will be written to the builder.
+        /// </summary>
         public TmxMesh Mesh = null;
+
+        /// <summary>
+        /// Subscribe to this event to be notified of progress.
+        /// This event will be triggered on every new row of the layer
+        /// that is being worked on.
+        /// </summary>
+        public event ProgressChangedEventHandler ProgressChanged;
+
+        private BitPlane mTileUsed = null;
+
+        #endregion // Datamembers
+
+        #region Public methods
 
         public MeshWriter() { }
 
@@ -34,17 +59,17 @@ namespace Tiled2Unity
         }
 
         /// <summary>
-        /// Execute the MeshWriter.
+        /// Execute the MeshWriter. This method may throw various exceptions so be sure to catch them.
         /// </summary>
-        /// <returns>0 for success, some other number for failure.</returns>
-        public int Execute()
+        public void Execute()
         {
             if (Mesh == null || 
                 Builder == null ||
                 PositionDatabase == null ||
                 TexcoordDatabase == null)
             {
-                return -1;
+                // Nothing to do.
+                return;
             }
             var layer = Mesh.Layer;
             var map = layer.Map;
@@ -64,6 +89,7 @@ namespace Tiled2Unity
 
             foreach (int y in verticalRange)
             {
+                OnProgressChanged(y / layer.Height);
                 foreach (int x in horizontalRange)
                 {
                     if (!DetermineQuad(x, y, out faceVertices, out uvs))
@@ -79,7 +105,18 @@ namespace Tiled2Unity
                     Builder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                 }
             }
-            return 0;
+        }
+
+        #endregion // Public methods
+
+        #region Helper methods
+
+        protected void OnProgressChanged(int percentage)
+        {
+            if (ProgressChanged != null)
+            {
+                ProgressChanged(this, new ProgressChangedEventArgs(percentage, null));
+            }
         }
 
         /// <summary>
@@ -784,5 +821,7 @@ namespace Tiled2Unity
 
             return coordinates;
         }
+
+        #endregion // Helper methods
     }
 }
