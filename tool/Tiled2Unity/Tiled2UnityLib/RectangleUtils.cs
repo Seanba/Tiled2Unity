@@ -18,6 +18,17 @@ namespace Tiled2Unity
         }
 
         /// <summary>
+        /// The closed area of a rectangle is defined to be
+        /// (width + 1) * (height + 1).
+        /// </summary>
+        /// <param name="rect">This Rectangle.</param>
+        /// <returns>The closed area of a rectangle.</returns>
+        public static uint GetClosedArea(this Rectangle rect)
+        {
+            return ((uint)rect.Width + 1) * ((uint)rect.Height + 1);
+        }
+
+        /// <summary>
         /// Adds a bottom row to the given rectangle.
         /// </summary>
         /// <param name="rect">The rectangle to enlarge.</param>
