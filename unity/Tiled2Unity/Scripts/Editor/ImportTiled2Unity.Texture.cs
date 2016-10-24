@@ -14,8 +14,8 @@ namespace Tiled2Unity
         public void TextureImported(string texturePath)
         {
             // This is a fixup method due to materials and textures, under some conditions, being imported out of order
-            Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texturePath, typeof(Texture2D)) as Texture2D;
-            Material material = AssetDatabase.LoadAssetAtPath(GetMaterialAssetPath(texturePath), typeof(Material)) as Material;
+            UnityEngine.Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texturePath, typeof(UnityEngine.Texture2D)) as UnityEngine.Texture2D;
+            UnityEngine.Material material = AssetDatabase.LoadAssetAtPath(GetMaterialAssetPath(texturePath), typeof(UnityEngine.Material)) as UnityEngine.Material;
             if (material == null)
             {
                 Debug.LogError(String.Format("Error importing texture '{0}'. Could not find material. Try re-importing Tiled2Unity/Imported/[MapName].tiled2unity.xml file", texturePath));

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Tiled2Unity
 {
@@ -28,6 +29,8 @@ namespace Tiled2Unity
         // Returns true if the program is to keep going. Will return false if there is an error parsing options or if we were only interested in help/version information
         private bool ParseOptions(string[] args)
         {
+            args = CleanseArgs(args);
+
             bool displayVersion = false;
             bool displayHelp = false;
             bool isAuto = false;
@@ -40,6 +43,7 @@ namespace Tiled2Unity
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
                 { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => isAuto = true },
+                { "w|writeable-vertices", "Exported meshes will have writable vertices. This increases the memory used by meshes significantly. Only use if you will mutate the vertices through scripting.", w => Tiled2Unity.Settings.WriteableVertices = true },
                 { "v|version", "Display version information.", v => displayVersion = true },
                 { "h|help", "Display this help message.", h => displayHelp = true },
             };
@@ -161,6 +165,21 @@ namespace Tiled2Unity
             Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
             Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
+        }
+
+        // Removes unwanted cruft from arguments
+        private static string[] CleanseArgs(string[] args)
+        {
+            List<string> arguments = new List<string>(args);
+
+#if TILED2UNITY_MAC
+            // MacOSX adds "-psn_number_number" (process number) argument. Get rid of it.
+            var regex = new Regex(@"-psn_\d+_\d+");
+            arguments.RemoveAll(s => regex.IsMatch(s));
+#endif
+
+            return arguments.ToArray();
+
         }
 
 

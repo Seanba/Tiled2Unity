@@ -56,7 +56,7 @@ namespace Tiled2Unity.Viewer
 
                 g.TranslateTransform(-bounds.X, -bounds.Y);
                 DrawBackground(g, tmxMap);
-                DrawGrid(g, tmxMap);
+                DrawGrid(g, tmxMap, scale);
                 DrawTiles(g, tmxMap);
                 DrawColliders(g, tmxMap, scale);
                 DrawObjectColliders(g, tmxMap);
@@ -109,7 +109,7 @@ namespace Tiled2Unity.Viewer
             g.FillRectangle(Brushes.White, rect);
         }
 
-        private static void DrawGrid(Graphics g, TmxMap tmxMap)
+        private static void DrawGrid(Graphics g, TmxMap tmxMap, float scale)
         {
             if (tmxMap.Orientation == TmxMap.MapOrientation.Hexagonal)
             {
@@ -117,11 +117,11 @@ namespace Tiled2Unity.Viewer
             }
             else
             {
-                DrawGridQuad(g, tmxMap);
+                DrawGridQuad(g, tmxMap, scale);
             }
         }
 
-        private static void DrawGridQuad(Graphics g, TmxMap tmxMap)
+        private static void DrawGridQuad(Graphics g, TmxMap tmxMap, float scale)
         {
             HashSet<Point> points = new HashSet<Point>();
             for (int x = 0; x < GetMaxTilesWide(tmxMap); ++x)
@@ -177,15 +177,19 @@ namespace Tiled2Unity.Viewer
             }
 
             // Can take for granted that background is always white
+            float invScale = 1.0f / scale;
             List<RectangleF> rectangles = new List<RectangleF>(points.Count);
             foreach (var p in points)
             {
-                RectangleF rc = new RectangleF(p.X, p.Y, PreviewImage.GridSize, PreviewImage.GridSize);
-                rc.Offset(-PreviewImage.GridSize * 0.5f, -PreviewImage.GridSize * 0.5f);
+                RectangleF rc = new RectangleF(p.X, p.Y, PreviewImage.GridSize * invScale, PreviewImage.GridSize * invScale);
+                rc.Offset(-PreviewImage.GridSize * 0.5f * invScale, -PreviewImage.GridSize * 0.5f * invScale);
                 rectangles.Add(rc);
             }
 
-            g.DrawRectangles(Pens.Black, rectangles.ToArray());
+            using (Pen pen = new Pen(Brushes.Black, invScale))
+            {
+                g.DrawRectangles(pen, rectangles.ToArray());
+            }
         }
 
         private static void DrawGridHex(Graphics g, TmxMap tmxMap)
@@ -344,7 +348,15 @@ namespace Tiled2Unity.Viewer
 
         private static void DrawTiles(Graphics g, TmxMap tmxMap)
         {
-            foreach (TmxLayer layer in tmxMap.Layers)
+            // Draw all layer tiles and tile objects in object groups in order
+            var layers = new List<TmxLayerBase>();
+            layers.AddRange(tmxMap.Layers);
+            layers.AddRange(tmxMap.ObjectGroups);
+
+            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
+            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
+
+            foreach (var layer in layers)
             {
                 if (layer.Visible == false)
                     continue;
@@ -352,92 +364,148 @@ namespace Tiled2Unity.Viewer
                 if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
                     continue;
 
-                // Set the opacity for the layer (Not supported on Mac builds)
-#if !TILED2UNITY_MAC
-                ColorMatrix colorMatrix = new ColorMatrix();
-                colorMatrix.Matrix33 = layer.Opacity;
-
-                ImageAttributes imageAttributes = new ImageAttributes();
-                imageAttributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-#endif
-
                 // Translate by the offset
                 GraphicsState state = g.Save();
                 g.TranslateTransform(layer.Offset.X, layer.Offset.Y);
 
-                // The range of x and y depends on the render order of the tiles
-                // By default we draw right and down but may reverse the tiles we visit
-                var range_x = Enumerable.Range(0, GetMaxTilesWide(layer));
-                var range_y = Enumerable.Range(0, GetMaxTilesHigh(layer));
-
-                if (tmxMap.DrawOrderHorizontal == -1)
-                    range_x = range_x.Reverse();
-
-                if (tmxMap.DrawOrderVertical == -1)
-                    range_y = range_y.Reverse();
-
-                // Visit the tiles we are going to draw
-                var tiles = from y in range_y
-                            from x in range_x
-                            let rawTileId = layer.GetRawTileIdAt(x, y)
-                            let tileId = layer.GetTileIdAt(x, y)
-                            where tileId != 0
-
-                            let tile = tmxMap.Tiles[tileId]
-
-                            // Support for animated tiles. Just show the first frame of the animation.
-                            let frame = tmxMap.Tiles[tile.Animation.Frames[0].GlobalTileId]
-
-                            select new
-                            {
-                                Tile = frame,
-                                Position = TmxMath.TileCornerInScreenCoordinates(tmxMap, x, y),
-                                Bitmap = frame.TmxImage.ImageBitmap,
-                                IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
-                                IsFlippedHorizontally = TmxMath.IsTileFlippedHorizontally(rawTileId),
-                                IsFlippedVertically = TmxMath.IsTileFlippedVertically(rawTileId),
-                            };
-
-                PointF[] destPoints = new PointF[4];
-                PointF[] destPoints3 = new PointF[3];
-                foreach (var t in tiles)
+                if (layer.GetType() == typeof(TmxLayer))
                 {
-                    PointF location = t.Position;
-
-                    // Individual tiles may be larger than the given tile size of the overall map
-                    location.Y = (t.Position.Y - t.Tile.TileSize.Height) + tmxMap.TileHeight;
-
-                    // Take tile offset into account
-                    location.X += t.Tile.Offset.X;
-                    location.Y += t.Tile.Offset.Y;
-
-                    // Make up the 'quad' of texture points and transform them
-                    PointF center = new PointF(t.Tile.TileSize.Width * 0.5f, t.Tile.TileSize.Height * 0.5f);
-                    destPoints[0] = new Point(0, 0);
-                    destPoints[1] = new Point(t.Tile.TileSize.Width, 0);
-                    destPoints[2] = new Point(t.Tile.TileSize.Width, t.Tile.TileSize.Height);
-                    destPoints[3] = new Point(0, t.Tile.TileSize.Height);
-
-                    // Transform the points based on our flipped flags
-                    TmxMath.TransformPoints(destPoints, center, t.IsFlippedDiagnoally, t.IsFlippedHorizontally, t.IsFlippedVertically);
-
-                    // Put the destination points back into world space
-                    TmxMath.TranslatePoints(destPoints, location);
-
-                    // Stupid DrawImage function only takes 3 destination points otherwise it throws an exception
-                    destPoints3[0] = destPoints[0];
-                    destPoints3[1] = destPoints[1];
-                    destPoints3[2] = destPoints[3];
-
-                    // Draw the tile
-                    Rectangle source = new Rectangle(t.Tile.LocationOnSource, t.Tile.TileSize);
-#if !TILED2UNITY_MAC
-                    g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel, imageAttributes);
-#else
-                    g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel);
-#endif
+                    DrawTilesInTileLayer(g, tmxMap, layer as TmxLayer);
+                }
+                else if (layer.GetType() == typeof(TmxObjectGroup))
+                {
+                    DrawTilesInObjectGroup(g, tmxMap, layer as TmxObjectGroup);
                 }
 
+                g.Restore(state);
+            }
+        }
+
+        private static void DrawTilesInTileLayer(Graphics g, TmxMap tmxMap, TmxLayer layer)
+        {
+            // Set the opacity for the layer (Not supported on Mac builds)
+#if !TILED2UNITY_MAC
+            ColorMatrix colorMatrix = new ColorMatrix();
+            colorMatrix.Matrix33 = layer.Opacity;
+
+            ImageAttributes imageAttributes = new ImageAttributes();
+            imageAttributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+#endif
+            // The range of x and y depends on the render order of the tiles
+            // By default we draw right and down but may reverse the tiles we visit
+            var range_x = Enumerable.Range(0, GetMaxTilesWide(layer));
+            var range_y = Enumerable.Range(0, GetMaxTilesHigh(layer));
+
+            if (tmxMap.DrawOrderHorizontal == -1)
+                range_x = range_x.Reverse();
+
+            if (tmxMap.DrawOrderVertical == -1)
+                range_y = range_y.Reverse();
+
+            // Visit the tiles we are going to draw
+            var tiles = from y in range_y
+                        from x in range_x
+                        let rawTileId = layer.GetRawTileIdAt(x, y)
+                        let tileId = layer.GetTileIdAt(x, y)
+                        where tileId != 0
+
+                        let tile = tmxMap.Tiles[tileId]
+
+                        // Support for animated tiles. Just show the first frame of the animation.
+                        let frame = tmxMap.Tiles[tile.Animation.Frames[0].GlobalTileId]
+
+                        select new
+                        {
+                            Tile = frame,
+                            Position = TmxMath.TileCornerInScreenCoordinates(tmxMap, x, y),
+                            Bitmap = frame.TmxImage.ImageBitmap,
+                            IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
+                            IsFlippedHorizontally = TmxMath.IsTileFlippedHorizontally(rawTileId),
+                            IsFlippedVertically = TmxMath.IsTileFlippedVertically(rawTileId),
+                        };
+
+            PointF[] destPoints = new PointF[4];
+            PointF[] destPoints3 = new PointF[3];
+            foreach (var t in tiles)
+            {
+                PointF location = t.Position;
+
+                // Individual tiles may be larger than the given tile size of the overall map
+                location.Y = (t.Position.Y - t.Tile.TileSize.Height) + tmxMap.TileHeight;
+
+                // Take tile offset into account
+                location.X += t.Tile.Offset.X;
+                location.Y += t.Tile.Offset.Y;
+
+                // Make up the 'quad' of texture points and transform them
+                PointF center = new PointF(t.Tile.TileSize.Width * 0.5f, t.Tile.TileSize.Height * 0.5f);
+                destPoints[0] = new Point(0, 0);
+                destPoints[1] = new Point(t.Tile.TileSize.Width, 0);
+                destPoints[2] = new Point(t.Tile.TileSize.Width, t.Tile.TileSize.Height);
+                destPoints[3] = new Point(0, t.Tile.TileSize.Height);
+
+                // Transform the points based on our flipped flags
+                TmxMath.TransformPoints(destPoints, center, t.IsFlippedDiagnoally, t.IsFlippedHorizontally, t.IsFlippedVertically);
+
+                // Put the destination points back into world space
+                TmxMath.TranslatePoints(destPoints, location);
+
+                // Stupid DrawImage function only takes 3 destination points otherwise it throws an exception
+                destPoints3[0] = destPoints[0];
+                destPoints3[1] = destPoints[1];
+                destPoints3[2] = destPoints[3];
+
+                // Draw the tile
+                Rectangle source = new Rectangle(t.Tile.LocationOnSource, t.Tile.TileSize);
+#if !TILED2UNITY_MAC
+                g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel, imageAttributes);
+#else
+                g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel);
+#endif
+            }
+        }
+
+        private static void DrawTilesInObjectGroup(Graphics g, TmxMap tmxMap, TmxObjectGroup objectGroup)
+        {
+            // Get opacity in eventually
+#if !TILED2UNITY_MAC
+            ColorMatrix colorMatrix = new ColorMatrix();
+            colorMatrix.Matrix33 = objectGroup.Opacity;
+
+            ImageAttributes imageAttributes = new ImageAttributes();
+            imageAttributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+#endif
+
+            foreach (var tmxObject in objectGroup.Objects)
+            {
+                if (!tmxObject.Visible)
+                    continue;
+
+                TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
+                if (tmxObjectTile == null)
+                    continue;
+
+                GraphicsState state = g.Save();
+                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(tmxMap, tmxObject.Position);
+                g.TranslateTransform(xfPosition.X, xfPosition.Y);
+                g.RotateTransform(tmxObject.Rotation);
+                {
+                    GraphicsState tileState = g.Save();
+                    PrepareTransformForTileObject(g, tmxMap, tmxObjectTile);
+
+                    // Draw the tile
+                    Rectangle destination = new Rectangle(0, -tmxObjectTile.Tile.TileSize.Height, tmxObjectTile.Tile.TileSize.Width, tmxObjectTile.Tile.TileSize.Height);
+                    Rectangle source = new Rectangle(tmxObjectTile.Tile.LocationOnSource, tmxObjectTile.Tile.TileSize);
+                    //g.DrawRectangle(Pens.Black, destination);
+
+#if !TILED2UNITY_MAC
+                    g.DrawImage(tmxObjectTile.Tile.TmxImage.ImageBitmap, destination, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel, imageAttributes);
+#else
+                    g.DrawImage(tmxObjectTile.Tile.TmxImage.ImageBitmap, destination, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel);
+#endif
+
+                    g.Restore(tileState);
+                }
                 g.Restore(state);
             }
         }
@@ -456,7 +524,6 @@ namespace Tiled2Unity.Viewer
 
                         Color lineColor = type.Color;
                         Color polyColor = Color.FromArgb(128, lineColor);
-
                         DrawLayerColliders(g, collisionLayer, polyColor, lineColor, scale);
                     }
                 }
@@ -546,6 +613,43 @@ namespace Tiled2Unity.Viewer
             }
         }
 
+        private static void PrepareTransformForTileObject(Graphics g, TmxMap tmxMap, TmxObjectTile tmxObjectTile)
+        {
+            // Isometric tiles are off by a half-width
+            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+            {
+                g.TranslateTransform(-tmxObjectTile.Tile.TileSize.Width * 0.5f, 0);
+            }
+
+            // Apply scale
+            {
+                // Move to "local origin" of tile and scale
+                float toCenter_x = (tmxMap.Orientation == TmxMap.MapOrientation.Isometric) ? (tmxObjectTile.Tile.TileSize.Width * 0.5f) : 0.0f;
+                g.TranslateTransform(toCenter_x, 0);
+                {
+                    SizeF scale = tmxObjectTile.GetTileObjectScale();
+                    g.ScaleTransform(scale.Width, scale.Height);
+                }
+
+                // Move back
+                g.TranslateTransform(-toCenter_x, 0);
+            }
+
+            // Apply horizontal flip
+            if (tmxObjectTile.FlippedHorizontal)
+            {
+                g.TranslateTransform(tmxObjectTile.Tile.TileSize.Width, 0);
+                g.ScaleTransform(-1, 1);
+            }
+
+            // Apply vertical flip
+            if (tmxObjectTile.FlippedVertical)
+            {
+                g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
+                g.ScaleTransform(1, -1);
+            }
+        }
+
         private static void DrawObjectCollider(Graphics g, TmxMap tmxMap, TmxObject tmxObject, Color color)
         {
             using (Brush brush = TmxHelper.CreateObjectColliderBrush(color))
@@ -585,41 +689,9 @@ namespace Tiled2Unity.Viewer
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
                     GraphicsState tileState = g.Save();
+
                     TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
-
-                    // Isometric tiles are off by a half-width
-                    if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
-                    {
-                        g.TranslateTransform(-tmxMap.TileWidth * 0.5f, 0);
-                    }
-
-                    // Apply scale
-                    SizeF scale = tmxObjectTile.GetTileObjectScale();
-                    g.ScaleTransform(scale.Width, scale.Height);
-
-                    // Apply horizontal flip
-                    if (tmxObjectTile.FlippedHorizontal)
-                    {
-                        g.TranslateTransform(tmxObjectTile.Tile.TileSize.Width, 0);
-                        g.ScaleTransform(-1, 1);
-                    }
-
-                    // Apply vertical flip
-                    if (tmxObjectTile.FlippedVertical)
-                    {
-                        g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
-                        g.ScaleTransform(1, -1);
-                    }
-
-                    // (Note: Now we can draw the tile and collisions as normal as the transforms have been set up.)
-
-                    // Draw the tile
-                    Rectangle destination = new Rectangle(0, -tmxObjectTile.Tile.TileSize.Height, tmxObjectTile.Tile.TileSize.Width, tmxObjectTile.Tile.TileSize.Height);
-                    Rectangle source = new Rectangle(tmxObjectTile.Tile.LocationOnSource, tmxObjectTile.Tile.TileSize);
-                    g.DrawImage(tmxObjectTile.Tile.TmxImage.ImageBitmap, destination, source, GraphicsUnit.Pixel);
-
-                    // Put a black border around the tile so it sticks out a bit as an object
-                    g.DrawRectangle(Pens.Black, destination);
+                    PrepareTransformForTileObject(g, tmxMap, tmxObjectTile);
 
                     // Draw the collisions
                     // Temporarily set orienation to Orthogonal for tile colliders

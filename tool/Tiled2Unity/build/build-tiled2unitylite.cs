@@ -16,11 +16,21 @@ namespace Tiled2UnityLite_Builder
 {
     class Program
     {
-        static public void Main()
+        static public int Main()
         {
-            string version = GetTiled2UnityVersion();
-            WriteCS(version);
-            WriteZip(version);
+            try
+            {
+                string version = GetTiled2UnityVersion();
+                WriteCS(version);
+                WriteZip(version);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error writing Tiled2UnityLite: {0}", e.Message);
+                return 1;
+            }
+            
+            return 0;
         }
 
         static private void WriteZip(string version)
@@ -90,7 +100,8 @@ namespace Tiled2UnityLite_Builder
             // Ignore "using [namespace]" for these
             List<string> ignoreUsers = new List<string>();
             ignoreUsers.Add("NDesk.Options");
-            ignoreUsers.Add("System.Drawing.Drawing2D");            
+            ignoreUsers.Add("System.Drawing.Drawing2D");
+            ignoreUsers.Add("Real = ");
 
             // Start collecting lines/data for our generated script file
             List<string> defines = new List<string>();
@@ -169,6 +180,17 @@ namespace Tiled2UnityLite_Builder
             }
             t2uWriter.WriteLine();
 
+            // Extra using (typedef style) goes here
+            string usingDoubleOrReal =
+@"
+#if DOUBLE
+using Real = System.Double;
+#else
+using Real = System.Single;
+#endif
+";
+            t2uWriter.WriteLine(usingDoubleOrReal);
+
             // Write out our "main"
             WriteMainProgramFile(t2uWriter, version);
 
@@ -184,7 +206,7 @@ namespace Tiled2UnityLite_Builder
         static public string GetTiled2UnityVersion()
         {
             // Get the version from the exe
-            FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(@"..\src\bin\x64\Release\Tiled2Unity.exe");
+            FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(@"..\src\bin\x64\Release\Tiled2UnityLib.dll");
             return versionInfo.ProductVersion;            
         }
 

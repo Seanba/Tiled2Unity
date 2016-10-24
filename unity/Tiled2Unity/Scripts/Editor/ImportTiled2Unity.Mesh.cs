@@ -137,6 +137,9 @@ namespace Tiled2Unity
                 float z = ImportUtils.GetAttributeAsFloat(goXml, "z", 0);
                 child.transform.localPosition = new Vector3(x, y, z);
 
+                // Add any tile objects
+                AddTileObjectComponentsTo(child, goXml);
+
                 // Add any tile animators
                 AddTileAnimatorsTo(child, goXml);
 
@@ -165,8 +168,6 @@ namespace Tiled2Unity
                 // Set the rotation
                 // Use negative rotation on the z component because of change in coordinate systems between Tiled and Unity
                 Vector3 localRotation = new Vector3();
-                localRotation.x = (ImportUtils.GetAttributeAsBoolean(goXml, "flipY", false) == true) ? 180.0f : 0.0f;
-                localRotation.y = (ImportUtils.GetAttributeAsBoolean(goXml, "flipX", false) == true) ? 180.0f : 0.0f;
                 localRotation.z = -ImportUtils.GetAttributeAsFloat(goXml, "rotation", 0);
                 child.transform.eulerAngles = localRotation;
             }
@@ -391,6 +392,17 @@ namespace Tiled2Unity
             // If we're here then there's an error with the mesh name
             Debug.LogError(String.Format("No mesh named '{0}' to copy from.", copyFromName));
             return null;
+        }
+
+        private void AddTileObjectComponentsTo(GameObject gameObject, XElement goXml)
+        {
+            var tileXml = goXml.Element("TileObjectComponent");
+            if (tileXml != null)
+            {
+                TileObject tileObject = gameObject.AddComponent<TileObject>();
+                tileObject.TileWidth = ImportUtils.GetAttributeAsFloat(tileXml, "width");
+                tileObject.TileHeight = ImportUtils.GetAttributeAsFloat(tileXml, "height");
+            }
         }
 
         private void AddTileAnimatorsTo(GameObject gameObject, XElement goXml)

@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.7.0
+// version 1.0.8.0
 
 //css_reference System;
 //css_reference System.Core;
@@ -28,8 +28,16 @@ using System.Runtime.Serialization;
 using System.Security.Permissions;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
+
+
+#if DOUBLE
+using Real = System.Double;
+#else
+using Real = System.Single;
+#endif
 
 
 namespace Tiled2Unity
@@ -51,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.7.0";
+            return "1.0.8.0";
         }
 
         public static string GetPlatform()
@@ -105,287 +113,32 @@ namespace Tiled2Unity
 }
 
 // ----------------------------------------------------------------------
-// ConvexPolygonSet.cs
+// GenericListDatabase.cs
 
 // using System;
 // using System.Collections.Generic;
 // using System.Linq;
 // using System.Text;
+// using System.Threading.Tasks;
 
 namespace Tiled2Unity
 {
-    // Build a list of convex polygons from a list of triangles
-    // This uses the Hertel-Mehlhorn alogorithm to (quickly) generate the convex polygons with no worse than 4x the minimum number.
-    // This is generally good enough. Generating a guaranteed minimum set uses dynamic programming with high alogorithmic complexity.
-    class ConvexPolygonSet
+    // A simple list acting as our "database"
+    // Similar items are found multiple times in this collection (as opposed to HashIndexOf)
+    class GenericListDatabase<T> : IGenericDatabase<T>
     {
-        // We potentially combine polygons along these edges
-        public class SharedPolygonEdge
-        {
-            public Poly2Tri.Point2D EdgePoint1 { get; set; }
-            public Poly2Tri.Point2D EdgePoint2 { get; set; }
+        public List<T> List { get; private set; }
 
-            public Poly2Tri.Point2DList PolygonA { get; set; }
-            public Poly2Tri.Point2DList PolygonB { get; set; }
+        public GenericListDatabase()
+        {
+            this.List = new List<T>();
         }
 
-        public List<SharedPolygonEdge> PolygonEdges { get; private set; }
-        public List<Poly2Tri.Point2DList> Polygons { get; private set; }
-
-
-        public ConvexPolygonSet()
+        public int AddToDatabase(T value)
         {
-            this.PolygonEdges = new List<SharedPolygonEdge>();
-            this.Polygons = new List<Poly2Tri.Point2DList>();
+            this.List.Add(value);
+            return this.List.Count - 1;
         }
-
-        public void MakeConvextSetFromClipperSolution(ClipperLib.PolyTree solution)
-        {
-            var triangles = GetTriangleListFromClipperSolution(solution);
-            MakeConvexSetFromTriangles(triangles);
-        }
-
-        public void MakeConvexSetFromTriangles(IEnumerable<Poly2Tri.DelaunayTriangle> triangles)
-        {
-            PreparePolygons(triangles);
-            CombinePolygons();
-        }
-
-        private List<Poly2Tri.DelaunayTriangle> GetTriangleListFromClipperSolution(ClipperLib.PolyTree solution)
-        {
-            Func<ClipperLib.IntPoint, Poly2Tri.PolygonPoint> xfToPolygonPoint = (p) => new Poly2Tri.PolygonPoint(p.X, p.Y);
-            Poly2Tri.PolygonSet polygonSet = new Poly2Tri.PolygonSet();
-
-            ClipperLib.PolyNode node = solution.GetFirst();
-            while (node != null)
-            {
-                // Only interested in closed paths
-                if (!node.IsOpen)
-                {
-                    if (node.IsHole)
-                    {
-                        if (polygonSet.Polygons.Count() > 0)
-                        {
-                            // Add hole to last polygon entered
-                            var polyPoints = node.Contour.Select(xfToPolygonPoint).ToArray();
-                            Poly2Tri.Polygon hole = new Poly2Tri.Polygon(polyPoints);
-
-                            Poly2Tri.Polygon polygon = polygonSet.Polygons.Last();
-                            polygon.AddHole(hole);
-                        }
-                    }
-                    else
-                    {
-                        // Add a new polygon to the set
-                        var polyPoints = node.Contour.Select(xfToPolygonPoint).ToList();
-                        Poly2Tri.Polygon polygon = new Poly2Tri.Polygon(polyPoints);
-                        polygonSet.Add(polygon);
-                    }
-                }
-                node = node.GetNext();
-            }
-
-            // Now triangulate the whole set
-            Poly2Tri.P2T.Triangulate(polygonSet);
-
-            // Combine all the triangles into one list
-            List<Poly2Tri.DelaunayTriangle> triangles = new List<Poly2Tri.DelaunayTriangle>();
-            foreach (var polygon in polygonSet.Polygons)
-            {
-                triangles.AddRange(polygon.Triangles);
-            }
-
-            return triangles;
-        }
-
-        private void CombinePolygons()
-        {
-            // Test each edge between polygons and see if it can be removed
-            for (int i = 0; i < this.PolygonEdges.Count; ++i)
-            {
-                if (CanRemoveEdge(i))
-                {
-                    CombinePolygonsAlongEdge(i);
-                }
-            }
-        }
-
-        private void CombinePolygonsAlongEdge(int index)
-        {
-            // We are going to combine all the points from polygon B into polygon A
-            var edge = this.PolygonEdges[index];
-
-            // Gather a list of all the points from polygon B to be added
-            // This is all the points from polygon B except for the shared edge
-            List<Poly2Tri.Point2D> pointsToAdd = new List<Poly2Tri.Point2D>();
-            {
-                int edgeStartOnBIndex = edge.PolygonB.IndexOf(edge.EdgePoint1);
-                int edgeStopOnBIndex = edge.PolygonB.IndexOf(edge.EdgePoint2);
-
-                int indexToAdd = edge.PolygonB.NextIndex(edgeStartOnBIndex);
-                while (indexToAdd != edgeStopOnBIndex)
-                {
-                    Poly2Tri.Point2D point = edge.PolygonB[indexToAdd];
-                    pointsToAdd.Add(point);
-
-                    indexToAdd = edge.PolygonB.NextIndex(indexToAdd);
-                }
-            }
-
-            // Insert the points to add between the edge points on polygon A
-            List<Poly2Tri.Point2D> newPolygonAPoints = edge.PolygonA.ToList();
-            {
-                int edgeStartOnAIndex = edge.PolygonA.IndexOf(edge.EdgePoint1);
-                int nextIndexA = edge.PolygonA.NextIndex(edgeStartOnAIndex);
-                newPolygonAPoints.InsertRange(nextIndexA, pointsToAdd);
-            }
-
-            // Create a new polygon A
-            Poly2Tri.Point2DList newPolygonA = new Poly2Tri.Point2DList(newPolygonAPoints);
-            this.Polygons.Add(newPolygonA);
-
-            // Any furter edges that had PolygonA or PolygonB in it must be updated
-            for (int i = index + 1; i < this.PolygonEdges.Count; ++i)
-            {
-                var furtherEdge = this.PolygonEdges[i];
-
-                if (furtherEdge.PolygonA == edge.PolygonA)
-                {
-                    furtherEdge.PolygonA = newPolygonA;
-                }
-                else if (furtherEdge.PolygonA == edge.PolygonB)
-                {
-                    furtherEdge.PolygonA = newPolygonA;
-                }
-
-                if (furtherEdge.PolygonB == edge.PolygonA)
-                {
-                    furtherEdge.PolygonB = newPolygonA;
-                }
-                else if (furtherEdge.PolygonB == edge.PolygonB)
-                {
-                    furtherEdge.PolygonB = newPolygonA;
-                }
-            }
-
-            // Old PolygonA and PolygonB are removed from the list of polygons
-            this.Polygons.Remove(edge.PolygonA);
-            this.Polygons.Remove(edge.PolygonB);
-        }
-
-        private bool CanRemoveEdge(int index)
-        {
-            var edge = this.PolygonEdges[index];
-
-            // (Assumes CCW list in polygons)
-            // (Assumes the edge is CCW along polygon A)
-            // In order to be able to remove an edge and (eventually) combine the polygons together two corners where the polygons match be less than 180 degress
-
-            // CornerA: (P1 - A.prev) x (B.next - P1)
-            {
-                int indexA = edge.PolygonA.IndexOf(edge.EdgePoint1);
-                int indexPrevA = edge.PolygonA.PreviousIndex(indexA);
-
-                int indexB = edge.PolygonB.IndexOf(edge.EdgePoint1);
-                int indexNextB = edge.PolygonB.NextIndex(indexB);
-
-                Poly2Tri.Point2D prevA = edge.PolygonA[indexPrevA];
-                Poly2Tri.Point2D nextB = edge.PolygonB[indexNextB];
-                Poly2Tri.Point2D line1 = edge.EdgePoint1 - prevA;
-                Poly2Tri.Point2D line2 = nextB - edge.EdgePoint1;
-
-                double cross = Poly2Tri.Point2D.Cross(line1, line2);
-                if (cross < 0)
-                    return false;
-            }
-
-            // CornerB: (A.next - P2) x (P2 - B.prev)
-            {
-                int indexA = edge.PolygonA.IndexOf(edge.EdgePoint2);
-                int indexNextA = edge.PolygonA.NextIndex(indexA);
-
-                int indexB = edge.PolygonB.IndexOf(edge.EdgePoint2);
-                int indexPrevB = edge.PolygonB.PreviousIndex(indexB);
-
-                Poly2Tri.Point2D nextA = edge.PolygonA[indexNextA];
-                Poly2Tri.Point2D prevB = edge.PolygonB[indexPrevB];
-                Poly2Tri.Point2D line1 = nextA - edge.EdgePoint2;
-                Poly2Tri.Point2D line2 = edge.EdgePoint2 - prevB;
-
-                double cross = Poly2Tri.Point2D.Cross(line1, line2);
-                if (cross > 0)
-                    return false;
-            }
-            return true;
-        }
-
-        private void CombingPolygonsAlongEdge(int index)
-        {
-            var edge = this.PolygonEdges[index];
-        }
-
-        private void PreparePolygons(IEnumerable<Poly2Tri.DelaunayTriangle> triangles)
-        {
-            this.PolygonEdges.Clear();
-            this.Polygons.Clear();
-
-            // For building edges we need a mapping of the original triangles to polygons
-            Dictionary<Poly2Tri.DelaunayTriangle, Poly2Tri.Point2DList> triangleToPolygon = new Dictionary<Poly2Tri.DelaunayTriangle, Poly2Tri.Point2DList>();
-            Dictionary<Poly2Tri.Point2DList, Poly2Tri.DelaunayTriangle> polygonToTriangle = new Dictionary<Poly2Tri.Point2DList, Poly2Tri.DelaunayTriangle>();
-
-            // Initially, our polygons are simply the triangles in polygon form
-            foreach (var triangle in triangles)
-            {
-                var polygonPoints = triangle.Points.Select(p => new Poly2Tri.Point2D(p.X, p.Y)).ToList();
-                Poly2Tri.Point2DList polygon = new Poly2Tri.Point2DList(polygonPoints);
-
-                triangleToPolygon[triangle] = polygon;
-                polygonToTriangle[polygon] = triangle;
-
-                this.Polygons.Add(polygon);
-            }
-
-            // Build up the edge list
-            foreach (var polygon in this.Polygons)
-            {
-                // Does this polygon have any neighbors? If so, that's how we make our edges.
-                var triangle = polygonToTriangle[polygon];
-
-                // We can have up to 3 neighbors on each triangle
-                for (int n = 0; n < 3; ++n)
-                {
-                    var neighborTriangle = triangle.Neighbors[n];
-                    if (neighborTriangle == null)
-                        continue;
-
-                    if (!triangleToPolygon.ContainsKey(neighborTriangle))
-                        continue;
-
-                    var neighborPolygon = triangleToPolygon[neighborTriangle];
-
-                    // If the neighbor polygon still has a triangle associated with it then we haven't added its edges yet
-                    // Otherwise, we have added her edges and we don't want to do so again
-                    if (!polygonToTriangle.ContainsKey(neighborPolygon))
-                        continue;
-
-                    // Gather the points needed for the edge
-                    Poly2Tri.TriangulationPoint triPoint1 = triangle.Points[(n + 1) % 3];
-                    Poly2Tri.TriangulationPoint triPoint2 = triangle.Points[(n + 2) % 3];
-
-                    // Create an polygon edge
-                    SharedPolygonEdge edge = new SharedPolygonEdge();
-                    edge.PolygonA = polygon;
-                    edge.PolygonB = neighborPolygon;
-                    edge.EdgePoint1 = new Poly2Tri.PolygonPoint(triPoint1.X, triPoint1.Y);
-                    edge.EdgePoint2 = new Poly2Tri.PolygonPoint(triPoint2.X, triPoint2.Y);
-                    this.PolygonEdges.Add(edge);
-                }
-
-                // Remove the polygon from the triangle mapping. We are done with it.
-                polygonToTriangle.Remove(polygon);
-            }
-        }
-
     }
 }
 
@@ -400,7 +153,7 @@ namespace Tiled2Unity
 namespace Tiled2Unity
 {
     // Generic collection class that gives us O(1) insertion with distinct values and O(1) IndexOf
-    public class HashIndexOf<T>
+    public class HashIndexOf<T> : IGenericDatabase<T>
     {
         private Dictionary<T, int> dictionary = new Dictionary<T, int>();
 
@@ -430,6 +183,32 @@ namespace Tiled2Unity
         {
             return this.dictionary[value];
         }
+
+        public int AddToDatabase(T value)
+        {
+            return Add(value);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// IGenericDatabase.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+
+namespace Tiled2Unity
+{
+    // This is really just a cheap interface that adds "stuff" to a container, returning an index
+    // You can access the items (that may be unique or there may be repeats) through the List property
+    // (We just want to be able to have unique or repeated collection of items polymorphically)
+    interface IGenericDatabase<T>
+    {
+        List<T> List { get; }
+        int AddToDatabase(T value);
     }
 }
 
@@ -441,6 +220,8 @@ namespace Tiled2Unity
 // using System.Drawing;
 // using System.Linq;
 // using System.Text;
+
+//#define T2U_TRIANGLES
 
 // Given a TmxMap and TmxLayer, crank out a Clipper polytree solution
 namespace Tiled2Unity
@@ -570,14 +351,24 @@ namespace Tiled2Unity
         // Each array of points in a separate convex polygon
         public static IEnumerable<PointF[]> SolutionPolygons_Simple(ClipperLib.PolyTree solution)
         {
-            ConvexPolygonSet convexPolygonSet = new ConvexPolygonSet();
-            convexPolygonSet.MakeConvextSetFromClipperSolution(solution);
-
-            foreach (var polygon in convexPolygonSet.Polygons)
+            // Triangulate the solution polygon
+            Geometry.TriangulateClipperSolution triangulation = new Geometry.TriangulateClipperSolution();
+            List<PointF[]> triangles = triangulation.Triangulate(solution);
+#if T2U_TRIANGLES
+            // Force triangle output
+            foreach (var tri in triangles)
             {
-                var pointfs = polygon.Select(pt => new PointF(pt.Xf, pt.Yf));
-                yield return pointfs.ToArray();
+                yield return tri;
             }
+#else
+            // Group the triangles into convex polygons
+            Geometry.ComposeConvexPolygons composition = new Geometry.ComposeConvexPolygons();
+            List<PointF[]> polygons = composition.Compose(triangles);
+            foreach (var poly in polygons)
+            {
+                yield return poly;
+            }
+#endif
         }
 
     }
@@ -825,6 +616,7 @@ namespace Tiled2Unity
 // using System.IO;
 // using System.Linq;
 // using System.Text;
+// using System.Text.RegularExpressions;
 
 namespace Tiled2Unity
 {
@@ -850,6 +642,8 @@ namespace Tiled2Unity
         // Returns true if the program is to keep going. Will return false if there is an error parsing options or if we were only interested in help/version information
         private bool ParseOptions(string[] args)
         {
+            args = CleanseArgs(args);
+
             bool displayVersion = false;
             bool displayHelp = false;
             bool isAuto = false;
@@ -862,6 +656,7 @@ namespace Tiled2Unity
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
                 { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => isAuto = true },
+                { "w|writeable-vertices", "Exported meshes will have writable vertices. This increases the memory used by meshes significantly. Only use if you will mutate the vertices through scripting.", w => Tiled2Unity.Settings.WriteableVertices = true },
                 { "v|version", "Display version information.", v => displayVersion = true },
                 { "h|help", "Display this help message.", h => displayHelp = true },
             };
@@ -983,6 +778,21 @@ namespace Tiled2Unity
             Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
             Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
+        }
+
+        // Removes unwanted cruft from arguments
+        private static string[] CleanseArgs(string[] args)
+        {
+            List<string> arguments = new List<string>(args);
+
+#if TILED2UNITY_MAC
+            // MacOSX adds "-psn_number_number" (process number) argument. Get rid of it.
+            var regex = new Regex(@"-psn_\d+_\d+");
+            arguments.RemoveAll(s => regex.IsMatch(s));
+#endif
+
+            return arguments.ToArray();
+
         }
 
 
@@ -1150,6 +960,7 @@ namespace Tiled2Unity
         public static float Scale = 1.0f;
         public static bool PreferConvexPolygons = false;
         public static bool DepthBufferEnabled = false;
+        public static bool WriteableVertices = false;
 
         public static readonly float DefaultTexelBias = 8192.0f;
         public static float TexelBias = DefaultTexelBias;
@@ -1698,6 +1509,20 @@ namespace Tiled2Unity
             return new PointF(tx, 1.0f - ty);
         }
 
+        public static float CalculateFaceDepth(float position_y, float mapHeight)
+        {
+            float z = position_y / mapHeight * -1.0f;
+            return (z == -0.0f) ? 0 : z;
+        }
+
+        public static float CalculateLayerDepth(int layerOrder, float tileHeight, float mapHeight)
+        {
+            // Note: I don't think a layer depth of this complexity is helpful and seems to be leading to z-fighting anyhow
+            //float z = layerOrder * tileHeight / mapHeight * -1.0f;
+            float z = layerOrder * -1.0f;
+            return (z == -0.0f) ? 0 : z;
+        }
+
         private string StringToBase64String(string text)
         {
             byte[] bytes = Encoding.ASCII.GetBytes(text);
@@ -1781,6 +1606,19 @@ namespace Tiled2Unity
                                   let tile = this.tmxMap.Tiles[tileId]
                                   select tile.TmxImage;
 
+                // Find the images from the frames as well
+                var frameImages = from layer in this.tmxMap.Layers
+                                  where layer.Visible == true
+                                  from rawTileId in layer.TileIds
+                                  where rawTileId != 0
+                                  let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
+                                  let tile = this.tmxMap.Tiles[tileId]
+                                  from rawFrame in tile.Animation.Frames
+                                  let frameId = TmxMath.GetTileIdWithoutFlags(rawFrame.GlobalTileId)
+                                  let frame = this.tmxMap.Tiles[frameId]
+                                  select frame.TmxImage;
+
+
                 // Tile Objects may have images not yet references by a layer
                 var objectImages = from objectGroup in this.tmxMap.ObjectGroups
                                    where objectGroup.Visible == true
@@ -1794,30 +1632,29 @@ namespace Tiled2Unity
                 // Combine image paths from tile layers and object layers
                 List<TmxImage> images = new List<TmxImage>();
                 images.AddRange(layerImages);
+                images.AddRange(frameImages);
                 images.AddRange(objectImages);
 
                 // Get rid of duplicate images
                 TmxImageComparer imageComparer = new TmxImageComparer();
                 images = images.Distinct(imageComparer).ToList();
 
-                // Do not import files if they are already in the project (in the /Assets/ directory of where we're exporting too)
-                string unityAssetsDir = Path.Combine(exportToUnityProjectPath, "Assets");
-
                 foreach (TmxImage image in images)
                 {
-                    // If the copy from location comes from within the project we want to copy to, then don't do it.
-                    // This allows us to have tileset images that are alreday in use by the Unity project
-                    string saveToAssetsDir = unityAssetsDir.ToLower();
-                    string copyFromDir = image.AbsolutePath.ToLower();
-
-                    if (copyFromDir.StartsWith(saveToAssetsDir))
+                    // The source texture is internal if it has a sibling *.meta file
+                    // We don't want to copy internal textures into Unity because they are already there.
+                    bool isInternal = File.Exists(image.AbsolutePath + ".meta");
+                    if (isInternal)
                     {
+                        // The texture is already in the Unity project so don't import
                         XElement xmlInternalTexture = new XElement("InternalTexture");
 
                         // The path to the texture will be WRT to the Unity project root
-                        string assetPath = image.AbsolutePath.Remove(0, exportToUnityProjectPath.Length);
-                        assetPath = assetPath.TrimStart('\\');
-                        assetPath = assetPath.TrimStart('/');
+                        string assetsFolder = GetUnityAssetsPath(image.AbsolutePath);
+                        string assetPath = image.AbsolutePath.Remove(0, assetsFolder.Length);
+                        assetPath = "Assets" + assetPath;
+                        assetPath = assetPath.Replace("\\", "/");
+
                         Logger.WriteLine("InternalTexture : {0}", assetPath);
 
                         // Path to texture in the asset directory
@@ -1839,10 +1676,11 @@ namespace Tiled2Unity
                     }
                     else
                     {
+                        // The texture needs to be imported into the Unity project (under Tiled2Unity's care)
                         XElement xmlImportTexture = new XElement("ImportTexture");
 
                         // Note that compression is not available in Unity. Go with Base64 string. Blerg.
-                        Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(unityAssetsDir, "Tiled2Unity\\Textures\\"));
+                        Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
 
                         // Is there a color key for transparency?
                         if (!String.IsNullOrEmpty(image.TransparentColor))
@@ -1865,6 +1703,23 @@ namespace Tiled2Unity
             }
 
             return elements;
+        }
+
+        // Assumes the path passed in is within the "Assets" directory of a Unity project
+        private string GetUnityAssetsPath(string path)
+        {
+            string folderPath = Path.GetDirectoryName(path);
+            while (!String.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
+            {
+                string folderName = Path.GetFileName(folderPath);
+                if (String.Compare(folderName, "Assets", true) == 0)
+                {
+                    return folderPath;
+                }
+                folderPath = Path.GetDirectoryName(folderPath);
+            }
+
+            return Path.GetDirectoryName(path);
         }
 
     } // end class
@@ -1927,8 +1782,16 @@ namespace Tiled2Unity
         // Creates the text for a Wavefront OBJ file for the TmxMap
         private StringWriter BuildObjString()
         {
-            HashIndexOf<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
+            IGenericDatabase<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+
+            // Are we allowing vertices to be written too (advanced option)
+            if (Tiled2Unity.Settings.WriteableVertices)
+            {
+                // Replace vertex database with class that ensure each vertex (even ones with similar values) are unique
+                Logger.WriteLine("Using writeable-vertices. This will increase the size of the mesh but will allow you mutate vertices through scripting. This is an advanced feature.");
+                vertexDatabase = new GenericListDatabase<Vertex3>();
+            }
 
             float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
 
@@ -1976,7 +1839,7 @@ namespace Tiled2Unity
                             float depth_z = 0.0f;
                             if (Tiled2Unity.Settings.DepthBufferEnabled)
                             {
-                                depth_z = position.Y / mapLogicalHeight * -1.0f;
+                                depth_z = CalculateFaceDepth(position.Y, mapLogicalHeight);
                             }
 
                             FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
@@ -1988,10 +1851,10 @@ namespace Tiled2Unity
                             var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
 
                             // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                             faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                         }
                     }
@@ -2017,10 +1880,10 @@ namespace Tiled2Unity
                 FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
 
                 // Adds vertices and uvs to the database as we build the face strings
-                string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+                string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                 faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
             }
 
@@ -2122,41 +1985,38 @@ namespace Tiled2Unity
             points[2] = PointF.Add(imageLocation, tileSize);
             points[3] = PointF.Add(imageLocation, new Size(0, tileSize.Height));
 
+            // "Tuck in" the points a tiny bit to help avoid seams
+            // This can be turned off by setting Texel Bias to zero
+            // Note that selecting a texel bias that is too small or a texture that is too big may affect pixel-perfect rendering (pixel snapping in shader will help)
+            if (Tiled2Unity.Settings.TexelBias > 0)
+            {
+                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
+                float bias_w = bias * tileSize.Width;
+                float bias_h = bias * tileSize.Height;
+
+                points[0].X += bias_w;
+                points[0].Y += bias_h;
+
+                points[1].X -= bias_w;
+                points[1].Y += bias_h;
+
+                points[2].X -= bias_w;
+                points[2].Y -= bias_h;
+
+                points[3].X += bias_w;
+                points[3].Y -= bias_h;
+            }
+
             PointF center = new PointF(tileSize.Width * 0.5f, tileSize.Height * 0.5f);
             center.X += imageLocation.X;
             center.Y += imageLocation.Y;
             TmxMath.TransformPoints_DiagFirst(points, center, flipDiagonal, flipHorizontal, flipVertical);
-            //TmxMath.TransformPoints(points, center, flipDiagonal, flipHorizontal, flipVertical);
 
             PointF[] coordinates = new PointF[4];
             coordinates[3] = PointToTextureCoordinate(points[0], imageSize);
             coordinates[2] = PointToTextureCoordinate(points[1], imageSize);
             coordinates[1] = PointToTextureCoordinate(points[2], imageSize);
             coordinates[0] = PointToTextureCoordinate(points[3], imageSize);
-
-            // Apply a small bias to the "inner" edges of the texels
-            // This keeps us from seeing seams
-            //const float bias = 1.0f / 8192.0f;
-            //const float bias = 1.0f / 4096.0f;
-            //const float bias = 1.0f / 2048.0f;
-            if (Tiled2Unity.Settings.TexelBias > 0)
-            {
-                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
-
-                PointF[] multiply = new PointF[4];
-                multiply[0] = new PointF(1, 1);
-                multiply[1] = new PointF(-1, 1);
-                multiply[2] = new PointF(-1, -1);
-                multiply[3] = new PointF(1, -1);
-
-                // This nudge has to be transformed too
-                TmxMath.TransformPoints_DiagFirst(multiply, Point.Empty, flipDiagonal, flipHorizontal, flipVertical);
-
-                coordinates[0] = TmxMath.AddPoints(coordinates[0], TmxMath.ScalePoints(multiply[0], bias));
-                coordinates[1] = TmxMath.AddPoints(coordinates[1], TmxMath.ScalePoints(multiply[1], bias));
-                coordinates[2] = TmxMath.AddPoints(coordinates[2], TmxMath.ScalePoints(multiply[2], bias));
-                coordinates[3] = TmxMath.AddPoints(coordinates[3], TmxMath.ScalePoints(multiply[3], bias));
-            }
 
             return coordinates;
         }
@@ -2266,8 +2126,7 @@ namespace Tiled2Unity
                     {
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileHeight = this.tmxMap.TileHeight;
-
-                        depth_z = layer.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                        depth_z = CalculateLayerDepth(layer.SortingOrder, tileHeight, mapLogicalHeight);
                     }
 
                     XElement layerElement =
@@ -2328,7 +2187,7 @@ namespace Tiled2Unity
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileHeight = this.tmxMap.TileHeight;
 
-                        depth_z = objGroup.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                        depth_z = CalculateLayerDepth(objGroup.SortingOrder, tileHeight, mapLogicalHeight);
                     }
 
                     gameObject.SetAttributeValue("z", depth_z);
@@ -2407,11 +2266,7 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
-                    // TileObjects are off by a half-width in Isometric mode
-                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
-                    {
-                        xmlObject.SetAttributeValue("x", pos.X - this.tmxMap.TileWidth * 0.5f * Tiled2Unity.Settings.Scale);
-                    }
+                    TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
 
                     // Apply z-cooridnate for use with the depth buffer
                     // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
@@ -2421,8 +2276,8 @@ namespace Tiled2Unity
                         float tileLogicalHeight = this.tmxMap.TileHeight;
                         float logicalPos_y = (-pos.Y / Tiled2Unity.Settings.Scale) - tileLogicalHeight;
 
-                        float depth_z = logicalPos_y / mapLogicalHeight * -1.0f;
-                        xmlObject.SetAttributeValue("z", depth_z == -0 ? 0 : depth_z);
+                        float depth_z = CalculateFaceDepth(logicalPos_y, mapLogicalHeight);
+                        xmlObject.SetAttributeValue("z", depth_z);
                     }
 
                     AddTileObjectElements(tmxObject as TmxObjectTile, xmlObject);
@@ -2686,28 +2541,51 @@ namespace Tiled2Unity
 
         private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot)
         {
-            // We combine the properties of the tile that is referenced and add it to our own properties
-            AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
-
             // TileObjects can be scaled (this is separate from vertex scaling)
             SizeF scale = tmxObjectTile.GetTileObjectScale();
+
+            // Flipping is done through negative-scaling on the child object
+            float flip_w = tmxObjectTile.FlippedHorizontal ? -1.0f : 1.0f;
+            float flip_h = tmxObjectTile.FlippedVertical ? -1.0f : 1.0f;
+
+            // Helper values for moving tile about local origin
+            float full_w = tmxObjectTile.Tile.TileSize.Width;
+            float full_h = tmxObjectTile.Tile.TileSize.Height;
+            float half_w = full_w * 0.5f;
+            float half_h = full_h * 0.5f;
+
+            // Scale goes onto root node
             xmlTileObjectRoot.SetAttributeValue("scaleX", scale.Width);
             xmlTileObjectRoot.SetAttributeValue("scaleY", scale.Height);
 
-            // Need another transform to help us with flipping of the tile (and their collisions)
+            // We combine the properties of the tile that is referenced and add it to our own properties
+            AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
+
+            // Add a TileObject component for scripting purposes
+            {
+                XElement xmlTileObjectComponent = new XElement("TileObjectComponent");
+                xmlTileObjectComponent.SetAttributeValue("width", tmxObjectTile.Tile.TileSize.Width * scale.Width * Tiled2Unity.Settings.Scale);
+                xmlTileObjectComponent.SetAttributeValue("height", tmxObjectTile.Tile.TileSize.Height * scale.Height * Tiled2Unity.Settings.Scale);
+                xmlTileObjectRoot.Add(xmlTileObjectComponent);
+            }
+
+            // Child node positions game object to match center of tile so can flip along x and y axes
             XElement xmlTileObject = new XElement("GameObject");
             xmlTileObject.SetAttributeValue("name", "TileObject");
-
-            if (tmxObjectTile.FlippedHorizontal)
+            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
             {
-                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width * Tiled2Unity.Settings.Scale);
-                xmlTileObject.SetAttributeValue("flipX", true);
+                // In isometric mode the local origin of the tile is at the bottom middle
+                xmlTileObject.SetAttributeValue("x", 0);
+                xmlTileObject.SetAttributeValue("y", half_h);
             }
-            if (tmxObjectTile.FlippedVertical)
+            else
             {
-                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Tiled2Unity.Settings.Scale);
-                xmlTileObject.SetAttributeValue("flipY", true);
+                // For non-isometric maps the local origin of the tile is the bottom left
+                xmlTileObject.SetAttributeValue("x", half_w);
+                xmlTileObject.SetAttributeValue("y", half_h);
             }
+            xmlTileObject.SetAttributeValue("scaleX", flip_w);
+            xmlTileObject.SetAttributeValue("scaleY", flip_h);
 
             // Add any colliders that might be on the tile
             // Note: Colliders on a tile object are always treated as if they are in Orthogonal space
@@ -2740,7 +2618,7 @@ namespace Tiled2Unity
                     {
                         // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
                         objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Tiled2Unity.Settings.Scale);
-                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale);
+                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Tile.TileSize.Height - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale);
 
                         xmlTileObject.Add(objElement);
                     }
@@ -2748,7 +2626,8 @@ namespace Tiled2Unity
             }
             this.tmxMap.Orientation = restoreOrientation;
 
-            // Add a child for each mesh (with animation if needed)
+            // Add a child for each mesh
+            // (The child node is needed due to animation)
             foreach (var mesh in tmxObjectTile.Tile.Meshes)
             {
                 XElement xmlMeshObject = new XElement("GameObject");
@@ -2759,9 +2638,10 @@ namespace Tiled2Unity
                 xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
                 xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
 
-                // This object, that actually displays the tile, has to be bumped up to account for the bottom-left corner problem with Tile Objects in Tiled
-                xmlMeshObject.SetAttributeValue("x", 0);
-                xmlMeshObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Tiled2Unity.Settings.Scale);
+                // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
+                // Put another way: This translation moves away from center to local origin
+                xmlMeshObject.SetAttributeValue("x", -half_w);
+                xmlMeshObject.SetAttributeValue("y", half_h);
 
                 if (mesh.FullAnimationDurationMs > 0)
                 {
@@ -2782,6 +2662,503 @@ namespace Tiled2Unity
 
     } // end class
 } // end namespace
+
+// ----------------------------------------------------------------------
+// ComposeConvexPolygons.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+
+namespace Tiled2Unity.Geometry
+{
+    // Input is a collection of triangles and output is a collection of convex polygons
+    // We remove shared edges along triangles were we can using the Hertel-Mehlhorn Algorithm
+    public class ComposeConvexPolygons
+    {
+        public PolygonEdgeGroup PolygonEdgeGroup { get; private set; }
+        public List<PointF[]> ConvexPolygons { get; private set; }
+
+        public ComposeConvexPolygons()
+        {
+            this.PolygonEdgeGroup = new PolygonEdgeGroup();
+        }
+
+        public List<PointF[]> Compose(List<PointF[]> triangles)
+        {
+            this.PolygonEdgeGroup.Initialize(triangles);
+            CombinePolygons();
+            return this.ConvexPolygons;
+        }
+
+        private void CombinePolygons()
+        {
+            // Before we start merging polygons keep a list of all the ones we have
+            List<CompositionPolygon> convexPolygons = new List<CompositionPolygon>();
+            foreach (var edge in this.PolygonEdgeGroup.PolygonEdges)
+            {
+                if (edge.MajorPartner != null)
+                {
+                    convexPolygons.Add(edge.MajorPartner);
+                }
+
+                if (edge.MinorPartner != null)
+                {
+                    convexPolygons.Add(edge.MinorPartner);
+                }
+            }
+            convexPolygons = convexPolygons.Distinct().ToList();
+
+            // Remove edges that don't have both partners since we can't possibly merge on them
+            this.PolygonEdgeGroup.PolygonEdges.RemoveAll(e => e.MinorPartner == null || e.MajorPartner == null);
+
+            // Now try to remove edges by merging the polygons on both sides
+            // We try to remove the longest edges first as, in general, it gives us solutions that avoid long splinters
+            var edgesByLength = this.PolygonEdgeGroup.PolygonEdges.OrderByDescending(edge => edge.Length2);
+
+            foreach (var edge in edgesByLength)
+            {
+                if (edge.CanMergePolygons())
+                {
+                    // Remove the minor polygon from our list of convex polygons and merge
+                    convexPolygons.Remove(edge.MinorPartner);
+
+                    edge.MergePolygons();
+                }
+            }
+
+            this.ConvexPolygons = convexPolygons.Select(cp => cp.Points.ToArray()).ToList();
+        }
+
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// CompositionPolygon.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+
+namespace Tiled2Unity.Geometry
+{
+    // For compositional considerations, a Polygon is a group of points and edges
+    // This allows us to merge polygons along edges
+    public class CompositionPolygon
+    {
+        public List<PointF> Points { get; private set; }
+        public List<PolygonEdge> Edges { get; private set; }
+
+        // A polygon starts off as a triangle with one edge
+        // Other points and edges are added to the polygon during merge
+        public CompositionPolygon(IEnumerable<PointF> points)
+        {
+            this.Points = new List<PointF>();
+            this.Edges = new List<PolygonEdge>();
+
+            this.Points.AddRange(points);
+        }
+
+        public void AddEdge(PolygonEdge edge)
+        {
+            this.Edges.Add(edge);
+        }
+
+        public int NextIndex(int index)
+        {
+            Debug.Assert(index >= 0);
+
+            return (index + 1) % this.Points.Count;
+        }
+
+        public int PrevIndex(int index)
+        {
+            Debug.Assert(index >= 0);
+
+            if (index == 0)
+            {
+                return this.Points.Count - 1;
+            }
+
+            return (index - 1) % this.Points.Count;
+        }
+
+        public PointF NextPoint(int index)
+        {
+            index = NextIndex(index);
+            return this.Points[index];
+        }
+
+        public PointF PrevPoint(int index)
+        {
+            index = PrevIndex(index);
+            return this.Points[index];
+        }
+
+        public void AbsorbPolygon(int q, CompositionPolygon minor, int pMinor)
+        {
+            // Insert Minor points Minor[P+1] ... Minor[Q-1] into Major, inserted at Major[Q]
+            // Same as inserting numPoints-2 starting at index qMinor+1
+            int numMinorPoints = minor.Points.Count - 2;
+
+            List<PointF> pointsToInsert = new List<PointF>();
+            for (int i = 0; i < numMinorPoints; ++i)
+            {
+                int qInsert = (pMinor + 1 + i) % minor.Points.Count;
+                pointsToInsert.Add(minor.Points[qInsert]);
+            }
+
+            this.Points.InsertRange(q, pointsToInsert);
+        }
+
+        public void ReplaceEdgesWithPolygon(CompositionPolygon replacement, PolygonEdge ignoreEdge)
+        {
+            // This polygon is going away as it was merged with another
+            // All edges this polygon referenced will need to reference the replacement instead
+            foreach (var edge in this.Edges)
+            {
+                if (edge == ignoreEdge)
+                    continue;
+
+                Debug.Assert(!(edge.MajorPartner == this && edge.MinorPartner == this));
+
+                if (edge.MajorPartner == this)
+                {
+                    edge.ReplaceMajor(replacement);
+                }
+                else if (edge.MinorPartner == this)
+                {
+                    edge.ReplaceMinor(replacement);
+                }
+            }
+        }
+
+        public void UpdateEdgeIndices(PolygonEdge ignoreEdge)
+        {
+            // All of our edges need to update their indices to us
+            foreach (var edge in this.Edges)
+            {
+                if (edge == ignoreEdge)
+                    continue;
+
+                edge.UpdateIndices(this);
+            }
+        }
+
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// Math.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+
+namespace Tiled2Unity.Geometry
+{
+    class Math
+    {
+        // Points are ordered CCW with B as the junction
+        public static float Cross(PointF A, PointF B, PointF C)
+        {
+            PointF lhs = new PointF(B.X - A.X, B.Y - A.Y);
+            PointF rhs = new PointF(C.X - B.X, C.Y - B.Y);
+            return (lhs.X * rhs.Y) - (lhs.Y * rhs.X);
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// PolygonEdge.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+
+
+namespace Tiled2Unity.Geometry
+{
+    // A polygon edge that may be shared with another polygon
+    public class PolygonEdge
+    {
+        public bool HasBeenMerged { get; private set; }
+
+        public PointF P { get; private set; }
+        public PointF Q { get; private set; }
+        public float Length2 { get; private set; }
+
+        // Our Major partner (the edge PQ will be counter-clockwise on this polygon)
+        // When we merge polygons it is always the Major partner that absorbs
+        public CompositionPolygon MajorPartner { get; private set; }
+        public int MajorPartner_pIndex { get; private set; }
+        public int MajorPartner_qIndex { get; private set; }
+
+        // Our Minor partner (the edge PQ will clockwise on this polygon)
+        public CompositionPolygon MinorPartner { get; private set; }
+        public int MinorPartner_pIndex { get; private set; }
+        public int MinorPartner_qIndex { get; private set; }
+
+        public PolygonEdge(CompositionPolygon compPolygon, int p)
+        {
+            Debug.Assert(compPolygon.Points.Count >= 3);
+
+            this.HasBeenMerged = false;
+
+            // P and Q make up our edge
+            int q = (p + 1) % compPolygon.Points.Count;
+            this.P = compPolygon.Points[p];
+            this.Q = compPolygon.Points[q];
+
+            // Create a compositional polygon with our edge
+            this.MajorPartner = compPolygon;
+            this.MajorPartner_pIndex = p;
+            this.MajorPartner_qIndex = q;
+
+            // Calculate the squared length
+            float x = (this.P.X - this.Q.X);
+            float y = (this.P.Y - this.Q.Y);
+            this.Length2 = (x * x) + (y * y);
+        }
+
+        public void AssignMinorPartner(CompositionPolygon polygon)
+        {
+            Debug.Assert(this.MinorPartner == null);
+            Debug.Assert(this.MajorPartner != null);
+
+            ReplaceMinor(polygon);
+        }
+
+        public void ReplaceMajor(CompositionPolygon polygon)
+        {
+            this.MajorPartner = polygon;
+            this.MajorPartner_pIndex = this.MajorPartner.Points.IndexOf(this.P);
+            this.MajorPartner_qIndex = this.MajorPartner.Points.IndexOf(this.Q);
+        }
+
+        public void ReplaceMinor(CompositionPolygon polygon)
+        {
+            this.MinorPartner = polygon;
+            this.MinorPartner_pIndex = this.MinorPartner.Points.IndexOf(this.P);
+            this.MinorPartner_qIndex = this.MinorPartner.Points.IndexOf(this.Q);
+        }
+
+        public bool CanMergePolygons()
+        {
+            // The two polygon partners can be merged if the two vectors on each point where they would merge don't create a concave polygon
+            // Concave testing is done through a cross product and assumes CCW winding of the polyon points
+
+            // Can merge point P of the Major/CCW partner?
+            {
+                // A = CWW[P - 1]
+                // B = CWW[P]
+                // C = CW[P + 1]
+                PointF A = this.MajorPartner.PrevPoint(this.MajorPartner_pIndex);
+                PointF B = this.MajorPartner.Points[this.MajorPartner_pIndex];
+                PointF C = this.MinorPartner.NextPoint(this.MinorPartner_pIndex);
+                float cross = Geometry.Math.Cross(A, B, C);
+                if (cross  > 0)
+                    return false;
+            }
+
+            // Can merge point Q of Major/CCW partner?
+            {
+                // A = CWW[Q + 1]
+                // B = CWW[Q]
+                // C = CW[Q-1]
+                PointF A = this.MajorPartner.NextPoint(this.MajorPartner_qIndex);
+                PointF B = this.MajorPartner.Points[this.MajorPartner_qIndex];
+                PointF C = this.MinorPartner.PrevPoint(this.MinorPartner_qIndex);
+                float cross = Geometry.Math.Cross(A, B, C);
+                if (cross < 0)
+                    return false;
+            }
+
+            return true;
+        }
+
+        public void MergePolygons()
+        {
+            Debug.Assert(this.HasBeenMerged == false);
+
+            // The major polygon will absorb the minor
+            this.MajorPartner.AbsorbPolygon(this.MajorPartner_qIndex, this.MinorPartner, this.MinorPartner_pIndex);
+
+            // All edges that referened the minor will need to reference the major
+            this.MinorPartner.ReplaceEdgesWithPolygon(this.MajorPartner, this);
+
+            // All edges that reference the major will need their P/Q indices updated
+            this.MajorPartner.UpdateEdgeIndices(this);
+
+            // This edge has now been processed and we shouldn't merge on it again
+            this.HasBeenMerged = true;
+        }
+
+        public void UpdateIndices(CompositionPolygon polygon)
+        {
+            if (polygon == this.MajorPartner)
+            {
+                this.MajorPartner_pIndex = polygon.Points.IndexOf(this.P);
+                this.MajorPartner_qIndex = polygon.Points.IndexOf(this.Q);
+            }
+            else if (polygon == MinorPartner)
+            {
+                this.MinorPartner_pIndex = polygon.Points.IndexOf(this.P);
+                this.MinorPartner_qIndex = polygon.Points.IndexOf(this.Q);
+            }
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// PolygonEdgeGroup.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+
+namespace Tiled2Unity.Geometry
+{
+    // Keeps a collection of polygon edges that are shared bewteen two polygons
+    // Assumes that all polygons have CCW winding to them
+    public class PolygonEdgeGroup
+    {
+        public List<PolygonEdge> PolygonEdges { get; set; }
+
+
+        public void Initialize(List<PointF[]> polygons)
+        {
+            this.PolygonEdges = new List<PolygonEdge>();
+
+            foreach (var polygon in polygons)
+            {
+                // Our polygon will be added to each edge
+                CompositionPolygon compPolygon = new CompositionPolygon(polygon);
+
+                // Process all edges of the polygon
+                for (int p = polygon.Length - 1, q = 0; q < polygon.Length; p = q++)
+                {
+                    PointF P = polygon[p];
+                    PointF Q = polygon[q];
+
+                    // The clockwise edge may already exist if it was added by an earlier polygon as the counter-clockwise edge
+                    // If so, add this polygon as the CW partner of that edge
+                    PolygonEdge edge = this.PolygonEdges.FirstOrDefault(e => e.P == Q && e.Q == P);
+                    if (edge != null)
+                    {
+                        // Add ourselves as the Minor/CW partner
+                        edge.AssignMinorPartner(compPolygon);
+                        compPolygon.AddEdge(edge);
+                    }
+                    else
+                    {
+                        // If this edge is new to the collection then add it with this polygon being the CCW partner
+                        PolygonEdge newEdge = new PolygonEdge(compPolygon, p);
+                        compPolygon.AddEdge(newEdge);
+                        this.PolygonEdges.Add(newEdge);
+                    }
+                }
+            }
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TriangulateClipperSolution.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+
+
+namespace Tiled2Unity.Geometry
+{
+    // Input is a ClipperLib solution and output is a collection of triangles
+    public class TriangulateClipperSolution
+    {
+        public List<PointF[]> Triangulate(ClipperLib.PolyTree solution)
+        {
+            List<PointF[]> triangles = new List<PointF[]>();
+
+            var tess = new LibTessDotNet.Tess();
+            tess.NoEmptyPolygons = true;
+
+            // Transformation function from ClipperLip Point to LibTess contour vertex
+            Func<ClipperLib.IntPoint, LibTessDotNet.ContourVertex> xfToContourVertex = (p) => new LibTessDotNet.ContourVertex() { Position = new LibTessDotNet.Vec3 { X = p.X, Y = p.Y, Z = 0 } };
+
+            // Add a contour for each part of the solution tree
+            ClipperLib.PolyNode node = solution.GetFirst();
+            while (node != null)
+            {
+                // Only interested in closed paths
+                if (!node.IsOpen)
+                {
+                    // Add a new countor. Holes are automatically generated.
+                    var vertices = node.Contour.Select(xfToContourVertex).ToArray();
+                    tess.AddContour(vertices);
+                }
+                node = node.GetNext();
+            }
+
+            // Do the tessellation
+            tess.Tessellate(LibTessDotNet.WindingRule.EvenOdd, LibTessDotNet.ElementType.Polygons, 3);
+
+            // Extract the triangles
+            int numTriangles = tess.ElementCount;
+            for (int i = 0; i < numTriangles; i++)
+            {
+                var v0 = tess.Vertices[tess.Elements[i * 3 + 0]].Position;
+                var v1 = tess.Vertices[tess.Elements[i * 3 + 1]].Position;
+                var v2 = tess.Vertices[tess.Elements[i * 3 + 2]].Position;
+
+                List<PointF> triangle = new List<PointF>()
+                {
+                    new PointF(v0.X, v0.Y),
+                    new PointF(v1.X, v1.Y),
+                    new PointF(v2.X, v2.Y),
+                };
+
+                // Assre each triangle needs to be CCW
+                float cross = Geometry.Math.Cross(triangle[0], triangle[1], triangle[2]);
+                if (cross > 0)
+                {
+                    triangle.Reverse();
+                }
+
+                triangles.Add(triangle.ToArray());
+            }
+
+            return triangles;
+        }
+
+    }
+}
 
 // ----------------------------------------------------------------------
 // MultiValueDictionary.cs
@@ -2923,18 +3300,16 @@ namespace SD.Tools.Algorithmia.GeneralDataStructures
 // ----------------------------------------------------------------------
 // clipper.cs
 
-// NOTE: This was put into Tiled2Unity namesapce for two reasons
-//  a) So we could have our own version with use_lines enabled
-//  b) Because the Mac version also uses ClipperLib and we were getting name collisions
-
+// NOTE: Clipper library was put into Tiled2Unity namespace to avoid name collision with Mac drawing libraries (which also used Clipper)
+// NOTE: Version 6.4.0 of Clipper is a beta release but fixes bugs with open path clipping
 
 /*******************************************************************************
 *                                                                              *
 * Author    :  Angus Johnson                                                   *
-* Version   :  6.2.1                                                           *
-* Date      :  31 October 2014                                                 *
+* Version   :  6.4.0                                                           *
+* Date      :  2 July 2015                                                     *
 * Website   :  http://www.angusj.com                                           *
-* Copyright :  Angus Johnson 2010-2014                                         *
+* Copyright :  Angus Johnson 2010-2015                                         *
 *                                                                              *
 * License:                                                                     *
 * Use, modification & distribution is subject to Boost Software License Ver 1. *
@@ -2978,9 +3353,6 @@ namespace SD.Tools.Algorithmia.GeneralDataStructures
 //use_lines: Enables open path clipping. Adds a very minor cost to performance.
 // #define use_lines // Commented out and put up top of file
 
-//use_deprecated: Enables temporary support for the obsolete functions
-//#define use_deprecated
-
 
 // using System;
 // using System.Collections.Generic;
@@ -2994,301 +3366,299 @@ namespace Tiled2Unity.ClipperLib
 #if use_int32
   using cInt = Int32;
 #else
-    using cInt = Int64;
+  using cInt = Int64;
 #endif
 
-    using Path = List<IntPoint>;
-    using Paths = List<List<IntPoint>>;
+  using Path = List<IntPoint>;
+  using Paths = List<List<IntPoint>>;
 
-    public struct DoublePoint
+  public struct DoublePoint
+  {
+    public double X;
+    public double Y;
+
+    public DoublePoint(double x = 0, double y = 0)
     {
-        public double X;
-        public double Y;
-
-        public DoublePoint(double x = 0, double y = 0)
-        {
-            this.X = x; this.Y = y;
-        }
-        public DoublePoint(DoublePoint dp)
-        {
-            this.X = dp.X; this.Y = dp.Y;
-        }
-        public DoublePoint(IntPoint ip)
-        {
-            this.X = ip.X; this.Y = ip.Y;
-        }
-    };
-
-
-    //------------------------------------------------------------------------------
-    // PolyTree & PolyNode classes
-    //------------------------------------------------------------------------------
-
-    public class PolyTree : PolyNode
-    {
-        internal List<PolyNode> m_AllPolys = new List<PolyNode>();
-
-        ~PolyTree()
-        {
-            Clear();
-        }
-
-        public void Clear()
-        {
-            for (int i = 0; i < m_AllPolys.Count; i++)
-                m_AllPolys[i] = null;
-            m_AllPolys.Clear();
-            m_Childs.Clear();
-        }
-
-        public PolyNode GetFirst()
-        {
-            if (m_Childs.Count > 0)
-                return m_Childs[0];
-            else
-                return null;
-        }
-
-        public int Total
-        {
-            get
-            {
-                int result = m_AllPolys.Count;
-                //with negative offsets, ignore the hidden outer polygon ...
-                if (result > 0 && m_Childs[0] != m_AllPolys[0]) result--;
-                return result;
-            }
-        }
-
+      this.X = x; this.Y = y;
     }
-
-    public class PolyNode
+    public DoublePoint(DoublePoint dp)
     {
-        internal PolyNode m_Parent;
-        internal Path m_polygon = new Path();
-        internal int m_Index;
-        internal JoinType m_jointype;
-        internal EndType m_endtype;
-        internal List<PolyNode> m_Childs = new List<PolyNode>();
+      this.X = dp.X; this.Y = dp.Y;
+    }
+    public DoublePoint(IntPoint ip)
+    {
+      this.X = ip.X; this.Y = ip.Y;
+    }
+  };
 
-        private bool IsHoleNode()
-        {
-            bool result = true;
-            PolyNode node = m_Parent;
-            while (node != null)
-            {
-                result = !result;
-                node = node.m_Parent;
-            }
+
+  //------------------------------------------------------------------------------
+  // PolyTree & PolyNode classes
+  //------------------------------------------------------------------------------
+
+  public class PolyTree : PolyNode
+  {
+      internal List<PolyNode> m_AllPolys = new List<PolyNode>();
+
+      //The GC probably handles this cleanup more efficiently ...
+      //~PolyTree(){Clear();}
+        
+      public void Clear() 
+      {
+          for (int i = 0; i < m_AllPolys.Count; i++)
+              m_AllPolys[i] = null;
+          m_AllPolys.Clear(); 
+          m_Childs.Clear(); 
+      }
+        
+      public PolyNode GetFirst()
+      {
+          if (m_Childs.Count > 0)
+              return m_Childs[0];
+          else
+              return null;
+      }
+
+      public int Total
+      {
+          get 
+          { 
+            int result = m_AllPolys.Count;
+            //with negative offsets, ignore the hidden outer polygon ...
+            if (result > 0 && m_Childs[0] != m_AllPolys[0]) result--;
             return result;
-        }
+          }
+      }
 
-        public int ChildCount
-        {
-            get { return m_Childs.Count; }
-        }
+  }
+        
+  public class PolyNode 
+  {
+      internal PolyNode m_Parent;
+      internal Path m_polygon = new Path();
+      internal int m_Index;
+      internal JoinType m_jointype;
+      internal EndType m_endtype;
+      internal List<PolyNode> m_Childs = new List<PolyNode>();
 
-        public Path Contour
-        {
-            get { return m_polygon; }
-        }
+      private bool IsHoleNode()
+      {
+          bool result = true;
+          PolyNode node = m_Parent;
+          while (node != null)
+          {
+              result = !result;
+              node = node.m_Parent;
+          }
+          return result;
+      }
 
-        internal void AddChild(PolyNode Child)
-        {
-            int cnt = m_Childs.Count;
-            m_Childs.Add(Child);
-            Child.m_Parent = this;
-            Child.m_Index = cnt;
-        }
+      public int ChildCount
+      {
+          get { return m_Childs.Count; }
+      }
 
-        public PolyNode GetNext()
-        {
-            if (m_Childs.Count > 0)
-                return m_Childs[0];
-            else
-                return GetNextSiblingUp();
-        }
+      public Path Contour
+      {
+          get { return m_polygon; }
+      }
 
-        internal PolyNode GetNextSiblingUp()
-        {
-            if (m_Parent == null)
-                return null;
-            else if (m_Index == m_Parent.m_Childs.Count - 1)
-                return m_Parent.GetNextSiblingUp();
-            else
-                return m_Parent.m_Childs[m_Index + 1];
-        }
+      internal void AddChild(PolyNode Child)
+      {
+          int cnt = m_Childs.Count;
+          m_Childs.Add(Child);
+          Child.m_Parent = this;
+          Child.m_Index = cnt;
+      }
 
-        public List<PolyNode> Childs
-        {
-            get { return m_Childs; }
-        }
+      public PolyNode GetNext()
+      {
+          if (m_Childs.Count > 0) 
+              return m_Childs[0]; 
+          else
+              return GetNextSiblingUp();        
+      }
+  
+      internal PolyNode GetNextSiblingUp()
+      {
+          if (m_Parent == null)
+              return null;
+          else if (m_Index == m_Parent.m_Childs.Count - 1)
+              return m_Parent.GetNextSiblingUp();
+          else
+              return m_Parent.m_Childs[m_Index + 1];
+      }
 
-        public PolyNode Parent
-        {
-            get { return m_Parent; }
-        }
+      public List<PolyNode> Childs
+      {
+          get { return m_Childs; }
+      }
 
-        public bool IsHole
-        {
-            get { return IsHoleNode(); }
-        }
+      public PolyNode Parent
+      {
+          get { return m_Parent; }
+      }
 
-        public bool IsOpen { get; set; }
+      public bool IsHole
+      {
+          get { return IsHoleNode(); }
+      }
+
+      public bool IsOpen { get; set; }
+  }
+
+
+  //------------------------------------------------------------------------------
+  // Int128 struct (enables safe math on signed 64bit integers)
+  // eg Int128 val1((Int64)9223372036854775807); //ie 2^63 -1
+  //    Int128 val2((Int64)9223372036854775807);
+  //    Int128 val3 = val1 * val2;
+  //    val3.ToString => "85070591730234615847396907784232501249" (8.5e+37)
+  //------------------------------------------------------------------------------
+
+  internal struct Int128
+  {
+    private Int64 hi;
+    private UInt64 lo;
+
+    public Int128(Int64 _lo)
+    {
+      lo = (UInt64)_lo;
+      if (_lo < 0) hi = -1;
+      else hi = 0;
     }
 
-
-    //------------------------------------------------------------------------------
-    // Int128 struct (enables safe math on signed 64bit integers)
-    // eg Int128 val1((Int64)9223372036854775807); //ie 2^63 -1
-    //    Int128 val2((Int64)9223372036854775807);
-    //    Int128 val3 = val1 * val2;
-    //    val3.ToString => "85070591730234615847396907784232501249" (8.5e+37)
-    //------------------------------------------------------------------------------
-
-    internal struct Int128
+    public Int128(Int64 _hi, UInt64 _lo)
     {
-        private Int64 hi;
-        private UInt64 lo;
+      lo = _lo;
+      hi = _hi;
+    }
 
-        public Int128(Int64 _lo)
-        {
-            lo = (UInt64)_lo;
-            if (_lo < 0) hi = -1;
-            else hi = 0;
-        }
-
-        public Int128(Int64 _hi, UInt64 _lo)
-        {
-            lo = _lo;
-            hi = _hi;
-        }
-
-        public Int128(Int128 val)
-        {
-            hi = val.hi;
-            lo = val.lo;
-        }
-
-        public bool IsNegative()
-        {
-            return hi < 0;
-        }
-
-        public static bool operator ==(Int128 val1, Int128 val2)
-        {
-            if ((object)val1 == (object)val2) return true;
-            else if ((object)val1 == null || (object)val2 == null) return false;
-            return (val1.hi == val2.hi && val1.lo == val2.lo);
-        }
-
-        public static bool operator !=(Int128 val1, Int128 val2)
-        {
-            return !(val1 == val2);
-        }
-
-        public override bool Equals(System.Object obj)
-        {
-            if (obj == null || !(obj is Int128))
-                return false;
-            Int128 i128 = (Int128)obj;
-            return (i128.hi == hi && i128.lo == lo);
-        }
-
-        public override int GetHashCode()
-        {
-            return hi.GetHashCode() ^ lo.GetHashCode();
-        }
-
-        public static bool operator >(Int128 val1, Int128 val2)
-        {
-            if (val1.hi != val2.hi)
-                return val1.hi > val2.hi;
-            else
-                return val1.lo > val2.lo;
-        }
-
-        public static bool operator <(Int128 val1, Int128 val2)
-        {
-            if (val1.hi != val2.hi)
-                return val1.hi < val2.hi;
-            else
-                return val1.lo < val2.lo;
-        }
-
-        public static Int128 operator +(Int128 lhs, Int128 rhs)
-        {
-            lhs.hi += rhs.hi;
-            lhs.lo += rhs.lo;
-            if (lhs.lo < rhs.lo) lhs.hi++;
-            return lhs;
-        }
-
-        public static Int128 operator -(Int128 lhs, Int128 rhs)
-        {
-            return lhs + -rhs;
-        }
-
-        public static Int128 operator -(Int128 val)
-        {
-            if (val.lo == 0)
-                return new Int128(-val.hi, 0);
-            else
-                return new Int128(~val.hi, ~val.lo + 1);
-        }
-
-        public static explicit operator double(Int128 val)
-        {
-            const double shift64 = 18446744073709551616.0; //2^64
-            if (val.hi < 0)
-            {
-                if (val.lo == 0)
-                    return (double)val.hi * shift64;
-                else
-                    return -(double)(~val.lo + ~val.hi * shift64);
-            }
-            else
-                return (double)(val.lo + val.hi * shift64);
-        }
-
-        //nb: Constructing two new Int128 objects every time we want to multiply longs  
-        //is slow. So, although calling the Int128Mul method doesn't look as clean, the 
-        //code runs significantly faster than if we'd used the * operator.
-
-        public static Int128 Int128Mul(Int64 lhs, Int64 rhs)
-        {
-            bool negate = (lhs < 0) != (rhs < 0);
-            if (lhs < 0) lhs = -lhs;
-            if (rhs < 0) rhs = -rhs;
-            UInt64 int1Hi = (UInt64)lhs >> 32;
-            UInt64 int1Lo = (UInt64)lhs & 0xFFFFFFFF;
-            UInt64 int2Hi = (UInt64)rhs >> 32;
-            UInt64 int2Lo = (UInt64)rhs & 0xFFFFFFFF;
-
-            //nb: see comments in clipper.pas
-            UInt64 a = int1Hi * int2Hi;
-            UInt64 b = int1Lo * int2Lo;
-            UInt64 c = int1Hi * int2Lo + int1Lo * int2Hi;
-
-            UInt64 lo;
-            Int64 hi;
-            hi = (Int64)(a + (c >> 32));
-
-            unchecked { lo = (c << 32) + b; }
-            if (lo < b) hi++;
-            Int128 result = new Int128(hi, lo);
-            return negate ? -result : result;
-        }
-
-    };
-
-    //------------------------------------------------------------------------------
-    //------------------------------------------------------------------------------
-
-    public struct IntPoint
+    public Int128(Int128 val)
     {
-        public cInt X;
-        public cInt Y;
+      hi = val.hi;
+      lo = val.lo;
+    }
+
+    public bool IsNegative()
+    {
+      return hi < 0;
+    }
+
+    public static bool operator ==(Int128 val1, Int128 val2)
+    {
+      if ((object)val1 == (object)val2) return true;
+      else if ((object)val1 == null || (object)val2 == null) return false;
+      return (val1.hi == val2.hi && val1.lo == val2.lo);
+    }
+
+    public static bool operator !=(Int128 val1, Int128 val2)
+    {
+      return !(val1 == val2);
+    }
+
+    public override bool Equals(System.Object obj)
+    {
+      if (obj == null || !(obj is Int128))
+        return false;
+      Int128 i128 = (Int128)obj;
+      return (i128.hi == hi && i128.lo == lo);
+    }
+
+    public override int GetHashCode()
+    {
+      return hi.GetHashCode() ^ lo.GetHashCode();
+    }
+
+    public static bool operator >(Int128 val1, Int128 val2)
+    {
+      if (val1.hi != val2.hi)
+        return val1.hi > val2.hi;
+      else
+        return val1.lo > val2.lo;
+    }
+
+    public static bool operator <(Int128 val1, Int128 val2)
+    {
+      if (val1.hi != val2.hi)
+        return val1.hi < val2.hi;
+      else
+        return val1.lo < val2.lo;
+    }
+
+    public static Int128 operator +(Int128 lhs, Int128 rhs)
+    {
+      lhs.hi += rhs.hi;
+      lhs.lo += rhs.lo;
+      if (lhs.lo < rhs.lo) lhs.hi++;
+      return lhs;
+    }
+
+    public static Int128 operator -(Int128 lhs, Int128 rhs)
+    {
+      return lhs + -rhs;
+    }
+
+    public static Int128 operator -(Int128 val)
+    {
+      if (val.lo == 0)
+        return new Int128(-val.hi, 0);
+      else
+        return new Int128(~val.hi, ~val.lo + 1);
+    }
+
+    public static explicit operator double(Int128 val)
+    {
+      const double shift64 = 18446744073709551616.0; //2^64
+      if (val.hi < 0)
+      {
+        if (val.lo == 0)
+          return (double)val.hi * shift64;
+        else
+          return -(double)(~val.lo + ~val.hi * shift64);
+      }
+      else
+        return (double)(val.lo + val.hi * shift64);
+    }
+    
+    //nb: Constructing two new Int128 objects every time we want to multiply longs  
+    //is slow. So, although calling the Int128Mul method doesn't look as clean, the 
+    //code runs significantly faster than if we'd used the * operator.
+
+    public static Int128 Int128Mul(Int64 lhs, Int64 rhs)
+    {
+      bool negate = (lhs < 0) != (rhs < 0);
+      if (lhs < 0) lhs = -lhs;
+      if (rhs < 0) rhs = -rhs;
+      UInt64 int1Hi = (UInt64)lhs >> 32;
+      UInt64 int1Lo = (UInt64)lhs & 0xFFFFFFFF;
+      UInt64 int2Hi = (UInt64)rhs >> 32;
+      UInt64 int2Lo = (UInt64)rhs & 0xFFFFFFFF;
+
+      //nb: see comments in clipper.pas
+      UInt64 a = int1Hi * int2Hi;
+      UInt64 b = int1Lo * int2Lo;
+      UInt64 c = int1Hi * int2Lo + int1Lo * int2Hi;
+
+      UInt64 lo;
+      Int64 hi;
+      hi = (Int64)(a + (c >> 32));
+
+      unchecked { lo = (c << 32) + b; }
+      if (lo < b) hi++;
+      Int128 result = new Int128(hi, lo);
+      return negate ? -result : result;
+    }
+
+  };
+
+  //------------------------------------------------------------------------------
+  //------------------------------------------------------------------------------
+
+  public struct IntPoint
+  {
+    public cInt X;
+    public cInt Y;
 #if use_xyz
     public cInt Z;
     
@@ -3312,1097 +3682,1233 @@ namespace Tiled2Unity.ClipperLib
       this.X = pt.X; this.Y = pt.Y; this.Z = pt.Z;
     }
 #else
-        public IntPoint(cInt X, cInt Y)
-        {
-            this.X = X; this.Y = Y;
-        }
-        public IntPoint(double x, double y)
-        {
-            this.X = (cInt)x; this.Y = (cInt)y;
-        }
+    public IntPoint(cInt X, cInt Y)
+    {
+        this.X = X; this.Y = Y;
+    }
+    public IntPoint(double x, double y)
+    {
+      this.X = (cInt)x; this.Y = (cInt)y;
+    }
 
-        public IntPoint(IntPoint pt)
-        {
-            this.X = pt.X; this.Y = pt.Y;
-        }
+    public IntPoint(IntPoint pt)
+    {
+        this.X = pt.X; this.Y = pt.Y;
+    }
 #endif
 
-        public static bool operator ==(IntPoint a, IntPoint b)
-        {
-            return a.X == b.X && a.Y == b.Y;
-        }
-
-        public static bool operator !=(IntPoint a, IntPoint b)
-        {
-            return a.X != b.X || a.Y != b.Y;
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (obj == null) return false;
-            if (obj is IntPoint)
-            {
-                IntPoint a = (IntPoint)obj;
-                return (X == a.X) && (Y == a.Y);
-            }
-            else return false;
-        }
-
-        public override int GetHashCode()
-        {
-            //simply prevents a compiler warning
-            return base.GetHashCode();
-        }
-
-    }// end struct IntPoint
-
-    public struct IntRect
+    public static bool operator ==(IntPoint a, IntPoint b)
     {
-        public cInt left;
-        public cInt top;
-        public cInt right;
-        public cInt bottom;
-
-        public IntRect(cInt l, cInt t, cInt r, cInt b)
-        {
-            this.left = l; this.top = t;
-            this.right = r; this.bottom = b;
-        }
-        public IntRect(IntRect ir)
-        {
-            this.left = ir.left; this.top = ir.top;
-            this.right = ir.right; this.bottom = ir.bottom;
-        }
+      return a.X == b.X && a.Y == b.Y;
     }
 
-    public enum ClipType { ctIntersection, ctUnion, ctDifference, ctXor };
-    public enum PolyType { ptSubject, ptClip };
-
-    //By far the most widely used winding rules for polygon filling are
-    //EvenOdd & NonZero (GDI, GDI+, XLib, OpenGL, Cairo, AGG, Quartz, SVG, Gr32)
-    //Others rules include Positive, Negative and ABS_GTR_EQ_TWO (only in OpenGL)
-    //see http://glprogramming.com/red/chapter11.html
-    public enum PolyFillType { pftEvenOdd, pftNonZero, pftPositive, pftNegative };
-
-    public enum JoinType { jtSquare, jtRound, jtMiter };
-    public enum EndType { etClosedPolygon, etClosedLine, etOpenButt, etOpenSquare, etOpenRound };
-
-    internal enum EdgeSide { esLeft, esRight };
-    internal enum Direction { dRightToLeft, dLeftToRight };
-
-    internal class TEdge
+    public static bool operator !=(IntPoint a, IntPoint b)
     {
-        internal IntPoint Bot;
-        internal IntPoint Curr;
-        internal IntPoint Top;
-        internal IntPoint Delta;
-        internal double Dx;
-        internal PolyType PolyTyp;
-        internal EdgeSide Side;
-        internal int WindDelta; //1 or -1 depending on winding direction
-        internal int WindCnt;
-        internal int WindCnt2; //winding count of the opposite polytype
-        internal int OutIdx;
-        internal TEdge Next;
-        internal TEdge Prev;
-        internal TEdge NextInLML;
-        internal TEdge NextInAEL;
-        internal TEdge PrevInAEL;
-        internal TEdge NextInSEL;
-        internal TEdge PrevInSEL;
-    };
-
-    public class IntersectNode
-    {
-        internal TEdge Edge1;
-        internal TEdge Edge2;
-        internal IntPoint Pt;
-    };
-
-    public class MyIntersectNodeSort : IComparer<IntersectNode>
-    {
-        public int Compare(IntersectNode node1, IntersectNode node2)
-        {
-            cInt i = node2.Pt.Y - node1.Pt.Y;
-            if (i > 0) return 1;
-            else if (i < 0) return -1;
-            else return 0;
-        }
+      return a.X != b.X  || a.Y != b.Y; 
     }
 
-    internal class LocalMinima
+    public override bool Equals(object obj)
     {
-        internal cInt Y;
-        internal TEdge LeftBound;
-        internal TEdge RightBound;
-        internal LocalMinima Next;
-    };
+      if (obj == null) return false;
+      if (obj is IntPoint)
+      {
+        IntPoint a = (IntPoint)obj;
+        return (X == a.X) && (Y == a.Y);
+      }
+      else return false;
+    }
 
-    internal class Scanbeam
+    public override int GetHashCode()
     {
-        internal cInt Y;
-        internal Scanbeam Next;
-    };
+      //simply prevents a compiler warning
+      return base.GetHashCode();
+    }
 
-    internal class OutRec
-    {
-        internal int Idx;
-        internal bool IsHole;
-        internal bool IsOpen;
-        internal OutRec FirstLeft; //see comments in clipper.pas
-        internal OutPt Pts;
-        internal OutPt BottomPt;
-        internal PolyNode PolyNode;
-    };
+  }// end struct IntPoint
 
-    internal class OutPt
-    {
-        internal int Idx;
-        internal IntPoint Pt;
-        internal OutPt Next;
-        internal OutPt Prev;
-    };
+  public struct IntRect
+  {
+    public cInt left;
+    public cInt top;
+    public cInt right;
+    public cInt bottom;
 
-    internal class Join
+    public IntRect(cInt l, cInt t, cInt r, cInt b)
     {
-        internal OutPt OutPt1;
-        internal OutPt OutPt2;
-        internal IntPoint OffPt;
-    };
+      this.left = l; this.top = t;
+      this.right = r; this.bottom = b;
+    }
+    public IntRect(IntRect ir)
+    {
+      this.left = ir.left; this.top = ir.top;
+      this.right = ir.right; this.bottom = ir.bottom;
+    }
+  }
 
-    public class ClipperBase
+  public enum ClipType { ctIntersection, ctUnion, ctDifference, ctXor };
+  public enum PolyType { ptSubject, ptClip };
+  
+  //By far the most widely used winding rules for polygon filling are
+  //EvenOdd & NonZero (GDI, GDI+, XLib, OpenGL, Cairo, AGG, Quartz, SVG, Gr32)
+  //Others rules include Positive, Negative and ABS_GTR_EQ_TWO (only in OpenGL)
+  //see http://glprogramming.com/red/chapter11.html
+  public enum PolyFillType { pftEvenOdd, pftNonZero, pftPositive, pftNegative };
+  
+  public enum JoinType { jtSquare, jtRound, jtMiter };
+  public enum EndType { etClosedPolygon, etClosedLine, etOpenButt, etOpenSquare, etOpenRound };
+
+  internal enum EdgeSide {esLeft, esRight};
+  internal enum Direction {dRightToLeft, dLeftToRight};
+    
+  internal class TEdge {
+    internal IntPoint Bot;
+    internal IntPoint Curr; //current (updated for every new scanbeam)
+    internal IntPoint Top;
+    internal IntPoint Delta;
+    internal double Dx;
+    internal PolyType PolyTyp;
+    internal EdgeSide Side; //side only refers to current side of solution poly
+    internal int WindDelta; //1 or -1 depending on winding direction
+    internal int WindCnt;
+    internal int WindCnt2; //winding count of the opposite polytype
+    internal int OutIdx;
+    internal TEdge Next;
+    internal TEdge Prev;
+    internal TEdge NextInLML;
+    internal TEdge NextInAEL;
+    internal TEdge PrevInAEL;
+    internal TEdge NextInSEL;
+    internal TEdge PrevInSEL;
+  };
+
+  public class IntersectNode
+  {
+      internal TEdge Edge1;
+      internal TEdge Edge2;
+      internal IntPoint Pt;
+  };
+
+  public class MyIntersectNodeSort : IComparer<IntersectNode>
+  {
+    public int Compare(IntersectNode node1, IntersectNode node2)
     {
-        protected const double horizontal = -3.4E+38;
-        protected const int Skip = -2;
-        protected const int Unassigned = -1;
-        protected const double tolerance = 1.0E-20;
-        internal static bool near_zero(double val) { return (val > -tolerance) && (val < tolerance); }
+      cInt i = node2.Pt.Y - node1.Pt.Y;
+      if (i > 0) return 1;
+      else if (i < 0) return -1;
+      else return 0;
+    }
+  }
+
+  internal class LocalMinima
+  {
+    internal cInt Y;
+    internal TEdge LeftBound;
+    internal TEdge RightBound;
+    internal LocalMinima Next;
+  };
+
+  internal class Scanbeam
+  {
+      internal cInt Y;
+      internal Scanbeam Next;
+  };
+
+  internal class Maxima
+  {
+      internal cInt X;
+      internal Maxima Next;
+      internal Maxima Prev;
+  };
+
+  //OutRec: contains a path in the clipping solution. Edges in the AEL will
+  //carry a pointer to an OutRec when they are part of the clipping solution.
+  internal class OutRec
+  {
+    internal int Idx;
+    internal bool IsHole;
+    internal bool IsOpen;
+    internal OutRec FirstLeft; //see comments in clipper.pas
+    internal OutPt Pts;
+    internal OutPt BottomPt;
+    internal PolyNode PolyNode;
+  };
+
+  internal class OutPt
+  {
+    internal int Idx;
+    internal IntPoint Pt;
+    internal OutPt Next;
+    internal OutPt Prev;
+  };
+
+  internal class Join
+  {
+    internal OutPt OutPt1;
+    internal OutPt OutPt2;
+    internal IntPoint OffPt;
+  };
+
+  public class ClipperBase
+  {    
+    internal const double horizontal = -3.4E+38;
+    internal const int Skip = -2;
+    internal const int Unassigned = -1;
+    internal const double tolerance = 1.0E-20;
+    internal static bool near_zero(double val){return (val > -tolerance) && (val < tolerance);}
 
 #if use_int32
     public const cInt loRange = 0x7FFF;
     public const cInt hiRange = 0x7FFF;
 #else
-        public const cInt loRange = 0x3FFFFFFF;
-        public const cInt hiRange = 0x3FFFFFFFFFFFFFFFL;
+    public const cInt loRange = 0x3FFFFFFF;
+    public const cInt hiRange = 0x3FFFFFFFFFFFFFFFL; 
 #endif
 
-        internal LocalMinima m_MinimaList;
-        internal LocalMinima m_CurrentLM;
-        internal List<List<TEdge>> m_edges = new List<List<TEdge>>();
-        internal bool m_UseFullRange;
-        internal bool m_HasOpenPaths;
+    internal LocalMinima m_MinimaList;
+    internal LocalMinima m_CurrentLM;
+    internal List<List<TEdge>> m_edges = new List<List<TEdge>>();
+    internal Scanbeam m_Scanbeam;
+    internal List<OutRec> m_PolyOuts;
+    internal TEdge m_ActiveEdges;
+    internal bool m_UseFullRange;
+    internal bool m_HasOpenPaths;
 
-        //------------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
 
-        public bool PreserveCollinear
+    public bool PreserveCollinear
+    {
+      get;
+      set;
+    }
+    //------------------------------------------------------------------------------
+
+    public void Swap(ref cInt val1, ref cInt val2)
+    {
+      cInt tmp = val1;
+      val1 = val2;
+      val2 = tmp;
+    }
+    //------------------------------------------------------------------------------
+
+    internal static bool IsHorizontal(TEdge e)
+    {
+      return e.Delta.Y == 0;
+    }
+    //------------------------------------------------------------------------------
+
+    internal bool PointIsVertex(IntPoint pt, OutPt pp)
+    {
+      OutPt pp2 = pp;
+      do
+      {
+        if (pp2.Pt == pt) return true;
+        pp2 = pp2.Next;
+      }
+      while (pp2 != pp);
+      return false;
+    }
+    //------------------------------------------------------------------------------
+
+    internal bool PointOnLineSegment(IntPoint pt, 
+        IntPoint linePt1, IntPoint linePt2, bool UseFullRange)
+    {
+      if (UseFullRange)
+        return ((pt.X == linePt1.X) && (pt.Y == linePt1.Y)) ||
+          ((pt.X == linePt2.X) && (pt.Y == linePt2.Y)) ||
+          (((pt.X > linePt1.X) == (pt.X < linePt2.X)) &&
+          ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) &&
+          ((Int128.Int128Mul((pt.X - linePt1.X), (linePt2.Y - linePt1.Y)) ==
+          Int128.Int128Mul((linePt2.X - linePt1.X), (pt.Y - linePt1.Y)))));
+      else
+        return ((pt.X == linePt1.X) && (pt.Y == linePt1.Y)) ||
+          ((pt.X == linePt2.X) && (pt.Y == linePt2.Y)) ||
+          (((pt.X > linePt1.X) == (pt.X < linePt2.X)) &&
+          ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) &&
+          ((pt.X - linePt1.X) * (linePt2.Y - linePt1.Y) ==
+            (linePt2.X - linePt1.X) * (pt.Y - linePt1.Y)));
+    }
+    //------------------------------------------------------------------------------
+
+    internal bool PointOnPolygon(IntPoint pt, OutPt pp, bool UseFullRange)
+    {
+      OutPt pp2 = pp;
+      while (true)
+      {
+        if (PointOnLineSegment(pt, pp2.Pt, pp2.Next.Pt, UseFullRange))
+          return true;
+        pp2 = pp2.Next;
+        if (pp2 == pp) break;
+      }
+      return false;
+    }
+    //------------------------------------------------------------------------------
+
+    internal static bool SlopesEqual(TEdge e1, TEdge e2, bool UseFullRange)
+    {
+        if (UseFullRange)
+          return Int128.Int128Mul(e1.Delta.Y, e2.Delta.X) ==
+              Int128.Int128Mul(e1.Delta.X, e2.Delta.Y);
+        else return (cInt)(e1.Delta.Y) * (e2.Delta.X) ==
+          (cInt)(e1.Delta.X) * (e2.Delta.Y);
+    }
+    //------------------------------------------------------------------------------
+
+    internal static bool SlopesEqual(IntPoint pt1, IntPoint pt2,
+        IntPoint pt3, bool UseFullRange)
+    {
+        if (UseFullRange)
+            return Int128.Int128Mul(pt1.Y - pt2.Y, pt2.X - pt3.X) ==
+              Int128.Int128Mul(pt1.X - pt2.X, pt2.Y - pt3.Y);
+        else return
+          (cInt)(pt1.Y - pt2.Y) * (pt2.X - pt3.X) - (cInt)(pt1.X - pt2.X) * (pt2.Y - pt3.Y) == 0;
+    }
+    //------------------------------------------------------------------------------
+
+    internal static bool SlopesEqual(IntPoint pt1, IntPoint pt2,
+        IntPoint pt3, IntPoint pt4, bool UseFullRange)
+    {
+        if (UseFullRange)
+            return Int128.Int128Mul(pt1.Y - pt2.Y, pt3.X - pt4.X) ==
+              Int128.Int128Mul(pt1.X - pt2.X, pt3.Y - pt4.Y);
+        else return
+          (cInt)(pt1.Y - pt2.Y) * (pt3.X - pt4.X) - (cInt)(pt1.X - pt2.X) * (pt3.Y - pt4.Y) == 0;
+    }
+    //------------------------------------------------------------------------------
+
+    internal ClipperBase() //constructor (nb: no external instantiation)
+    {
+        m_MinimaList = null;
+        m_CurrentLM = null;
+        m_UseFullRange = false;
+        m_HasOpenPaths = false;
+    }
+    //------------------------------------------------------------------------------
+
+    public virtual void Clear()
+    {
+        DisposeLocalMinimaList();
+        for (int i = 0; i < m_edges.Count; ++i)
         {
-            get;
-            set;
+            for (int j = 0; j < m_edges[i].Count; ++j) m_edges[i][j] = null;
+            m_edges[i].Clear();
         }
-        //------------------------------------------------------------------------------
+        m_edges.Clear();
+        m_UseFullRange = false;
+        m_HasOpenPaths = false;
+    }
+    //------------------------------------------------------------------------------
 
-        public void Swap(ref cInt val1, ref cInt val2)
+    private void DisposeLocalMinimaList()
+    {
+        while( m_MinimaList != null )
         {
-            cInt tmp = val1;
-            val1 = val2;
-            val2 = tmp;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static bool IsHorizontal(TEdge e)
-        {
-            return e.Delta.Y == 0;
-        }
-        //------------------------------------------------------------------------------
-
-        internal bool PointIsVertex(IntPoint pt, OutPt pp)
-        {
-            OutPt pp2 = pp;
-            do
-            {
-                if (pp2.Pt == pt) return true;
-                pp2 = pp2.Next;
-            }
-            while (pp2 != pp);
-            return false;
-        }
-        //------------------------------------------------------------------------------
-
-        internal bool PointOnLineSegment(IntPoint pt,
-            IntPoint linePt1, IntPoint linePt2, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return ((pt.X == linePt1.X) && (pt.Y == linePt1.Y)) ||
-                  ((pt.X == linePt2.X) && (pt.Y == linePt2.Y)) ||
-                  (((pt.X > linePt1.X) == (pt.X < linePt2.X)) &&
-                  ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) &&
-                  ((Int128.Int128Mul((pt.X - linePt1.X), (linePt2.Y - linePt1.Y)) ==
-                  Int128.Int128Mul((linePt2.X - linePt1.X), (pt.Y - linePt1.Y)))));
-            else
-                return ((pt.X == linePt1.X) && (pt.Y == linePt1.Y)) ||
-                  ((pt.X == linePt2.X) && (pt.Y == linePt2.Y)) ||
-                  (((pt.X > linePt1.X) == (pt.X < linePt2.X)) &&
-                  ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) &&
-                  ((pt.X - linePt1.X) * (linePt2.Y - linePt1.Y) ==
-                    (linePt2.X - linePt1.X) * (pt.Y - linePt1.Y)));
-        }
-        //------------------------------------------------------------------------------
-
-        internal bool PointOnPolygon(IntPoint pt, OutPt pp, bool UseFullRange)
-        {
-            OutPt pp2 = pp;
-            while (true)
-            {
-                if (PointOnLineSegment(pt, pp2.Pt, pp2.Next.Pt, UseFullRange))
-                    return true;
-                pp2 = pp2.Next;
-                if (pp2 == pp) break;
-            }
-            return false;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static bool SlopesEqual(TEdge e1, TEdge e2, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return Int128.Int128Mul(e1.Delta.Y, e2.Delta.X) ==
-                    Int128.Int128Mul(e1.Delta.X, e2.Delta.Y);
-            else return (cInt)(e1.Delta.Y) * (e2.Delta.X) ==
-              (cInt)(e1.Delta.X) * (e2.Delta.Y);
-        }
-        //------------------------------------------------------------------------------
-
-        protected static bool SlopesEqual(IntPoint pt1, IntPoint pt2,
-            IntPoint pt3, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return Int128.Int128Mul(pt1.Y - pt2.Y, pt2.X - pt3.X) ==
-                  Int128.Int128Mul(pt1.X - pt2.X, pt2.Y - pt3.Y);
-            else return
-              (cInt)(pt1.Y - pt2.Y) * (pt2.X - pt3.X) - (cInt)(pt1.X - pt2.X) * (pt2.Y - pt3.Y) == 0;
-        }
-        //------------------------------------------------------------------------------
-
-        protected static bool SlopesEqual(IntPoint pt1, IntPoint pt2,
-            IntPoint pt3, IntPoint pt4, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return Int128.Int128Mul(pt1.Y - pt2.Y, pt3.X - pt4.X) ==
-                  Int128.Int128Mul(pt1.X - pt2.X, pt3.Y - pt4.Y);
-            else return
-              (cInt)(pt1.Y - pt2.Y) * (pt3.X - pt4.X) - (cInt)(pt1.X - pt2.X) * (pt3.Y - pt4.Y) == 0;
-        }
-        //------------------------------------------------------------------------------
-
-        internal ClipperBase() //constructor (nb: no external instantiation)
-        {
+            LocalMinima tmpLm = m_MinimaList.Next;
             m_MinimaList = null;
-            m_CurrentLM = null;
-            m_UseFullRange = false;
-            m_HasOpenPaths = false;
+            m_MinimaList = tmpLm;
         }
-        //------------------------------------------------------------------------------
+        m_CurrentLM = null;
+    }
+    //------------------------------------------------------------------------------
 
-        public virtual void Clear()
+    void RangeTest(IntPoint Pt, ref bool useFullRange)
+    {
+      if (useFullRange)
+      {
+        if (Pt.X > hiRange || Pt.Y > hiRange || -Pt.X > hiRange || -Pt.Y > hiRange) 
+          throw new ClipperException("Coordinate outside allowed range");
+      }
+      else if (Pt.X > loRange || Pt.Y > loRange || -Pt.X > loRange || -Pt.Y > loRange) 
+      {
+        useFullRange = true;
+        RangeTest(Pt, ref useFullRange);
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    private void InitEdge(TEdge e, TEdge eNext,
+      TEdge ePrev, IntPoint pt)
+    {
+      e.Next = eNext;
+      e.Prev = ePrev;
+      e.Curr = pt;
+      e.OutIdx = Unassigned;
+    }
+    //------------------------------------------------------------------------------
+
+    private void InitEdge2(TEdge e, PolyType polyType)
+    {
+      if (e.Curr.Y >= e.Next.Curr.Y)
+      {
+        e.Bot = e.Curr;
+        e.Top = e.Next.Curr;
+      }
+      else
+      {
+        e.Top = e.Curr;
+        e.Bot = e.Next.Curr;
+      }
+      SetDx(e);
+      e.PolyTyp = polyType;
+    }
+    //------------------------------------------------------------------------------
+
+    private TEdge FindNextLocMin(TEdge E)
+    {
+      TEdge E2;
+      for (;;)
+      {
+        while (E.Bot != E.Prev.Bot || E.Curr == E.Top) E = E.Next;
+        if (E.Dx != horizontal && E.Prev.Dx != horizontal) break;
+        while (E.Prev.Dx == horizontal) E = E.Prev;
+        E2 = E;
+        while (E.Dx == horizontal) E = E.Next;
+        if (E.Top.Y == E.Prev.Bot.Y) continue; //ie just an intermediate horz.
+        if (E2.Prev.Bot.X < E.Bot.X) E = E2;
+        break;
+      }
+      return E;
+    }
+    //------------------------------------------------------------------------------
+
+    private TEdge ProcessBound(TEdge E, bool LeftBoundIsForward)
+    {
+      TEdge EStart, Result = E;
+      TEdge Horz;
+
+      if (Result.OutIdx == Skip)
+      {
+        //check if there are edges beyond the skip edge in the bound and if so
+        //create another LocMin and calling ProcessBound once more ...
+        E = Result;
+        if (LeftBoundIsForward)
         {
-            DisposeLocalMinimaList();
-            for (int i = 0; i < m_edges.Count; ++i)
-            {
-                for (int j = 0; j < m_edges[i].Count; ++j) m_edges[i][j] = null;
-                m_edges[i].Clear();
-            }
-            m_edges.Clear();
-            m_UseFullRange = false;
-            m_HasOpenPaths = false;
+          while (E.Top.Y == E.Next.Bot.Y) E = E.Next;
+          while (E != Result && E.Dx == horizontal) E = E.Prev;
         }
-        //------------------------------------------------------------------------------
-
-        private void DisposeLocalMinimaList()
+        else
         {
-            while (m_MinimaList != null)
-            {
-                LocalMinima tmpLm = m_MinimaList.Next;
-                m_MinimaList = null;
-                m_MinimaList = tmpLm;
-            }
-            m_CurrentLM = null;
+          while (E.Top.Y == E.Prev.Bot.Y) E = E.Prev;
+          while (E != Result && E.Dx == horizontal) E = E.Next;
         }
-        //------------------------------------------------------------------------------
-
-        void RangeTest(IntPoint Pt, ref bool useFullRange)
+        if (E == Result)
         {
-            if (useFullRange)
-            {
-                if (Pt.X > hiRange || Pt.Y > hiRange || -Pt.X > hiRange || -Pt.Y > hiRange)
-                    throw new ClipperException("Coordinate outside allowed range");
-            }
-            else if (Pt.X > loRange || Pt.Y > loRange || -Pt.X > loRange || -Pt.Y > loRange)
-            {
-                useFullRange = true;
-                RangeTest(Pt, ref useFullRange);
-            }
+          if (LeftBoundIsForward) Result = E.Next;
+          else Result = E.Prev;
         }
-        //------------------------------------------------------------------------------
-
-        private void InitEdge(TEdge e, TEdge eNext,
-          TEdge ePrev, IntPoint pt)
+        else
         {
-            e.Next = eNext;
-            e.Prev = ePrev;
-            e.Curr = pt;
-            e.OutIdx = Unassigned;
+          //there are more edges in the bound beyond result starting with E
+          if (LeftBoundIsForward)
+            E = Result.Next;
+          else
+            E = Result.Prev;
+          LocalMinima locMin = new LocalMinima();
+          locMin.Next = null;
+          locMin.Y = E.Bot.Y;
+          locMin.LeftBound = null;
+          locMin.RightBound = E;
+          E.WindDelta = 0;
+          Result = ProcessBound(E, LeftBoundIsForward);
+          InsertLocalMinima(locMin);
         }
-        //------------------------------------------------------------------------------
+        return Result;
+      }
 
-        private void InitEdge2(TEdge e, PolyType polyType)
+      if (E.Dx == horizontal)
+      {
+        //We need to be careful with open paths because this may not be a
+        //true local minima (ie E may be following a skip edge).
+        //Also, consecutive horz. edges may start heading left before going right.
+        if (LeftBoundIsForward) EStart = E.Prev;
+        else EStart = E.Next;
+        if (EStart.Dx == horizontal) //ie an adjoining horizontal skip edge
         {
-            if (e.Curr.Y >= e.Next.Curr.Y)
-            {
-                e.Bot = e.Curr;
-                e.Top = e.Next.Curr;
-            }
-            else
-            {
-                e.Top = e.Curr;
-                e.Bot = e.Next.Curr;
-            }
-            SetDx(e);
-            e.PolyTyp = polyType;
+        if (EStart.Bot.X != E.Bot.X && EStart.Top.X != E.Bot.X)
+            ReverseHorizontal(E);
         }
-        //------------------------------------------------------------------------------
+        else if (EStart.Bot.X != E.Bot.X)
+        ReverseHorizontal(E);
+      }
 
-        private TEdge FindNextLocMin(TEdge E)
+      EStart = E;
+      if (LeftBoundIsForward)
+      {
+        while (Result.Top.Y == Result.Next.Bot.Y && Result.Next.OutIdx != Skip)
+          Result = Result.Next;
+        if (Result.Dx == horizontal && Result.Next.OutIdx != Skip)
         {
-            TEdge E2;
-            for (; ; )
-            {
-                while (E.Bot != E.Prev.Bot || E.Curr == E.Top) E = E.Next;
-                if (E.Dx != horizontal && E.Prev.Dx != horizontal) break;
-                while (E.Prev.Dx == horizontal) E = E.Prev;
-                E2 = E;
-                while (E.Dx == horizontal) E = E.Next;
-                if (E.Top.Y == E.Prev.Bot.Y) continue; //ie just an intermediate horz.
-                if (E2.Prev.Bot.X < E.Bot.X) E = E2;
-                break;
-            }
-            return E;
+          //nb: at the top of a bound, horizontals are added to the bound
+          //only when the preceding edge attaches to the horizontal's left vertex
+          //unless a Skip edge is encountered when that becomes the top divide
+          Horz = Result;
+          while (Horz.Prev.Dx == horizontal) Horz = Horz.Prev;
+          if (Horz.Prev.Top.X > Result.Next.Top.X) Result = Horz.Prev;
         }
-        //------------------------------------------------------------------------------
-
-        private TEdge ProcessBound(TEdge E, bool LeftBoundIsForward)
+        while (E != Result)
         {
-            TEdge EStart, Result = E;
-            TEdge Horz;
-
-            if (Result.OutIdx == Skip)
-            {
-                //check if there are edges beyond the skip edge in the bound and if so
-                //create another LocMin and calling ProcessBound once more ...
-                E = Result;
-                if (LeftBoundIsForward)
-                {
-                    while (E.Top.Y == E.Next.Bot.Y) E = E.Next;
-                    while (E != Result && E.Dx == horizontal) E = E.Prev;
-                }
-                else
-                {
-                    while (E.Top.Y == E.Prev.Bot.Y) E = E.Prev;
-                    while (E != Result && E.Dx == horizontal) E = E.Next;
-                }
-                if (E == Result)
-                {
-                    if (LeftBoundIsForward) Result = E.Next;
-                    else Result = E.Prev;
-                }
-                else
-                {
-                    //there are more edges in the bound beyond result starting with E
-                    if (LeftBoundIsForward)
-                        E = Result.Next;
-                    else
-                        E = Result.Prev;
-                    LocalMinima locMin = new LocalMinima();
-                    locMin.Next = null;
-                    locMin.Y = E.Bot.Y;
-                    locMin.LeftBound = null;
-                    locMin.RightBound = E;
-                    E.WindDelta = 0;
-                    Result = ProcessBound(E, LeftBoundIsForward);
-                    InsertLocalMinima(locMin);
-                }
-                return Result;
-            }
-
-            if (E.Dx == horizontal)
-            {
-                //We need to be careful with open paths because this may not be a
-                //true local minima (ie E may be following a skip edge).
-                //Also, consecutive horz. edges may start heading left before going right.
-                if (LeftBoundIsForward) EStart = E.Prev;
-                else EStart = E.Next;
-                if (EStart.OutIdx != Skip)
-                {
-                    if (EStart.Dx == horizontal) //ie an adjoining horizontal skip edge
-                    {
-                        if (EStart.Bot.X != E.Bot.X && EStart.Top.X != E.Bot.X)
-                            ReverseHorizontal(E);
-                    }
-                    else if (EStart.Bot.X != E.Bot.X)
-                        ReverseHorizontal(E);
-                }
-            }
-
-            EStart = E;
-            if (LeftBoundIsForward)
-            {
-                while (Result.Top.Y == Result.Next.Bot.Y && Result.Next.OutIdx != Skip)
-                    Result = Result.Next;
-                if (Result.Dx == horizontal && Result.Next.OutIdx != Skip)
-                {
-                    //nb: at the top of a bound, horizontals are added to the bound
-                    //only when the preceding edge attaches to the horizontal's left vertex
-                    //unless a Skip edge is encountered when that becomes the top divide
-                    Horz = Result;
-                    while (Horz.Prev.Dx == horizontal) Horz = Horz.Prev;
-                    if (Horz.Prev.Top.X == Result.Next.Top.X)
-                    {
-                        if (!LeftBoundIsForward) Result = Horz.Prev;
-                    }
-                    else if (Horz.Prev.Top.X > Result.Next.Top.X) Result = Horz.Prev;
-                }
-                while (E != Result)
-                {
-                    E.NextInLML = E.Next;
-                    if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Prev.Top.X)
-                        ReverseHorizontal(E);
-                    E = E.Next;
-                }
-                if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Prev.Top.X)
-                    ReverseHorizontal(E);
-                Result = Result.Next; //move to the edge just beyond current bound
-            }
-            else
-            {
-                while (Result.Top.Y == Result.Prev.Bot.Y && Result.Prev.OutIdx != Skip)
-                    Result = Result.Prev;
-                if (Result.Dx == horizontal && Result.Prev.OutIdx != Skip)
-                {
-                    Horz = Result;
-                    while (Horz.Next.Dx == horizontal) Horz = Horz.Next;
-                    if (Horz.Next.Top.X == Result.Prev.Top.X)
-                    {
-                        if (!LeftBoundIsForward) Result = Horz.Next;
-                    }
-                    else if (Horz.Next.Top.X > Result.Prev.Top.X) Result = Horz.Next;
-                }
-
-                while (E != Result)
-                {
-                    E.NextInLML = E.Prev;
-                    if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Next.Top.X)
-                        ReverseHorizontal(E);
-                    E = E.Prev;
-                }
-                if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Next.Top.X)
-                    ReverseHorizontal(E);
-                Result = Result.Prev; //move to the edge just beyond current bound
-            }
-            return Result;
+          E.NextInLML = E.Next;
+          if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Prev.Top.X) 
+            ReverseHorizontal(E);
+          E = E.Next;
         }
-        //------------------------------------------------------------------------------
-
-
-        public bool AddPath(Path pg, PolyType polyType, bool Closed)
+        if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Prev.Top.X) 
+          ReverseHorizontal(E);
+        Result = Result.Next; //move to the edge just beyond current bound
+      }
+      else
+      {
+        while (Result.Top.Y == Result.Prev.Bot.Y && Result.Prev.OutIdx != Skip)
+          Result = Result.Prev;
+        if (Result.Dx == horizontal && Result.Prev.OutIdx != Skip)
         {
+          Horz = Result;
+          while (Horz.Next.Dx == horizontal) Horz = Horz.Next;
+          if (Horz.Next.Top.X == Result.Prev.Top.X || 
+              Horz.Next.Top.X > Result.Prev.Top.X) Result = Horz.Next;
+        }
+
+        while (E != Result)
+        {
+          E.NextInLML = E.Prev;
+          if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Next.Top.X) 
+            ReverseHorizontal(E);
+          E = E.Prev;
+        }
+        if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Next.Top.X) 
+          ReverseHorizontal(E);
+        Result = Result.Prev; //move to the edge just beyond current bound
+      }
+      return Result;
+    }
+    //------------------------------------------------------------------------------
+
+
+    public bool AddPath(Path pg, PolyType polyType, bool Closed)
+    {
 #if use_lines
       if (!Closed && polyType == PolyType.ptClip)
         throw new ClipperException("AddPath: Open paths must be subject.");
 #else
-            if (!Closed)
-                throw new ClipperException("AddPath: Open paths have been disabled.");
+      if (!Closed)
+        throw new ClipperException("AddPath: Open paths have been disabled.");
 #endif
 
-            int highI = (int)pg.Count - 1;
-            if (Closed) while (highI > 0 && (pg[highI] == pg[0])) --highI;
-            while (highI > 0 && (pg[highI] == pg[highI - 1])) --highI;
-            if ((Closed && highI < 2) || (!Closed && highI < 1)) return false;
+      int highI = (int)pg.Count - 1;
+      if (Closed) while (highI > 0 && (pg[highI] == pg[0])) --highI;
+      while (highI > 0 && (pg[highI] == pg[highI - 1])) --highI;
+      if ((Closed && highI < 2) || (!Closed && highI < 1)) return false;
 
-            //create a new edge array ...
-            List<TEdge> edges = new List<TEdge>(highI + 1);
-            for (int i = 0; i <= highI; i++) edges.Add(new TEdge());
+      //create a new edge array ...
+      List<TEdge> edges = new List<TEdge>(highI+1);
+      for (int i = 0; i <= highI; i++) edges.Add(new TEdge());
+          
+      bool IsFlat = true;
 
-            bool IsFlat = true;
+      //1. Basic (first) edge initialization ...
+      edges[1].Curr = pg[1];
+      RangeTest(pg[0], ref m_UseFullRange);
+      RangeTest(pg[highI], ref m_UseFullRange);
+      InitEdge(edges[0], edges[1], edges[highI], pg[0]);
+      InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
+      for (int i = highI - 1; i >= 1; --i)
+      {
+        RangeTest(pg[i], ref m_UseFullRange);
+        InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
+      }
+      TEdge eStart = edges[0];
 
-            //1. Basic (first) edge initialization ...
-            edges[1].Curr = pg[1];
-            RangeTest(pg[0], ref m_UseFullRange);
-            RangeTest(pg[highI], ref m_UseFullRange);
-            InitEdge(edges[0], edges[1], edges[highI], pg[0]);
-            InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
-            for (int i = highI - 1; i >= 1; --i)
-            {
-                RangeTest(pg[i], ref m_UseFullRange);
-                InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
-            }
-            TEdge eStart = edges[0];
-
-            //2. Remove duplicate vertices, and (when closed) collinear edges ...
-            TEdge E = eStart, eLoopStop = eStart;
-            for (; ; )
-            {
-                //nb: allows matching start and end points when not Closed ...
-                if (E.Curr == E.Next.Curr && (Closed || E.Next != eStart))
-                {
-                    if (E == E.Next) break;
-                    if (E == eStart) eStart = E.Next;
-                    E = RemoveEdge(E);
-                    eLoopStop = E;
-                    continue;
-                }
-                if (E.Prev == E.Next)
-                    break; //only two vertices
-                else if (Closed &&
-                  SlopesEqual(E.Prev.Curr, E.Curr, E.Next.Curr, m_UseFullRange) &&
-                  (!PreserveCollinear ||
-                  !Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))
-                {
-                    //Collinear edges are allowed for open paths but in closed paths
-                    //the default is to merge adjacent collinear edges into a single edge.
-                    //However, if the PreserveCollinear property is enabled, only overlapping
-                    //collinear edges (ie spikes) will be removed from closed paths.
-                    if (E == eStart) eStart = E.Next;
-                    E = RemoveEdge(E);
-                    E = E.Prev;
-                    eLoopStop = E;
-                    continue;
-                }
-                E = E.Next;
-                if ((E == eLoopStop) || (!Closed && E.Next == eStart)) break;
-            }
-
-            if ((!Closed && (E == E.Next)) || (Closed && (E.Prev == E.Next)))
-                return false;
-
-            if (!Closed)
-            {
-                m_HasOpenPaths = true;
-                eStart.Prev.OutIdx = Skip;
-            }
-
-            //3. Do second stage of edge initialization ...
-            E = eStart;
-            do
-            {
-                InitEdge2(E, polyType);
-                E = E.Next;
-                if (IsFlat && E.Curr.Y != eStart.Curr.Y) IsFlat = false;
-            }
-            while (E != eStart);
-
-            //4. Finally, add edge bounds to LocalMinima list ...
-
-            //Totally flat paths must be handled differently when adding them
-            //to LocalMinima list to avoid endless loops etc ...
-            if (IsFlat)
-            {
-                if (Closed) return false;
-                E.Prev.OutIdx = Skip;
-                if (E.Prev.Bot.X < E.Prev.Top.X) ReverseHorizontal(E.Prev);
-                LocalMinima locMin = new LocalMinima();
-                locMin.Next = null;
-                locMin.Y = E.Bot.Y;
-                locMin.LeftBound = null;
-                locMin.RightBound = E;
-                locMin.RightBound.Side = EdgeSide.esRight;
-                locMin.RightBound.WindDelta = 0;
-                while (E.Next.OutIdx != Skip)
-                {
-                    E.NextInLML = E.Next;
-                    if (E.Bot.X != E.Prev.Top.X) ReverseHorizontal(E);
-                    E = E.Next;
-                }
-                InsertLocalMinima(locMin);
-                m_edges.Add(edges);
-                return true;
-            }
-
-            m_edges.Add(edges);
-            bool leftBoundIsForward;
-            TEdge EMin = null;
-
-            //workaround to avoid an endless loop in the while loop below when
-            //open paths have matching start and end points ...
-            if (E.Prev.Bot == E.Prev.Top) E = E.Next;
-
-            for (; ; )
-            {
-                E = FindNextLocMin(E);
-                if (E == EMin) break;
-                else if (EMin == null) EMin = E;
-
-                //E and E.Prev now share a local minima (left aligned if horizontal).
-                //Compare their slopes to find which starts which bound ...
-                LocalMinima locMin = new LocalMinima();
-                locMin.Next = null;
-                locMin.Y = E.Bot.Y;
-                if (E.Dx < E.Prev.Dx)
-                {
-                    locMin.LeftBound = E.Prev;
-                    locMin.RightBound = E;
-                    leftBoundIsForward = false; //Q.nextInLML = Q.prev
-                }
-                else
-                {
-                    locMin.LeftBound = E;
-                    locMin.RightBound = E.Prev;
-                    leftBoundIsForward = true; //Q.nextInLML = Q.next
-                }
-                locMin.LeftBound.Side = EdgeSide.esLeft;
-                locMin.RightBound.Side = EdgeSide.esRight;
-
-                if (!Closed) locMin.LeftBound.WindDelta = 0;
-                else if (locMin.LeftBound.Next == locMin.RightBound)
-                    locMin.LeftBound.WindDelta = -1;
-                else locMin.LeftBound.WindDelta = 1;
-                locMin.RightBound.WindDelta = -locMin.LeftBound.WindDelta;
-
-                E = ProcessBound(locMin.LeftBound, leftBoundIsForward);
-                if (E.OutIdx == Skip) E = ProcessBound(E, leftBoundIsForward);
-
-                TEdge E2 = ProcessBound(locMin.RightBound, !leftBoundIsForward);
-                if (E2.OutIdx == Skip) E2 = ProcessBound(E2, !leftBoundIsForward);
-
-                if (locMin.LeftBound.OutIdx == Skip)
-                    locMin.LeftBound = null;
-                else if (locMin.RightBound.OutIdx == Skip)
-                    locMin.RightBound = null;
-                InsertLocalMinima(locMin);
-                if (!leftBoundIsForward) E = E2;
-            }
-            return true;
-
-        }
-        //------------------------------------------------------------------------------
-
-        public bool AddPaths(Paths ppg, PolyType polyType, bool closed)
+      //2. Remove duplicate vertices, and (when closed) collinear edges ...
+      TEdge E = eStart, eLoopStop = eStart;
+      for (;;)
+      {
+        //nb: allows matching start and end points when not Closed ...
+        if (E.Curr == E.Next.Curr && (Closed || E.Next != eStart))
         {
-            bool result = false;
-            for (int i = 0; i < ppg.Count; ++i)
-                if (AddPath(ppg[i], polyType, closed)) result = true;
-            return result;
+          if (E == E.Next) break;
+          if (E == eStart) eStart = E.Next;
+          E = RemoveEdge(E);
+          eLoopStop = E;
+          continue;
         }
-        //------------------------------------------------------------------------------
-
-        internal bool Pt2IsBetweenPt1AndPt3(IntPoint pt1, IntPoint pt2, IntPoint pt3)
+        if (E.Prev == E.Next) 
+          break; //only two vertices
+        else if (Closed &&
+          SlopesEqual(E.Prev.Curr, E.Curr, E.Next.Curr, m_UseFullRange) && 
+          (!PreserveCollinear ||
+          !Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr))) 
         {
-            if ((pt1 == pt3) || (pt1 == pt2) || (pt3 == pt2)) return false;
-            else if (pt1.X != pt3.X) return (pt2.X > pt1.X) == (pt2.X < pt3.X);
-            else return (pt2.Y > pt1.Y) == (pt2.Y < pt3.Y);
+          //Collinear edges are allowed for open paths but in closed paths
+          //the default is to merge adjacent collinear edges into a single edge.
+          //However, if the PreserveCollinear property is enabled, only overlapping
+          //collinear edges (ie spikes) will be removed from closed paths.
+          if (E == eStart) eStart = E.Next;
+          E = RemoveEdge(E);
+          E = E.Prev;
+          eLoopStop = E;
+          continue;
         }
-        //------------------------------------------------------------------------------
+        E = E.Next;
+        if ((E == eLoopStop) || (!Closed && E.Next == eStart)) break;
+      }
 
-        TEdge RemoveEdge(TEdge e)
+      if ((!Closed && (E == E.Next)) || (Closed && (E.Prev == E.Next)))
+        return false;
+
+      if (!Closed)
+      {
+        m_HasOpenPaths = true;
+        eStart.Prev.OutIdx = Skip;
+      }
+
+      //3. Do second stage of edge initialization ...
+      E = eStart;
+      do
+      {
+        InitEdge2(E, polyType);
+        E = E.Next;
+        if (IsFlat && E.Curr.Y != eStart.Curr.Y) IsFlat = false;
+      }
+      while (E != eStart);
+
+      //4. Finally, add edge bounds to LocalMinima list ...
+
+      //Totally flat paths must be handled differently when adding them
+      //to LocalMinima list to avoid endless loops etc ...
+      if (IsFlat) 
+      {
+        if (Closed) return false;
+        E.Prev.OutIdx = Skip;
+        LocalMinima locMin = new LocalMinima();
+        locMin.Next = null;
+        locMin.Y = E.Bot.Y;
+        locMin.LeftBound = null;
+        locMin.RightBound = E;
+        locMin.RightBound.Side = EdgeSide.esRight;
+        locMin.RightBound.WindDelta = 0;
+        for ( ; ; )
         {
-            //removes e from double_linked_list (but without removing from memory)
-            e.Prev.Next = e.Next;
-            e.Next.Prev = e.Prev;
-            TEdge result = e.Next;
-            e.Prev = null; //flag as removed (see ClipperBase.Clear)
-            return result;
+          if (E.Bot.X != E.Prev.Top.X) ReverseHorizontal(E);
+          if (E.Next.OutIdx == Skip) break;
+          E.NextInLML = E.Next;
+          E = E.Next;
         }
-        //------------------------------------------------------------------------------
+        InsertLocalMinima(locMin);
+        m_edges.Add(edges);
+        return true;
+      }
 
-        private void SetDx(TEdge e)
+      m_edges.Add(edges);
+      bool leftBoundIsForward;
+      TEdge EMin = null;
+
+      //workaround to avoid an endless loop in the while loop below when
+      //open paths have matching start and end points ...
+      if (E.Prev.Bot == E.Prev.Top) E = E.Next;
+
+      for (;;)
+      {
+        E = FindNextLocMin(E);
+        if (E == EMin) break;
+        else if (EMin == null) EMin = E;
+
+        //E and E.Prev now share a local minima (left aligned if horizontal).
+        //Compare their slopes to find which starts which bound ...
+        LocalMinima locMin = new LocalMinima();
+        locMin.Next = null;
+        locMin.Y = E.Bot.Y;
+        if (E.Dx < E.Prev.Dx) 
         {
-            e.Delta.X = (e.Top.X - e.Bot.X);
-            e.Delta.Y = (e.Top.Y - e.Bot.Y);
-            if (e.Delta.Y == 0) e.Dx = horizontal;
-            else e.Dx = (double)(e.Delta.X) / (e.Delta.Y);
+          locMin.LeftBound = E.Prev;
+          locMin.RightBound = E;
+          leftBoundIsForward = false; //Q.nextInLML = Q.prev
+        } else
+        {
+          locMin.LeftBound = E;
+          locMin.RightBound = E.Prev;
+          leftBoundIsForward = true; //Q.nextInLML = Q.next
         }
-        //---------------------------------------------------------------------------
+        locMin.LeftBound.Side = EdgeSide.esLeft;
+        locMin.RightBound.Side = EdgeSide.esRight;
 
-        private void InsertLocalMinima(LocalMinima newLm)
-        {
-            if (m_MinimaList == null)
-            {
-                m_MinimaList = newLm;
-            }
-            else if (newLm.Y >= m_MinimaList.Y)
-            {
-                newLm.Next = m_MinimaList;
-                m_MinimaList = newLm;
-            }
-            else
-            {
-                LocalMinima tmpLm = m_MinimaList;
-                while (tmpLm.Next != null && (newLm.Y < tmpLm.Next.Y))
-                    tmpLm = tmpLm.Next;
-                newLm.Next = tmpLm.Next;
-                tmpLm.Next = newLm;
-            }
-        }
-        //------------------------------------------------------------------------------
+        if (!Closed) locMin.LeftBound.WindDelta = 0;
+        else if (locMin.LeftBound.Next == locMin.RightBound)
+          locMin.LeftBound.WindDelta = -1;
+        else locMin.LeftBound.WindDelta = 1;
+        locMin.RightBound.WindDelta = -locMin.LeftBound.WindDelta;
 
-        protected void PopLocalMinima()
+        E = ProcessBound(locMin.LeftBound, leftBoundIsForward);
+        if (E.OutIdx == Skip) E = ProcessBound(E, leftBoundIsForward);
+
+        TEdge E2 = ProcessBound(locMin.RightBound, !leftBoundIsForward);
+        if (E2.OutIdx == Skip) E2 = ProcessBound(E2, !leftBoundIsForward);
+
+        if (locMin.LeftBound.OutIdx == Skip)
+          locMin.LeftBound = null;
+        else if (locMin.RightBound.OutIdx == Skip)
+          locMin.RightBound = null;
+        InsertLocalMinima(locMin);
+        if (!leftBoundIsForward) E = E2;
+      }
+      return true;
+
+    }
+    //------------------------------------------------------------------------------
+
+    public bool AddPaths(Paths ppg, PolyType polyType, bool closed)
+    {
+      bool result = false;
+      for (int i = 0; i < ppg.Count; ++i)
+        if (AddPath(ppg[i], polyType, closed)) result = true;
+      return result;
+    }
+    //------------------------------------------------------------------------------
+
+    internal bool Pt2IsBetweenPt1AndPt3(IntPoint pt1, IntPoint pt2, IntPoint pt3)
+    {
+      if ((pt1 == pt3) || (pt1 == pt2) || (pt3 == pt2)) return false;
+      else if (pt1.X != pt3.X) return (pt2.X > pt1.X) == (pt2.X < pt3.X);
+      else return (pt2.Y > pt1.Y) == (pt2.Y < pt3.Y);
+    }
+    //------------------------------------------------------------------------------
+
+    TEdge RemoveEdge(TEdge e)
+    {
+      //removes e from double_linked_list (but without removing from memory)
+      e.Prev.Next = e.Next;
+      e.Next.Prev = e.Prev;
+      TEdge result = e.Next;
+      e.Prev = null; //flag as removed (see ClipperBase.Clear)
+      return result;
+    }
+    //------------------------------------------------------------------------------
+
+    private void SetDx(TEdge e)
+    {
+      e.Delta.X = (e.Top.X - e.Bot.X);
+      e.Delta.Y = (e.Top.Y - e.Bot.Y);
+      if (e.Delta.Y == 0) e.Dx = horizontal;
+      else e.Dx = (double)(e.Delta.X) / (e.Delta.Y);
+    }
+    //---------------------------------------------------------------------------
+
+    private void InsertLocalMinima(LocalMinima newLm)
+    {
+      if( m_MinimaList == null )
+      {
+        m_MinimaList = newLm;
+      }
+      else if( newLm.Y >= m_MinimaList.Y )
+      {
+        newLm.Next = m_MinimaList;
+        m_MinimaList = newLm;
+      } else
+      {
+        LocalMinima tmpLm = m_MinimaList;
+        while( tmpLm.Next != null  && ( newLm.Y < tmpLm.Next.Y ) )
+          tmpLm = tmpLm.Next;
+        newLm.Next = tmpLm.Next;
+        tmpLm.Next = newLm;
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    internal Boolean PopLocalMinima(cInt Y, out LocalMinima current)
+    {
+        current = m_CurrentLM;
+        if (m_CurrentLM != null && m_CurrentLM.Y == Y)
         {
-            if (m_CurrentLM == null) return;
             m_CurrentLM = m_CurrentLM.Next;
+            return true;
         }
-        //------------------------------------------------------------------------------
+        return false;
+    }
+    //------------------------------------------------------------------------------
 
-        private void ReverseHorizontal(TEdge e)
-        {
-            //swap horizontal edges' top and bottom x's so they follow the natural
-            //progression of the bounds - ie so their xbots will align with the
-            //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
-            Swap(ref e.Top.X, ref e.Bot.X);
+    private void ReverseHorizontal(TEdge e)
+    {
+      //swap horizontal edges' top and bottom x's so they follow the natural
+      //progression of the bounds - ie so their xbots will align with the
+      //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
+      Swap(ref e.Top.X, ref e.Bot.X);
 #if use_xyz
       Swap(ref e.Top.Z, ref e.Bot.Z);
 #endif
-        }
-        //------------------------------------------------------------------------------
+    }
+    //------------------------------------------------------------------------------
 
-        protected virtual void Reset()
-        {
-            m_CurrentLM = m_MinimaList;
-            if (m_CurrentLM == null) return; //ie nothing to process
-
-            //reset all edges ...
-            LocalMinima lm = m_MinimaList;
-            while (lm != null)
-            {
-                TEdge e = lm.LeftBound;
-                if (e != null)
-                {
-                    e.Curr = e.Bot;
-                    e.Side = EdgeSide.esLeft;
-                    e.OutIdx = Unassigned;
-                }
-                e = lm.RightBound;
-                if (e != null)
-                {
-                    e.Curr = e.Bot;
-                    e.Side = EdgeSide.esRight;
-                    e.OutIdx = Unassigned;
-                }
-                lm = lm.Next;
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public static IntRect GetBounds(Paths paths)
-        {
-            int i = 0, cnt = paths.Count;
-            while (i < cnt && paths[i].Count == 0) i++;
-            if (i == cnt) return new IntRect(0, 0, 0, 0);
-            IntRect result = new IntRect();
-            result.left = paths[i][0].X;
-            result.right = result.left;
-            result.top = paths[i][0].Y;
-            result.bottom = result.top;
-            for (; i < cnt; i++)
-                for (int j = 0; j < paths[i].Count; j++)
-                {
-                    if (paths[i][j].X < result.left) result.left = paths[i][j].X;
-                    else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
-                    if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
-                    else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
-                }
-            return result;
-        }
-
-    } //end ClipperBase
-
-    public class Clipper : ClipperBase
+    internal virtual void Reset()
     {
-        //InitOptions that can be passed to the constructor ...
-        public const int ioReverseSolution = 1;
-        public const int ioStrictlySimple = 2;
-        public const int ioPreserveCollinear = 4;
+      m_CurrentLM = m_MinimaList;
+      if (m_CurrentLM == null) return; //ie nothing to process
 
-        private List<OutRec> m_PolyOuts;
-        private ClipType m_ClipType;
-        private Scanbeam m_Scanbeam;
-        private TEdge m_ActiveEdges;
-        private TEdge m_SortedEdges;
-        private List<IntersectNode> m_IntersectList;
-        IComparer<IntersectNode> m_IntersectNodeComparer;
-        private bool m_ExecuteLocked;
-        private PolyFillType m_ClipFillType;
-        private PolyFillType m_SubjFillType;
-        private List<Join> m_Joins;
-        private List<Join> m_GhostJoins;
-        private bool m_UsingPolyTree;
+      //reset all edges ...
+      m_Scanbeam = null;
+      LocalMinima lm = m_MinimaList;
+      while (lm != null)
+      {
+        InsertScanbeam(lm.Y);
+        TEdge e = lm.LeftBound;
+        if (e != null)
+        {
+          e.Curr = e.Bot;
+          e.OutIdx = Unassigned;
+        }
+        e = lm.RightBound;
+        if (e != null)
+        {
+          e.Curr = e.Bot;
+          e.OutIdx = Unassigned;
+        }
+        lm = lm.Next;
+      }
+      m_ActiveEdges = null;
+    }
+    //------------------------------------------------------------------------------
+
+    public static IntRect GetBounds(Paths paths)
+    {
+      int i = 0, cnt = paths.Count;
+      while (i < cnt && paths[i].Count == 0) i++;
+      if (i == cnt) return new IntRect(0,0,0,0);
+      IntRect result = new IntRect();
+      result.left = paths[i][0].X;
+      result.right = result.left;
+      result.top = paths[i][0].Y;
+      result.bottom = result.top;
+      for (; i < cnt; i++)
+        for (int j = 0; j < paths[i].Count; j++)
+        {
+          if (paths[i][j].X < result.left) result.left = paths[i][j].X;
+          else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
+          if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
+          else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
+        }
+      return result;
+    }
+    //------------------------------------------------------------------------------
+
+    internal void InsertScanbeam(cInt Y)
+    {
+        //single-linked list: sorted descending, ignoring dups.
+        if (m_Scanbeam == null)
+        {
+            m_Scanbeam = new Scanbeam();
+            m_Scanbeam.Next = null;
+            m_Scanbeam.Y = Y;
+        }
+        else if (Y > m_Scanbeam.Y)
+        {
+            Scanbeam newSb = new Scanbeam();
+            newSb.Y = Y;
+            newSb.Next = m_Scanbeam;
+            m_Scanbeam = newSb;
+        }
+        else
+        {
+            Scanbeam sb2 = m_Scanbeam;
+            while (sb2.Next != null && (Y <= sb2.Next.Y)) sb2 = sb2.Next;
+            if (Y == sb2.Y) return; //ie ignores duplicates
+            Scanbeam newSb = new Scanbeam();
+            newSb.Y = Y;
+            newSb.Next = sb2.Next;
+            sb2.Next = newSb;
+        }
+    }
+    //------------------------------------------------------------------------------
+
+    internal Boolean PopScanbeam(out cInt Y)
+    {
+        if (m_Scanbeam == null)
+        {
+            Y = 0;
+            return false;
+        }
+        Y = m_Scanbeam.Y;
+        m_Scanbeam = m_Scanbeam.Next;
+        return true;
+    }
+    //------------------------------------------------------------------------------
+
+    internal Boolean LocalMinimaPending()
+    {
+        return (m_CurrentLM != null);
+    }
+    //------------------------------------------------------------------------------
+
+    internal OutRec CreateOutRec()
+    {
+        OutRec result = new OutRec();
+        result.Idx = Unassigned;
+        result.IsHole = false;
+        result.IsOpen = false;
+        result.FirstLeft = null;
+        result.Pts = null;
+        result.BottomPt = null;
+        result.PolyNode = null;
+        m_PolyOuts.Add(result);
+        result.Idx = m_PolyOuts.Count - 1;
+        return result;
+    }
+    //------------------------------------------------------------------------------
+
+    internal void DisposeOutRec(int index)
+    {
+        OutRec outRec = m_PolyOuts[index];
+        outRec.Pts = null;
+        outRec = null;
+        m_PolyOuts[index] = null;
+    }
+    //------------------------------------------------------------------------------
+
+    internal void UpdateEdgeIntoAEL(ref TEdge e)
+    {
+        if (e.NextInLML == null)
+            throw new ClipperException("UpdateEdgeIntoAEL: invalid call");
+        TEdge AelPrev = e.PrevInAEL;
+        TEdge AelNext = e.NextInAEL;
+        e.NextInLML.OutIdx = e.OutIdx;
+        if (AelPrev != null)
+            AelPrev.NextInAEL = e.NextInLML;
+        else m_ActiveEdges = e.NextInLML;
+        if (AelNext != null)
+            AelNext.PrevInAEL = e.NextInLML;
+        e.NextInLML.Side = e.Side;
+        e.NextInLML.WindDelta = e.WindDelta;
+        e.NextInLML.WindCnt = e.WindCnt;
+        e.NextInLML.WindCnt2 = e.WindCnt2;
+        e = e.NextInLML;
+        e.Curr = e.Bot;
+        e.PrevInAEL = AelPrev;
+        e.NextInAEL = AelNext;
+        if (!IsHorizontal(e)) InsertScanbeam(e.Top.Y);
+    }
+    //------------------------------------------------------------------------------
+
+    internal void SwapPositionsInAEL(TEdge edge1, TEdge edge2)
+    {
+        //check that one or other edge hasn't already been removed from AEL ...
+        if (edge1.NextInAEL == edge1.PrevInAEL ||
+          edge2.NextInAEL == edge2.PrevInAEL) return;
+
+        if (edge1.NextInAEL == edge2)
+        {
+            TEdge next = edge2.NextInAEL;
+            if (next != null)
+                next.PrevInAEL = edge1;
+            TEdge prev = edge1.PrevInAEL;
+            if (prev != null)
+                prev.NextInAEL = edge2;
+            edge2.PrevInAEL = prev;
+            edge2.NextInAEL = edge1;
+            edge1.PrevInAEL = edge2;
+            edge1.NextInAEL = next;
+        }
+        else if (edge2.NextInAEL == edge1)
+        {
+            TEdge next = edge1.NextInAEL;
+            if (next != null)
+                next.PrevInAEL = edge2;
+            TEdge prev = edge2.PrevInAEL;
+            if (prev != null)
+                prev.NextInAEL = edge1;
+            edge1.PrevInAEL = prev;
+            edge1.NextInAEL = edge2;
+            edge2.PrevInAEL = edge1;
+            edge2.NextInAEL = next;
+        }
+        else
+        {
+            TEdge next = edge1.NextInAEL;
+            TEdge prev = edge1.PrevInAEL;
+            edge1.NextInAEL = edge2.NextInAEL;
+            if (edge1.NextInAEL != null)
+                edge1.NextInAEL.PrevInAEL = edge1;
+            edge1.PrevInAEL = edge2.PrevInAEL;
+            if (edge1.PrevInAEL != null)
+                edge1.PrevInAEL.NextInAEL = edge1;
+            edge2.NextInAEL = next;
+            if (edge2.NextInAEL != null)
+                edge2.NextInAEL.PrevInAEL = edge2;
+            edge2.PrevInAEL = prev;
+            if (edge2.PrevInAEL != null)
+                edge2.PrevInAEL.NextInAEL = edge2;
+        }
+
+        if (edge1.PrevInAEL == null)
+            m_ActiveEdges = edge1;
+        else if (edge2.PrevInAEL == null)
+            m_ActiveEdges = edge2;
+    }
+    //------------------------------------------------------------------------------
+
+    internal void DeleteFromAEL(TEdge e)
+    {
+        TEdge AelPrev = e.PrevInAEL;
+        TEdge AelNext = e.NextInAEL;
+        if (AelPrev == null && AelNext == null && (e != m_ActiveEdges))
+            return; //already deleted
+        if (AelPrev != null)
+            AelPrev.NextInAEL = AelNext;
+        else m_ActiveEdges = AelNext;
+        if (AelNext != null)
+            AelNext.PrevInAEL = AelPrev;
+        e.NextInAEL = null;
+        e.PrevInAEL = null;
+    }
+    //------------------------------------------------------------------------------
+
+  } //end ClipperBase
+
+  public class Clipper : ClipperBase
+  {
+      //InitOptions that can be passed to the constructor ...
+      public const int ioReverseSolution = 1;
+      public const int ioStrictlySimple = 2;
+      public const int ioPreserveCollinear = 4;
+
+      private ClipType m_ClipType;
+      private Maxima m_Maxima;
+      private TEdge m_SortedEdges;
+      private List<IntersectNode> m_IntersectList;
+      IComparer<IntersectNode> m_IntersectNodeComparer;
+      private bool m_ExecuteLocked;
+      private PolyFillType m_ClipFillType;
+      private PolyFillType m_SubjFillType;
+      private List<Join> m_Joins;
+      private List<Join> m_GhostJoins;
+      private bool m_UsingPolyTree;
 #if use_xyz
       public delegate void ZFillCallback(IntPoint bot1, IntPoint top1, 
         IntPoint bot2, IntPoint top2, ref IntPoint pt);
       public ZFillCallback ZFillFunction { get; set; }
 #endif
-        public Clipper(int InitOptions = 0)
-            : base() //constructor
-        {
-            m_Scanbeam = null;
-            m_ActiveEdges = null;
-            m_SortedEdges = null;
-            m_IntersectList = new List<IntersectNode>();
-            m_IntersectNodeComparer = new MyIntersectNodeSort();
-            m_ExecuteLocked = false;
-            m_UsingPolyTree = false;
-            m_PolyOuts = new List<OutRec>();
-            m_Joins = new List<Join>();
-            m_GhostJoins = new List<Join>();
-            ReverseSolution = (ioReverseSolution & InitOptions) != 0;
-            StrictlySimple = (ioStrictlySimple & InitOptions) != 0;
-            PreserveCollinear = (ioPreserveCollinear & InitOptions) != 0;
+      public Clipper(int InitOptions = 0): base() //constructor
+      {
+          m_Scanbeam = null;
+          m_Maxima = null;
+          m_ActiveEdges = null;
+          m_SortedEdges = null;
+          m_IntersectList = new List<IntersectNode>();
+          m_IntersectNodeComparer = new MyIntersectNodeSort();
+          m_ExecuteLocked = false;
+          m_UsingPolyTree = false;
+          m_PolyOuts = new List<OutRec>();
+          m_Joins = new List<Join>();
+          m_GhostJoins = new List<Join>();
+          ReverseSolution = (ioReverseSolution & InitOptions) != 0;
+          StrictlySimple = (ioStrictlySimple & InitOptions) != 0;
+          PreserveCollinear = (ioPreserveCollinear & InitOptions) != 0;
 #if use_xyz
           ZFillFunction = null;
 #endif
-        }
-        //------------------------------------------------------------------------------
+      }
+      //------------------------------------------------------------------------------
 
-        void DisposeScanbeamList()
-        {
-            while (m_Scanbeam != null)
-            {
-                Scanbeam sb2 = m_Scanbeam.Next;
-                m_Scanbeam = null;
-                m_Scanbeam = sb2;
-            }
-        }
-        //------------------------------------------------------------------------------
+      private void InsertMaxima(cInt X)
+      {
+          //double-linked list: sorted ascending, ignoring dups.
+          Maxima newMax = new Maxima();
+          newMax.X = X;
+          if (m_Maxima == null)
+          {
+              m_Maxima = newMax;
+              m_Maxima.Next = null;
+              m_Maxima.Prev = null;
+          }
+          else if (X < m_Maxima.X)
+          {
+              newMax.Next = m_Maxima;
+              newMax.Prev = null;
+              m_Maxima = newMax;
+          }
+          else
+          {
+              Maxima m = m_Maxima;
+              while (m.Next != null && (X >= m.Next.X)) m = m.Next;
+              if (X == m.X) return; //ie ignores duplicates (& CG to clean up newMax)
+              //insert newMax between m and m.Next ...
+              newMax.Next = m.Next;
+              newMax.Prev = m;
+              if (m.Next != null) m.Next.Prev = newMax;
+              m.Next = newMax;
+          }
+      }
+      //------------------------------------------------------------------------------
 
-        protected override void Reset()
-        {
-            base.Reset();
-            m_Scanbeam = null;
-            m_ActiveEdges = null;
-            m_SortedEdges = null;
-            LocalMinima lm = m_MinimaList;
-            while (lm != null)
-            {
-                InsertScanbeam(lm.Y);
-                lm = lm.Next;
-            }
-        }
-        //------------------------------------------------------------------------------
+      public bool ReverseSolution
+      {
+        get;
+        set;
+      }
+      //------------------------------------------------------------------------------
 
-        public bool ReverseSolution
-        {
-            get;
-            set;
-        }
-        //------------------------------------------------------------------------------
+      public bool StrictlySimple
+      {
+        get; 
+        set;
+      }
+      //------------------------------------------------------------------------------
+       
+      public bool Execute(ClipType clipType, Paths solution, 
+          PolyFillType FillType = PolyFillType.pftEvenOdd)
+      {
+          return Execute(clipType, solution, FillType, FillType);
+      }
+      //------------------------------------------------------------------------------
 
-        public bool StrictlySimple
-        {
-            get;
-            set;
-        }
-        //------------------------------------------------------------------------------
+      public bool Execute(ClipType clipType, PolyTree polytree,
+          PolyFillType FillType = PolyFillType.pftEvenOdd)
+      {
+          return Execute(clipType, polytree, FillType, FillType);
+      }
+      //------------------------------------------------------------------------------
 
-        private void InsertScanbeam(cInt Y)
+      public bool Execute(ClipType clipType, Paths solution,
+          PolyFillType subjFillType, PolyFillType clipFillType)
+      {
+          if (m_ExecuteLocked) return false;
+          if (m_HasOpenPaths) throw 
+            new ClipperException("Error: PolyTree struct is needed for open path clipping.");
+
+          m_ExecuteLocked = true;
+          solution.Clear();
+          m_SubjFillType = subjFillType;
+          m_ClipFillType = clipFillType;
+          m_ClipType = clipType;
+          m_UsingPolyTree = false;
+          bool succeeded;
+          try
+          {
+            succeeded = ExecuteInternal();
+            //build the return polygons ...
+            if (succeeded) BuildResult(solution);
+          }
+          finally
+          {
+            DisposeAllPolyPts();
+            m_ExecuteLocked = false;
+          }
+          return succeeded;
+      }
+      //------------------------------------------------------------------------------
+
+      public bool Execute(ClipType clipType, PolyTree polytree,
+          PolyFillType subjFillType, PolyFillType clipFillType)
+      {
+          if (m_ExecuteLocked) return false;
+          m_ExecuteLocked = true;
+          m_SubjFillType = subjFillType;
+          m_ClipFillType = clipFillType;
+          m_ClipType = clipType;
+          m_UsingPolyTree = true;
+          bool succeeded;
+          try
+          {
+            succeeded = ExecuteInternal();
+            //build the return polygons ...
+            if (succeeded) BuildResult2(polytree);
+          }
+          finally
+          {
+            DisposeAllPolyPts();
+            m_ExecuteLocked = false;
+          }
+          return succeeded;
+      }
+      //------------------------------------------------------------------------------
+
+      internal void FixHoleLinkage(OutRec outRec)
+      {
+        //skip if an outermost polygon or
+        //already already points to the correct FirstLeft ...
+        if (outRec.FirstLeft == null ||
+              (outRec.IsHole != outRec.FirstLeft.IsHole &&
+              outRec.FirstLeft.Pts != null)) return;
+
+        OutRec orfl = outRec.FirstLeft;
+        while (orfl != null && ((orfl.IsHole == outRec.IsHole) || orfl.Pts == null))
+          orfl = orfl.FirstLeft;
+        outRec.FirstLeft = orfl;
+      }
+      //------------------------------------------------------------------------------
+
+      private bool ExecuteInternal()
+      {
+        try
         {
-            if (m_Scanbeam == null)
-            {
-                m_Scanbeam = new Scanbeam();
-                m_Scanbeam.Next = null;
-                m_Scanbeam.Y = Y;
-            }
-            else if (Y > m_Scanbeam.Y)
-            {
-                Scanbeam newSb = new Scanbeam();
-                newSb.Y = Y;
-                newSb.Next = m_Scanbeam;
-                m_Scanbeam = newSb;
-            }
+          Reset();
+          m_SortedEdges = null;
+          m_Maxima = null;
+
+          cInt botY, topY;
+          if (!PopScanbeam(out botY)) return false;
+          InsertLocalMinimaIntoAEL(botY);
+          while (PopScanbeam(out topY) || LocalMinimaPending())
+          {
+            ProcessHorizontals();
+            m_GhostJoins.Clear();
+            if (!ProcessIntersections(topY)) return false;
+            ProcessEdgesAtTopOfScanbeam(topY);
+            botY = topY;
+            InsertLocalMinimaIntoAEL(botY);
+          } 
+
+          //fix orientations ...
+          foreach (OutRec outRec in m_PolyOuts)
+          {
+            if (outRec.Pts == null || outRec.IsOpen) continue;
+            if ((outRec.IsHole ^ ReverseSolution) == (Area(outRec) > 0))
+              ReversePolyPtLinks(outRec.Pts);
+          }
+
+          JoinCommonEdges();
+
+          foreach (OutRec outRec in m_PolyOuts)
+          {
+            if (outRec.Pts == null) 
+                continue;
+            else if (outRec.IsOpen)
+                FixupOutPolyline(outRec);
             else
-            {
-                Scanbeam sb2 = m_Scanbeam;
-                while (sb2.Next != null && (Y <= sb2.Next.Y)) sb2 = sb2.Next;
-                if (Y == sb2.Y) return; //ie ignores duplicates
-                Scanbeam newSb = new Scanbeam();
-                newSb.Y = Y;
-                newSb.Next = sb2.Next;
-                sb2.Next = newSb;
-            }
-        }
-        //------------------------------------------------------------------------------
+                FixupOutPolygon(outRec);
+          }
 
-        public bool Execute(ClipType clipType, Paths solution,
-            PolyFillType subjFillType, PolyFillType clipFillType)
+          if (StrictlySimple) DoSimplePolygons();
+          return true;
+        }
+        //catch { return false; }
+        finally 
         {
-            if (m_ExecuteLocked) return false;
-            if (m_HasOpenPaths) throw
-              new ClipperException("Error: PolyTree struct is need for open path clipping.");
-
-            m_ExecuteLocked = true;
-            solution.Clear();
-            m_SubjFillType = subjFillType;
-            m_ClipFillType = clipFillType;
-            m_ClipType = clipType;
-            m_UsingPolyTree = false;
-            bool succeeded;
-            try
-            {
-                succeeded = ExecuteInternal();
-                //build the return polygons ...
-                if (succeeded) BuildResult(solution);
-            }
-            finally
-            {
-                DisposeAllPolyPts();
-                m_ExecuteLocked = false;
-            }
-            return succeeded;
+          m_Joins.Clear();
+          m_GhostJoins.Clear();          
         }
-        //------------------------------------------------------------------------------
+      }
+      //------------------------------------------------------------------------------
 
-        public bool Execute(ClipType clipType, PolyTree polytree,
-            PolyFillType subjFillType, PolyFillType clipFillType)
-        {
-            if (m_ExecuteLocked) return false;
-            m_ExecuteLocked = true;
-            m_SubjFillType = subjFillType;
-            m_ClipFillType = clipFillType;
-            m_ClipType = clipType;
-            m_UsingPolyTree = true;
-            bool succeeded;
-            try
-            {
-                succeeded = ExecuteInternal();
-                //build the return polygons ...
-                if (succeeded) BuildResult2(polytree);
-            }
-            finally
-            {
-                DisposeAllPolyPts();
-                m_ExecuteLocked = false;
-            }
-            return succeeded;
-        }
-        //------------------------------------------------------------------------------
+      private void DisposeAllPolyPts(){
+        for (int i = 0; i < m_PolyOuts.Count; ++i) DisposeOutRec(i);
+        m_PolyOuts.Clear();
+      }
+      //------------------------------------------------------------------------------
 
-        public bool Execute(ClipType clipType, Paths solution)
-        {
-            return Execute(clipType, solution,
-                PolyFillType.pftEvenOdd, PolyFillType.pftEvenOdd);
-        }
-        //------------------------------------------------------------------------------
+      private void AddJoin(OutPt Op1, OutPt Op2, IntPoint OffPt)
+      {
+        Join j = new Join();
+        j.OutPt1 = Op1;
+        j.OutPt2 = Op2;
+        j.OffPt = OffPt;
+        m_Joins.Add(j);
+      }
+      //------------------------------------------------------------------------------
 
-        public bool Execute(ClipType clipType, PolyTree polytree)
-        {
-            return Execute(clipType, polytree,
-                PolyFillType.pftEvenOdd, PolyFillType.pftEvenOdd);
-        }
-        //------------------------------------------------------------------------------
-
-        internal void FixHoleLinkage(OutRec outRec)
-        {
-            //skip if an outermost polygon or
-            //already already points to the correct FirstLeft ...
-            if (outRec.FirstLeft == null ||
-                  (outRec.IsHole != outRec.FirstLeft.IsHole &&
-                  outRec.FirstLeft.Pts != null)) return;
-
-            OutRec orfl = outRec.FirstLeft;
-            while (orfl != null && ((orfl.IsHole == outRec.IsHole) || orfl.Pts == null))
-                orfl = orfl.FirstLeft;
-            outRec.FirstLeft = orfl;
-        }
-        //------------------------------------------------------------------------------
-
-        private bool ExecuteInternal()
-        {
-            try
-            {
-                Reset();
-                if (m_CurrentLM == null) return false;
-
-                cInt botY = PopScanbeam();
-                do
-                {
-                    InsertLocalMinimaIntoAEL(botY);
-                    m_GhostJoins.Clear();
-                    ProcessHorizontals(false);
-                    if (m_Scanbeam == null) break;
-                    cInt topY = PopScanbeam();
-                    if (!ProcessIntersections(topY)) return false;
-                    ProcessEdgesAtTopOfScanbeam(topY);
-                    botY = topY;
-                } while (m_Scanbeam != null || m_CurrentLM != null);
-
-                //fix orientations ...
-                for (int i = 0; i < m_PolyOuts.Count; i++)
-                {
-                    OutRec outRec = m_PolyOuts[i];
-                    if (outRec.Pts == null || outRec.IsOpen) continue;
-                    if ((outRec.IsHole ^ ReverseSolution) == (Area(outRec) > 0))
-                        ReversePolyPtLinks(outRec.Pts);
-                }
-
-                JoinCommonEdges();
-
-                for (int i = 0; i < m_PolyOuts.Count; i++)
-                {
-                    OutRec outRec = m_PolyOuts[i];
-                    if (outRec.Pts != null && !outRec.IsOpen)
-                        FixupOutPolygon(outRec);
-                }
-
-                if (StrictlySimple) DoSimplePolygons();
-                return true;
-            }
-            //catch { return false; }
-            finally
-            {
-                m_Joins.Clear();
-                m_GhostJoins.Clear();
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        private cInt PopScanbeam()
-        {
-            cInt Y = m_Scanbeam.Y;
-            m_Scanbeam = m_Scanbeam.Next;
-            return Y;
-        }
-        //------------------------------------------------------------------------------
-
-        private void DisposeAllPolyPts()
-        {
-            for (int i = 0; i < m_PolyOuts.Count; ++i) DisposeOutRec(i);
-            m_PolyOuts.Clear();
-        }
-        //------------------------------------------------------------------------------
-
-        void DisposeOutRec(int index)
-        {
-            OutRec outRec = m_PolyOuts[index];
-            outRec.Pts = null;
-            outRec = null;
-            m_PolyOuts[index] = null;
-        }
-        //------------------------------------------------------------------------------
-
-        private void AddJoin(OutPt Op1, OutPt Op2, IntPoint OffPt)
-        {
-            Join j = new Join();
-            j.OutPt1 = Op1;
-            j.OutPt2 = Op2;
-            j.OffPt = OffPt;
-            m_Joins.Add(j);
-        }
-        //------------------------------------------------------------------------------
-
-        private void AddGhostJoin(OutPt Op, IntPoint OffPt)
-        {
-            Join j = new Join();
-            j.OutPt1 = Op;
-            j.OffPt = OffPt;
-            m_GhostJoins.Add(j);
-        }
-        //------------------------------------------------------------------------------
+      private void AddGhostJoin(OutPt Op, IntPoint OffPt)
+      {
+        Join j = new Join();
+        j.OutPt1 = Op;
+        j.OffPt = OffPt;
+        m_GhostJoins.Add(j);
+      }
+      //------------------------------------------------------------------------------
 
 #if use_xyz
       internal void SetZ(ref IntPoint pt, TEdge e1, TEdge e2)
@@ -4417,205 +4923,221 @@ namespace Tiled2Unity.ClipperLib
       //------------------------------------------------------------------------------
 #endif
 
-        private void InsertLocalMinimaIntoAEL(cInt botY)
+      private void InsertLocalMinimaIntoAEL(cInt botY)
+      {
+        LocalMinima lm;
+        while (PopLocalMinima(botY, out lm))
         {
-            while (m_CurrentLM != null && (m_CurrentLM.Y == botY))
+          TEdge lb = lm.LeftBound;
+          TEdge rb = lm.RightBound;
+
+          OutPt Op1 = null;
+          if (lb == null)
+          {
+            InsertEdgeIntoAEL(rb, null);
+            SetWindingCount(rb);
+            if (IsContributing(rb))
+              Op1 = AddOutPt(rb, rb.Bot);
+          }
+          else if (rb == null)
+          {
+            InsertEdgeIntoAEL(lb, null);
+            SetWindingCount(lb);
+            if (IsContributing(lb))
+              Op1 = AddOutPt(lb, lb.Bot);
+            InsertScanbeam(lb.Top.Y);
+          }
+          else
+          {
+            InsertEdgeIntoAEL(lb, null);
+            InsertEdgeIntoAEL(rb, lb);
+            SetWindingCount(lb);
+            rb.WindCnt = lb.WindCnt;
+            rb.WindCnt2 = lb.WindCnt2;
+            if (IsContributing(lb))
+              Op1 = AddLocalMinPoly(lb, rb, lb.Bot);
+            InsertScanbeam(lb.Top.Y);
+          }
+
+          if (rb != null)
+          {
+            if (IsHorizontal(rb))
             {
-                TEdge lb = m_CurrentLM.LeftBound;
-                TEdge rb = m_CurrentLM.RightBound;
-                PopLocalMinima();
-
-                OutPt Op1 = null;
-                if (lb == null)
-                {
-                    InsertEdgeIntoAEL(rb, null);
-                    SetWindingCount(rb);
-                    if (IsContributing(rb))
-                        Op1 = AddOutPt(rb, rb.Bot);
-                }
-                else if (rb == null)
-                {
-                    InsertEdgeIntoAEL(lb, null);
-                    SetWindingCount(lb);
-                    if (IsContributing(lb))
-                        Op1 = AddOutPt(lb, lb.Bot);
-                    InsertScanbeam(lb.Top.Y);
-                }
-                else
-                {
-                    InsertEdgeIntoAEL(lb, null);
-                    InsertEdgeIntoAEL(rb, lb);
-                    SetWindingCount(lb);
-                    rb.WindCnt = lb.WindCnt;
-                    rb.WindCnt2 = lb.WindCnt2;
-                    if (IsContributing(lb))
-                        Op1 = AddLocalMinPoly(lb, rb, lb.Bot);
-                    InsertScanbeam(lb.Top.Y);
-                }
-
-                if (rb != null)
-                {
-                    if (IsHorizontal(rb))
-                        AddEdgeToSEL(rb);
-                    else
-                        InsertScanbeam(rb.Top.Y);
-                }
-
-                if (lb == null || rb == null) continue;
-
-                //if output polygons share an Edge with a horizontal rb, they'll need joining later ...
-                if (Op1 != null && IsHorizontal(rb) &&
-                  m_GhostJoins.Count > 0 && rb.WindDelta != 0)
-                {
-                    for (int i = 0; i < m_GhostJoins.Count; i++)
-                    {
-                        //if the horizontal Rb and a 'ghost' horizontal overlap, then convert
-                        //the 'ghost' join to a real join ready for later ...
-                        Join j = m_GhostJoins[i];
-                        if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
-                            AddJoin(j.OutPt1, Op1, j.OffPt);
-                    }
-                }
-
-                if (lb.OutIdx >= 0 && lb.PrevInAEL != null &&
-                  lb.PrevInAEL.Curr.X == lb.Bot.X &&
-                  lb.PrevInAEL.OutIdx >= 0 &&
-                  SlopesEqual(lb.PrevInAEL, lb, m_UseFullRange) &&
-                  lb.WindDelta != 0 && lb.PrevInAEL.WindDelta != 0)
-                {
-                    OutPt Op2 = AddOutPt(lb.PrevInAEL, lb.Bot);
-                    AddJoin(Op1, Op2, lb.Top);
-                }
-
-                if (lb.NextInAEL != rb)
-                {
-
-                    if (rb.OutIdx >= 0 && rb.PrevInAEL.OutIdx >= 0 &&
-                      SlopesEqual(rb.PrevInAEL, rb, m_UseFullRange) &&
-                      rb.WindDelta != 0 && rb.PrevInAEL.WindDelta != 0)
-                    {
-                        OutPt Op2 = AddOutPt(rb.PrevInAEL, rb.Bot);
-                        AddJoin(Op1, Op2, rb.Top);
-                    }
-
-                    TEdge e = lb.NextInAEL;
-                    if (e != null)
-                        while (e != rb)
-                        {
-                            //nb: For calculating winding counts etc, IntersectEdges() assumes
-                            //that param1 will be to the right of param2 ABOVE the intersection ...
-                            IntersectEdges(rb, e, lb.Curr); //order important here
-                            e = e.NextInAEL;
-                        }
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        private void InsertEdgeIntoAEL(TEdge edge, TEdge startEdge)
-        {
-            if (m_ActiveEdges == null)
-            {
-                edge.PrevInAEL = null;
-                edge.NextInAEL = null;
-                m_ActiveEdges = edge;
-            }
-            else if (startEdge == null && E2InsertsBeforeE1(m_ActiveEdges, edge))
-            {
-                edge.PrevInAEL = null;
-                edge.NextInAEL = m_ActiveEdges;
-                m_ActiveEdges.PrevInAEL = edge;
-                m_ActiveEdges = edge;
+              if (rb.NextInLML != null)
+                InsertScanbeam(rb.NextInLML.Top.Y);
+              AddEdgeToSEL(rb);
             }
             else
+              InsertScanbeam(rb.Top.Y);
+          }
+
+        if (lb == null || rb == null) continue;
+
+          //if output polygons share an Edge with a horizontal rb, they'll need joining later ...
+          if (Op1 != null && IsHorizontal(rb) && 
+            m_GhostJoins.Count > 0 && rb.WindDelta != 0)
+          {
+            for (int i = 0; i < m_GhostJoins.Count; i++)
             {
-                if (startEdge == null) startEdge = m_ActiveEdges;
-                while (startEdge.NextInAEL != null &&
-                  !E2InsertsBeforeE1(startEdge.NextInAEL, edge))
-                    startEdge = startEdge.NextInAEL;
-                edge.NextInAEL = startEdge.NextInAEL;
-                if (startEdge.NextInAEL != null) startEdge.NextInAEL.PrevInAEL = edge;
-                edge.PrevInAEL = startEdge;
-                startEdge.NextInAEL = edge;
+              //if the horizontal Rb and a 'ghost' horizontal overlap, then convert
+              //the 'ghost' join to a real join ready for later ...
+              Join j = m_GhostJoins[i];
+              if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
+                AddJoin(j.OutPt1, Op1, j.OffPt);
             }
+          }
+
+          if (lb.OutIdx >= 0 && lb.PrevInAEL != null &&
+            lb.PrevInAEL.Curr.X == lb.Bot.X &&
+            lb.PrevInAEL.OutIdx >= 0 &&
+            SlopesEqual(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, m_UseFullRange) &&
+            lb.WindDelta != 0 && lb.PrevInAEL.WindDelta != 0)
+          {
+            OutPt Op2 = AddOutPt(lb.PrevInAEL, lb.Bot);
+            AddJoin(Op1, Op2, lb.Top);
+          }
+
+          if( lb.NextInAEL != rb )
+          {
+
+            if (rb.OutIdx >= 0 && rb.PrevInAEL.OutIdx >= 0 &&
+              SlopesEqual(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, m_UseFullRange) &&
+              rb.WindDelta != 0 && rb.PrevInAEL.WindDelta != 0)
+            {
+              OutPt Op2 = AddOutPt(rb.PrevInAEL, rb.Bot);
+              AddJoin(Op1, Op2, rb.Top);
+            }
+
+            TEdge e = lb.NextInAEL;
+            if (e != null)
+              while (e != rb)
+              {
+                //nb: For calculating winding counts etc, IntersectEdges() assumes
+                //that param1 will be to the right of param2 ABOVE the intersection ...
+                IntersectEdges(rb, e, lb.Curr); //order important here
+                e = e.NextInAEL;
+              }
+          }
         }
-        //----------------------------------------------------------------------
+      }
+      //------------------------------------------------------------------------------
 
-        private bool E2InsertsBeforeE1(TEdge e1, TEdge e2)
+      private void InsertEdgeIntoAEL(TEdge edge, TEdge startEdge)
+      {
+        if (m_ActiveEdges == null)
         {
-            if (e2.Curr.X == e1.Curr.X)
-            {
-                if (e2.Top.Y > e1.Top.Y)
-                    return e2.Top.X < TopX(e1, e2.Top.Y);
-                else return e1.Top.X > TopX(e2, e1.Top.Y);
-            }
-            else return e2.Curr.X < e1.Curr.X;
+          edge.PrevInAEL = null;
+          edge.NextInAEL = null;
+          m_ActiveEdges = edge;
         }
-        //------------------------------------------------------------------------------
-
-        private bool IsEvenOddFillType(TEdge edge)
+        else if (startEdge == null && E2InsertsBeforeE1(m_ActiveEdges, edge))
         {
-            if (edge.PolyTyp == PolyType.ptSubject)
-                return m_SubjFillType == PolyFillType.pftEvenOdd;
-            else
-                return m_ClipFillType == PolyFillType.pftEvenOdd;
+          edge.PrevInAEL = null;
+          edge.NextInAEL = m_ActiveEdges;
+          m_ActiveEdges.PrevInAEL = edge;
+          m_ActiveEdges = edge;
         }
-        //------------------------------------------------------------------------------
-
-        private bool IsEvenOddAltFillType(TEdge edge)
+        else
         {
-            if (edge.PolyTyp == PolyType.ptSubject)
-                return m_ClipFillType == PolyFillType.pftEvenOdd;
-            else
-                return m_SubjFillType == PolyFillType.pftEvenOdd;
+          if (startEdge == null) startEdge = m_ActiveEdges;
+          while (startEdge.NextInAEL != null &&
+            !E2InsertsBeforeE1(startEdge.NextInAEL, edge))
+            startEdge = startEdge.NextInAEL;
+          edge.NextInAEL = startEdge.NextInAEL;
+          if (startEdge.NextInAEL != null) startEdge.NextInAEL.PrevInAEL = edge;
+          edge.PrevInAEL = startEdge;
+          startEdge.NextInAEL = edge;
         }
-        //------------------------------------------------------------------------------
+      }
+      //----------------------------------------------------------------------
 
-        private bool IsContributing(TEdge edge)
-        {
-            PolyFillType pft, pft2;
-            if (edge.PolyTyp == PolyType.ptSubject)
-            {
-                pft = m_SubjFillType;
-                pft2 = m_ClipFillType;
-            }
-            else
-            {
-                pft = m_ClipFillType;
-                pft2 = m_SubjFillType;
-            }
+      private bool E2InsertsBeforeE1(TEdge e1, TEdge e2)
+      {
+          if (e2.Curr.X == e1.Curr.X)
+          {
+              if (e2.Top.Y > e1.Top.Y)
+                  return e2.Top.X < TopX(e1, e2.Top.Y);
+              else return e1.Top.X > TopX(e2, e1.Top.Y);
+          }
+          else return e2.Curr.X < e1.Curr.X;
+      }
+      //------------------------------------------------------------------------------
 
-            switch (pft)
-            {
-                case PolyFillType.pftEvenOdd:
-                    //return false if a subj line has been flagged as inside a subj polygon
-                    if (edge.WindDelta == 0 && edge.WindCnt != 1) return false;
-                    break;
-                case PolyFillType.pftNonZero:
-                    if (Math.Abs(edge.WindCnt) != 1) return false;
-                    break;
-                case PolyFillType.pftPositive:
-                    if (edge.WindCnt != 1) return false;
-                    break;
-                default: //PolyFillType.pftNegative
-                    if (edge.WindCnt != -1) return false;
-                    break;
-            }
+      private bool IsEvenOddFillType(TEdge edge) 
+      {
+        if (edge.PolyTyp == PolyType.ptSubject)
+            return m_SubjFillType == PolyFillType.pftEvenOdd; 
+        else
+            return m_ClipFillType == PolyFillType.pftEvenOdd;
+      }
+      //------------------------------------------------------------------------------
 
-            switch (m_ClipType)
-            {
-                case ClipType.ctIntersection:
-                    switch (pft2)
-                    {
-                        case PolyFillType.pftEvenOdd:
-                        case PolyFillType.pftNonZero:
-                            return (edge.WindCnt2 != 0);
-                        case PolyFillType.pftPositive:
-                            return (edge.WindCnt2 > 0);
-                        default:
-                            return (edge.WindCnt2 < 0);
-                    }
-                case ClipType.ctUnion:
+      private bool IsEvenOddAltFillType(TEdge edge) 
+      {
+        if (edge.PolyTyp == PolyType.ptSubject)
+            return m_ClipFillType == PolyFillType.pftEvenOdd; 
+        else
+            return m_SubjFillType == PolyFillType.pftEvenOdd;
+      }
+      //------------------------------------------------------------------------------
+
+      private bool IsContributing(TEdge edge)
+      {
+          PolyFillType pft, pft2;
+          if (edge.PolyTyp == PolyType.ptSubject)
+          {
+              pft = m_SubjFillType;
+              pft2 = m_ClipFillType;
+          }
+          else
+          {
+              pft = m_ClipFillType;
+              pft2 = m_SubjFillType;
+          }
+
+          switch (pft)
+          {
+              case PolyFillType.pftEvenOdd:
+                  //return false if a subj line has been flagged as inside a subj polygon
+                  if (edge.WindDelta == 0 && edge.WindCnt != 1) return false;
+                  break;
+              case PolyFillType.pftNonZero:
+                  if (Math.Abs(edge.WindCnt) != 1) return false;
+                  break;
+              case PolyFillType.pftPositive:
+                  if (edge.WindCnt != 1) return false;
+                  break;
+              default: //PolyFillType.pftNegative
+                  if (edge.WindCnt != -1) return false; 
+                  break;
+          }
+
+          switch (m_ClipType)
+          {
+            case ClipType.ctIntersection:
+                switch (pft2)
+                {
+                    case PolyFillType.pftEvenOdd:
+                    case PolyFillType.pftNonZero:
+                        return (edge.WindCnt2 != 0);
+                    case PolyFillType.pftPositive:
+                        return (edge.WindCnt2 > 0);
+                    default:
+                        return (edge.WindCnt2 < 0);
+                }
+            case ClipType.ctUnion:
+                switch (pft2)
+                {
+                    case PolyFillType.pftEvenOdd:
+                    case PolyFillType.pftNonZero:
+                        return (edge.WindCnt2 == 0);
+                    case PolyFillType.pftPositive:
+                        return (edge.WindCnt2 <= 0);
+                    default:
+                        return (edge.WindCnt2 >= 0);
+                }
+            case ClipType.ctDifference:
+                if (edge.PolyTyp == PolyType.ptSubject)
                     switch (pft2)
                     {
                         case PolyFillType.pftEvenOdd:
@@ -4626,685 +5148,640 @@ namespace Tiled2Unity.ClipperLib
                         default:
                             return (edge.WindCnt2 >= 0);
                     }
-                case ClipType.ctDifference:
-                    if (edge.PolyTyp == PolyType.ptSubject)
-                        switch (pft2)
-                        {
-                            case PolyFillType.pftEvenOdd:
-                            case PolyFillType.pftNonZero:
-                                return (edge.WindCnt2 == 0);
-                            case PolyFillType.pftPositive:
-                                return (edge.WindCnt2 <= 0);
-                            default:
-                                return (edge.WindCnt2 >= 0);
-                        }
-                    else
-                        switch (pft2)
-                        {
-                            case PolyFillType.pftEvenOdd:
-                            case PolyFillType.pftNonZero:
-                                return (edge.WindCnt2 != 0);
-                            case PolyFillType.pftPositive:
-                                return (edge.WindCnt2 > 0);
-                            default:
-                                return (edge.WindCnt2 < 0);
-                        }
-                case ClipType.ctXor:
-                    if (edge.WindDelta == 0) //XOr always contributing unless open
-                        switch (pft2)
-                        {
-                            case PolyFillType.pftEvenOdd:
-                            case PolyFillType.pftNonZero:
-                                return (edge.WindCnt2 == 0);
-                            case PolyFillType.pftPositive:
-                                return (edge.WindCnt2 <= 0);
-                            default:
-                                return (edge.WindCnt2 >= 0);
-                        }
-                    else
-                        return true;
-            }
-            return true;
-        }
-        //------------------------------------------------------------------------------
-
-        private void SetWindingCount(TEdge edge)
-        {
-            TEdge e = edge.PrevInAEL;
-            //find the edge of the same polytype that immediately preceeds 'edge' in AEL
-            while (e != null && ((e.PolyTyp != edge.PolyTyp) || (e.WindDelta == 0))) e = e.PrevInAEL;
-            if (e == null)
-            {
-                edge.WindCnt = (edge.WindDelta == 0 ? 1 : edge.WindDelta);
-                edge.WindCnt2 = 0;
-                e = m_ActiveEdges; //ie get ready to calc WindCnt2
-            }
-            else if (edge.WindDelta == 0 && m_ClipType != ClipType.ctUnion)
-            {
-                edge.WindCnt = 1;
-                edge.WindCnt2 = e.WindCnt2;
-                e = e.NextInAEL; //ie get ready to calc WindCnt2
-            }
-            else if (IsEvenOddFillType(edge))
-            {
-                //EvenOdd filling ...
-                if (edge.WindDelta == 0)
-                {
-                    //are we inside a subj polygon ...
-                    bool Inside = true;
-                    TEdge e2 = e.PrevInAEL;
-                    while (e2 != null)
+                else
+                    switch (pft2)
                     {
-                        if (e2.PolyTyp == e.PolyTyp && e2.WindDelta != 0)
-                            Inside = !Inside;
-                        e2 = e2.PrevInAEL;
+                        case PolyFillType.pftEvenOdd:
+                        case PolyFillType.pftNonZero:
+                            return (edge.WindCnt2 != 0);
+                        case PolyFillType.pftPositive:
+                            return (edge.WindCnt2 > 0);
+                        default:
+                            return (edge.WindCnt2 < 0);
                     }
-                    edge.WindCnt = (Inside ? 0 : 1);
-                }
+            case ClipType.ctXor:
+                if (edge.WindDelta == 0) //XOr always contributing unless open
+                  switch (pft2)
+                  {
+                    case PolyFillType.pftEvenOdd:
+                    case PolyFillType.pftNonZero:
+                      return (edge.WindCnt2 == 0);
+                    case PolyFillType.pftPositive:
+                      return (edge.WindCnt2 <= 0);
+                    default:
+                      return (edge.WindCnt2 >= 0);
+                  }
                 else
-                {
-                    edge.WindCnt = edge.WindDelta;
-                }
-                edge.WindCnt2 = e.WindCnt2;
-                e = e.NextInAEL; //ie get ready to calc WindCnt2
-            }
-            else
-            {
-                //nonZero, Positive or Negative filling ...
-                if (e.WindCnt * e.WindDelta < 0)
-                {
-                    //prev edge is 'decreasing' WindCount (WC) toward zero
-                    //so we're outside the previous polygon ...
-                    if (Math.Abs(e.WindCnt) > 1)
-                    {
-                        //outside prev poly but still inside another.
-                        //when reversing direction of prev poly use the same WC 
-                        if (e.WindDelta * edge.WindDelta < 0) edge.WindCnt = e.WindCnt;
-                        //otherwise continue to 'decrease' WC ...
-                        else edge.WindCnt = e.WindCnt + edge.WindDelta;
-                    }
-                    else
-                        //now outside all polys of same polytype so set own WC ...
-                        edge.WindCnt = (edge.WindDelta == 0 ? 1 : edge.WindDelta);
-                }
-                else
-                {
-                    //prev edge is 'increasing' WindCount (WC) away from zero
-                    //so we're inside the previous polygon ...
-                    if (edge.WindDelta == 0)
-                        edge.WindCnt = (e.WindCnt < 0 ? e.WindCnt - 1 : e.WindCnt + 1);
-                    //if wind direction is reversing prev then use same WC
-                    else if (e.WindDelta * edge.WindDelta < 0)
-                        edge.WindCnt = e.WindCnt;
-                    //otherwise add to WC ...
-                    else edge.WindCnt = e.WindCnt + edge.WindDelta;
-                }
-                edge.WindCnt2 = e.WindCnt2;
-                e = e.NextInAEL; //ie get ready to calc WindCnt2
-            }
+                  return true;
+          }
+          return true;
+      }
+      //------------------------------------------------------------------------------
 
-            //update WindCnt2 ...
-            if (IsEvenOddAltFillType(edge))
-            {
-                //EvenOdd filling ...
-                while (e != edge)
-                {
-                    if (e.WindDelta != 0)
-                        edge.WindCnt2 = (edge.WindCnt2 == 0 ? 1 : 0);
-                    e = e.NextInAEL;
-                }
-            }
-            else
-            {
-                //nonZero, Positive or Negative filling ...
-                while (e != edge)
-                {
-                    edge.WindCnt2 += e.WindDelta;
-                    e = e.NextInAEL;
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        private void AddEdgeToSEL(TEdge edge)
+      private void SetWindingCount(TEdge edge)
+      {
+        TEdge e = edge.PrevInAEL;
+        //find the edge of the same polytype that immediately preceeds 'edge' in AEL
+        while (e != null && ((e.PolyTyp != edge.PolyTyp) || (e.WindDelta == 0))) e = e.PrevInAEL;
+        if (e == null)
         {
-            //SEL pointers in PEdge are reused to build a list of horizontal edges.
-            //However, we don't need to worry about order with horizontal edge processing.
-            if (m_SortedEdges == null)
-            {
-                m_SortedEdges = edge;
-                edge.PrevInSEL = null;
-                edge.NextInSEL = null;
-            }
-            else
-            {
-                edge.NextInSEL = m_SortedEdges;
-                edge.PrevInSEL = null;
-                m_SortedEdges.PrevInSEL = edge;
-                m_SortedEdges = edge;
-            }
+          PolyFillType pft;
+          pft = (edge.PolyTyp == PolyType.ptSubject ? m_SubjFillType : m_ClipFillType);
+          if (edge.WindDelta == 0) edge.WindCnt = (pft == PolyFillType.pftNegative ? -1 : 1);
+          else edge.WindCnt = edge.WindDelta;
+          edge.WindCnt2 = 0;
+          e = m_ActiveEdges; //ie get ready to calc WindCnt2
         }
-        //------------------------------------------------------------------------------
-
-        private void CopyAELToSEL()
+        else if (edge.WindDelta == 0 && m_ClipType != ClipType.ctUnion)
         {
-            TEdge e = m_ActiveEdges;
-            m_SortedEdges = e;
-            while (e != null)
-            {
-                e.PrevInSEL = e.PrevInAEL;
-                e.NextInSEL = e.NextInAEL;
-                e = e.NextInAEL;
-            }
+          edge.WindCnt = 1;
+          edge.WindCnt2 = e.WindCnt2;
+          e = e.NextInAEL; //ie get ready to calc WindCnt2
         }
-        //------------------------------------------------------------------------------
-
-        private void SwapPositionsInAEL(TEdge edge1, TEdge edge2)
+        else if (IsEvenOddFillType(edge))
         {
-            //check that one or other edge hasn't already been removed from AEL ...
-            if (edge1.NextInAEL == edge1.PrevInAEL ||
-              edge2.NextInAEL == edge2.PrevInAEL) return;
-
-            if (edge1.NextInAEL == edge2)
-            {
-                TEdge next = edge2.NextInAEL;
-                if (next != null)
-                    next.PrevInAEL = edge1;
-                TEdge prev = edge1.PrevInAEL;
-                if (prev != null)
-                    prev.NextInAEL = edge2;
-                edge2.PrevInAEL = prev;
-                edge2.NextInAEL = edge1;
-                edge1.PrevInAEL = edge2;
-                edge1.NextInAEL = next;
-            }
-            else if (edge2.NextInAEL == edge1)
-            {
-                TEdge next = edge1.NextInAEL;
-                if (next != null)
-                    next.PrevInAEL = edge2;
-                TEdge prev = edge2.PrevInAEL;
-                if (prev != null)
-                    prev.NextInAEL = edge1;
-                edge1.PrevInAEL = prev;
-                edge1.NextInAEL = edge2;
-                edge2.PrevInAEL = edge1;
-                edge2.NextInAEL = next;
-            }
-            else
-            {
-                TEdge next = edge1.NextInAEL;
-                TEdge prev = edge1.PrevInAEL;
-                edge1.NextInAEL = edge2.NextInAEL;
-                if (edge1.NextInAEL != null)
-                    edge1.NextInAEL.PrevInAEL = edge1;
-                edge1.PrevInAEL = edge2.PrevInAEL;
-                if (edge1.PrevInAEL != null)
-                    edge1.PrevInAEL.NextInAEL = edge1;
-                edge2.NextInAEL = next;
-                if (edge2.NextInAEL != null)
-                    edge2.NextInAEL.PrevInAEL = edge2;
-                edge2.PrevInAEL = prev;
-                if (edge2.PrevInAEL != null)
-                    edge2.PrevInAEL.NextInAEL = edge2;
-            }
-
-            if (edge1.PrevInAEL == null)
-                m_ActiveEdges = edge1;
-            else if (edge2.PrevInAEL == null)
-                m_ActiveEdges = edge2;
-        }
-        //------------------------------------------------------------------------------
-
-        private void SwapPositionsInSEL(TEdge edge1, TEdge edge2)
-        {
-            if (edge1.NextInSEL == null && edge1.PrevInSEL == null)
-                return;
-            if (edge2.NextInSEL == null && edge2.PrevInSEL == null)
-                return;
-
-            if (edge1.NextInSEL == edge2)
-            {
-                TEdge next = edge2.NextInSEL;
-                if (next != null)
-                    next.PrevInSEL = edge1;
-                TEdge prev = edge1.PrevInSEL;
-                if (prev != null)
-                    prev.NextInSEL = edge2;
-                edge2.PrevInSEL = prev;
-                edge2.NextInSEL = edge1;
-                edge1.PrevInSEL = edge2;
-                edge1.NextInSEL = next;
-            }
-            else if (edge2.NextInSEL == edge1)
-            {
-                TEdge next = edge1.NextInSEL;
-                if (next != null)
-                    next.PrevInSEL = edge2;
-                TEdge prev = edge2.PrevInSEL;
-                if (prev != null)
-                    prev.NextInSEL = edge1;
-                edge1.PrevInSEL = prev;
-                edge1.NextInSEL = edge2;
-                edge2.PrevInSEL = edge1;
-                edge2.NextInSEL = next;
-            }
-            else
-            {
-                TEdge next = edge1.NextInSEL;
-                TEdge prev = edge1.PrevInSEL;
-                edge1.NextInSEL = edge2.NextInSEL;
-                if (edge1.NextInSEL != null)
-                    edge1.NextInSEL.PrevInSEL = edge1;
-                edge1.PrevInSEL = edge2.PrevInSEL;
-                if (edge1.PrevInSEL != null)
-                    edge1.PrevInSEL.NextInSEL = edge1;
-                edge2.NextInSEL = next;
-                if (edge2.NextInSEL != null)
-                    edge2.NextInSEL.PrevInSEL = edge2;
-                edge2.PrevInSEL = prev;
-                if (edge2.PrevInSEL != null)
-                    edge2.PrevInSEL.NextInSEL = edge2;
-            }
-
-            if (edge1.PrevInSEL == null)
-                m_SortedEdges = edge1;
-            else if (edge2.PrevInSEL == null)
-                m_SortedEdges = edge2;
-        }
-        //------------------------------------------------------------------------------
-
-
-        private void AddLocalMaxPoly(TEdge e1, TEdge e2, IntPoint pt)
-        {
-            AddOutPt(e1, pt);
-            if (e2.WindDelta == 0) AddOutPt(e2, pt);
-            if (e1.OutIdx == e2.OutIdx)
-            {
-                e1.OutIdx = Unassigned;
-                e2.OutIdx = Unassigned;
-            }
-            else if (e1.OutIdx < e2.OutIdx)
-                AppendPolygon(e1, e2);
-            else
-                AppendPolygon(e2, e1);
-        }
-        //------------------------------------------------------------------------------
-
-        private OutPt AddLocalMinPoly(TEdge e1, TEdge e2, IntPoint pt)
-        {
-            OutPt result;
-            TEdge e, prevE;
-            if (IsHorizontal(e2) || (e1.Dx > e2.Dx))
-            {
-                result = AddOutPt(e1, pt);
-                e2.OutIdx = e1.OutIdx;
-                e1.Side = EdgeSide.esLeft;
-                e2.Side = EdgeSide.esRight;
-                e = e1;
-                if (e.PrevInAEL == e2)
-                    prevE = e2.PrevInAEL;
-                else
-                    prevE = e.PrevInAEL;
-            }
-            else
-            {
-                result = AddOutPt(e2, pt);
-                e1.OutIdx = e2.OutIdx;
-                e1.Side = EdgeSide.esRight;
-                e2.Side = EdgeSide.esLeft;
-                e = e2;
-                if (e.PrevInAEL == e1)
-                    prevE = e1.PrevInAEL;
-                else
-                    prevE = e.PrevInAEL;
-            }
-
-            if (prevE != null && prevE.OutIdx >= 0 &&
-                (TopX(prevE, pt.Y) == TopX(e, pt.Y)) &&
-                SlopesEqual(e, prevE, m_UseFullRange) &&
-                (e.WindDelta != 0) && (prevE.WindDelta != 0))
-            {
-                OutPt outPt = AddOutPt(prevE, pt);
-                AddJoin(result, outPt, e.Top);
-            }
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        private OutRec CreateOutRec()
-        {
-            OutRec result = new OutRec();
-            result.Idx = Unassigned;
-            result.IsHole = false;
-            result.IsOpen = false;
-            result.FirstLeft = null;
-            result.Pts = null;
-            result.BottomPt = null;
-            result.PolyNode = null;
-            m_PolyOuts.Add(result);
-            result.Idx = m_PolyOuts.Count - 1;
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        private OutPt AddOutPt(TEdge e, IntPoint pt)
-        {
-            bool ToFront = (e.Side == EdgeSide.esLeft);
-            if (e.OutIdx < 0)
-            {
-                OutRec outRec = CreateOutRec();
-                outRec.IsOpen = (e.WindDelta == 0);
-                OutPt newOp = new OutPt();
-                outRec.Pts = newOp;
-                newOp.Idx = outRec.Idx;
-                newOp.Pt = pt;
-                newOp.Next = newOp;
-                newOp.Prev = newOp;
-                if (!outRec.IsOpen)
-                    SetHoleState(e, outRec);
-                e.OutIdx = outRec.Idx; //nb: do this after SetZ !
-                return newOp;
-            }
-            else
-            {
-                OutRec outRec = m_PolyOuts[e.OutIdx];
-                //OutRec.Pts is the 'Left-most' point & OutRec.Pts.Prev is the 'Right-most'
-                OutPt op = outRec.Pts;
-                if (ToFront && pt == op.Pt) return op;
-                else if (!ToFront && pt == op.Prev.Pt) return op.Prev;
-
-                OutPt newOp = new OutPt();
-                newOp.Idx = outRec.Idx;
-                newOp.Pt = pt;
-                newOp.Next = op;
-                newOp.Prev = op.Prev;
-                newOp.Prev.Next = newOp;
-                op.Prev = newOp;
-                if (ToFront) outRec.Pts = newOp;
-                return newOp;
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        internal void SwapPoints(ref IntPoint pt1, ref IntPoint pt2)
-        {
-            IntPoint tmp = new IntPoint(pt1);
-            pt1 = pt2;
-            pt2 = tmp;
-        }
-        //------------------------------------------------------------------------------
-
-        private bool HorzSegmentsOverlap(cInt seg1a, cInt seg1b, cInt seg2a, cInt seg2b)
-        {
-            if (seg1a > seg1b) Swap(ref seg1a, ref seg1b);
-            if (seg2a > seg2b) Swap(ref seg2a, ref seg2b);
-            return (seg1a < seg2b) && (seg2a < seg1b);
-        }
-        //------------------------------------------------------------------------------
-
-        private void SetHoleState(TEdge e, OutRec outRec)
-        {
-            bool isHole = false;
+          //EvenOdd filling ...
+          if (edge.WindDelta == 0)
+          {
+            //are we inside a subj polygon ...
+            bool Inside = true;
             TEdge e2 = e.PrevInAEL;
             while (e2 != null)
             {
-                if (e2.OutIdx >= 0 && e2.WindDelta != 0)
-                {
-                    isHole = !isHole;
-                    if (outRec.FirstLeft == null)
-                        outRec.FirstLeft = m_PolyOuts[e2.OutIdx];
-                }
-                e2 = e2.PrevInAEL;
+              if (e2.PolyTyp == e.PolyTyp && e2.WindDelta != 0)
+                Inside = !Inside;
+              e2 = e2.PrevInAEL;
             }
-            if (isHole)
-                outRec.IsHole = true;
+            edge.WindCnt = (Inside ? 0 : 1);
+          }
+          else
+          {
+            edge.WindCnt = edge.WindDelta;
+          }
+          edge.WindCnt2 = e.WindCnt2;
+          e = e.NextInAEL; //ie get ready to calc WindCnt2
         }
-        //------------------------------------------------------------------------------
-
-        private double GetDx(IntPoint pt1, IntPoint pt2)
+        else
         {
-            if (pt1.Y == pt2.Y) return horizontal;
-            else return (double)(pt2.X - pt1.X) / (pt2.Y - pt1.Y);
-        }
-        //---------------------------------------------------------------------------
-
-        private bool FirstIsBottomPt(OutPt btmPt1, OutPt btmPt2)
-        {
-            OutPt p = btmPt1.Prev;
-            while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Prev;
-            double dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
-            p = btmPt1.Next;
-            while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Next;
-            double dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
-
-            p = btmPt2.Prev;
-            while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Prev;
-            double dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
-            p = btmPt2.Next;
-            while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Next;
-            double dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
-            return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
-        }
-        //------------------------------------------------------------------------------
-
-        private OutPt GetBottomPt(OutPt pp)
-        {
-            OutPt dups = null;
-            OutPt p = pp.Next;
-            while (p != pp)
+          //nonZero, Positive or Negative filling ...
+          if (e.WindCnt * e.WindDelta < 0)
+          {
+            //prev edge is 'decreasing' WindCount (WC) toward zero
+            //so we're outside the previous polygon ...
+            if (Math.Abs(e.WindCnt) > 1)
             {
-                if (p.Pt.Y > pp.Pt.Y)
-                {
-                    pp = p;
-                    dups = null;
-                }
-                else if (p.Pt.Y == pp.Pt.Y && p.Pt.X <= pp.Pt.X)
-                {
-                    if (p.Pt.X < pp.Pt.X)
-                    {
-                        dups = null;
-                        pp = p;
-                    }
-                    else
-                    {
-                        if (p.Next != pp && p.Prev != pp) dups = p;
-                    }
-                }
-                p = p.Next;
-            }
-            if (dups != null)
-            {
-                //there appears to be at least 2 vertices at bottomPt so ...
-                while (dups != p)
-                {
-                    if (!FirstIsBottomPt(p, dups)) pp = dups;
-                    dups = dups.Next;
-                    while (dups.Pt != pp.Pt) dups = dups.Next;
-                }
-            }
-            return pp;
-        }
-        //------------------------------------------------------------------------------
-
-        private OutRec GetLowermostRec(OutRec outRec1, OutRec outRec2)
-        {
-            //work out which polygon fragment has the correct hole state ...
-            if (outRec1.BottomPt == null)
-                outRec1.BottomPt = GetBottomPt(outRec1.Pts);
-            if (outRec2.BottomPt == null)
-                outRec2.BottomPt = GetBottomPt(outRec2.Pts);
-            OutPt bPt1 = outRec1.BottomPt;
-            OutPt bPt2 = outRec2.BottomPt;
-            if (bPt1.Pt.Y > bPt2.Pt.Y) return outRec1;
-            else if (bPt1.Pt.Y < bPt2.Pt.Y) return outRec2;
-            else if (bPt1.Pt.X < bPt2.Pt.X) return outRec1;
-            else if (bPt1.Pt.X > bPt2.Pt.X) return outRec2;
-            else if (bPt1.Next == bPt1) return outRec2;
-            else if (bPt2.Next == bPt2) return outRec1;
-            else if (FirstIsBottomPt(bPt1, bPt2)) return outRec1;
-            else return outRec2;
-        }
-        //------------------------------------------------------------------------------
-
-        bool Param1RightOfParam2(OutRec outRec1, OutRec outRec2)
-        {
-            do
-            {
-                outRec1 = outRec1.FirstLeft;
-                if (outRec1 == outRec2) return true;
-            } while (outRec1 != null);
-            return false;
-        }
-        //------------------------------------------------------------------------------
-
-        private OutRec GetOutRec(int idx)
-        {
-            OutRec outrec = m_PolyOuts[idx];
-            while (outrec != m_PolyOuts[outrec.Idx])
-                outrec = m_PolyOuts[outrec.Idx];
-            return outrec;
-        }
-        //------------------------------------------------------------------------------
-
-        private void AppendPolygon(TEdge e1, TEdge e2)
-        {
-            //get the start and ends of both output polygons ...
-            OutRec outRec1 = m_PolyOuts[e1.OutIdx];
-            OutRec outRec2 = m_PolyOuts[e2.OutIdx];
-
-            OutRec holeStateRec;
-            if (Param1RightOfParam2(outRec1, outRec2))
-                holeStateRec = outRec2;
-            else if (Param1RightOfParam2(outRec2, outRec1))
-                holeStateRec = outRec1;
-            else
-                holeStateRec = GetLowermostRec(outRec1, outRec2);
-
-            OutPt p1_lft = outRec1.Pts;
-            OutPt p1_rt = p1_lft.Prev;
-            OutPt p2_lft = outRec2.Pts;
-            OutPt p2_rt = p2_lft.Prev;
-
-            EdgeSide side;
-            //join e2 poly onto e1 poly and delete pointers to e2 ...
-            if (e1.Side == EdgeSide.esLeft)
-            {
-                if (e2.Side == EdgeSide.esLeft)
-                {
-                    //z y x a b c
-                    ReversePolyPtLinks(p2_lft);
-                    p2_lft.Next = p1_lft;
-                    p1_lft.Prev = p2_lft;
-                    p1_rt.Next = p2_rt;
-                    p2_rt.Prev = p1_rt;
-                    outRec1.Pts = p2_rt;
-                }
-                else
-                {
-                    //x y z a b c
-                    p2_rt.Next = p1_lft;
-                    p1_lft.Prev = p2_rt;
-                    p2_lft.Prev = p1_rt;
-                    p1_rt.Next = p2_lft;
-                    outRec1.Pts = p2_lft;
-                }
-                side = EdgeSide.esLeft;
+              //outside prev poly but still inside another.
+              //when reversing direction of prev poly use the same WC 
+              if (e.WindDelta * edge.WindDelta < 0) edge.WindCnt = e.WindCnt;
+              //otherwise continue to 'decrease' WC ...
+              else edge.WindCnt = e.WindCnt + edge.WindDelta;
             }
             else
+              //now outside all polys of same polytype so set own WC ...
+              edge.WindCnt = (edge.WindDelta == 0 ? 1 : edge.WindDelta);
+          }
+          else
+          {
+            //prev edge is 'increasing' WindCount (WC) away from zero
+            //so we're inside the previous polygon ...
+            if (edge.WindDelta == 0)
+              edge.WindCnt = (e.WindCnt < 0 ? e.WindCnt - 1 : e.WindCnt + 1);
+            //if wind direction is reversing prev then use same WC
+            else if (e.WindDelta * edge.WindDelta < 0)
+              edge.WindCnt = e.WindCnt;
+            //otherwise add to WC ...
+            else edge.WindCnt = e.WindCnt + edge.WindDelta;
+          }
+          edge.WindCnt2 = e.WindCnt2;
+          e = e.NextInAEL; //ie get ready to calc WindCnt2
+        }
+
+        //update WindCnt2 ...
+        if (IsEvenOddAltFillType(edge))
+        {
+          //EvenOdd filling ...
+          while (e != edge)
+          {
+            if (e.WindDelta != 0)
+              edge.WindCnt2 = (edge.WindCnt2 == 0 ? 1 : 0);
+            e = e.NextInAEL;
+          }
+        }
+        else
+        {
+          //nonZero, Positive or Negative filling ...
+          while (e != edge)
+          {
+            edge.WindCnt2 += e.WindDelta;
+            e = e.NextInAEL;
+          }
+        }
+      }
+      //------------------------------------------------------------------------------
+
+      private void AddEdgeToSEL(TEdge edge)
+      {
+        //SEL pointers in PEdge are use to build transient lists of horizontal edges.
+        //However, since we don't need to worry about processing order, all additions
+        //are made to the front of the list ...
+        if (m_SortedEdges == null)
+        {
+            m_SortedEdges = edge;
+            edge.PrevInSEL = null;
+            edge.NextInSEL = null;
+        }
+        else
+        {
+            edge.NextInSEL = m_SortedEdges;
+            edge.PrevInSEL = null;
+            m_SortedEdges.PrevInSEL = edge;
+            m_SortedEdges = edge;
+        }
+      }
+      //------------------------------------------------------------------------------
+
+      internal Boolean PopEdgeFromSEL(out TEdge e)
+      {
+        //Pop edge from front of SEL (ie SEL is a FILO list)
+        e = m_SortedEdges;
+        if (e == null) return false;
+        TEdge oldE = e;
+        m_SortedEdges = e.NextInSEL;
+        if (m_SortedEdges != null) m_SortedEdges.PrevInSEL = null;
+        oldE.NextInSEL = null;
+        oldE.PrevInSEL = null;
+        return true;
+      }
+      //------------------------------------------------------------------------------
+     
+      private void CopyAELToSEL()
+      {
+          TEdge e = m_ActiveEdges;
+          m_SortedEdges = e;
+          while (e != null)
+          {
+              e.PrevInSEL = e.PrevInAEL;
+              e.NextInSEL = e.NextInAEL;
+              e = e.NextInAEL;
+          }
+      }
+      //------------------------------------------------------------------------------
+
+      private void SwapPositionsInSEL(TEdge edge1, TEdge edge2)
+      {
+          if (edge1.NextInSEL == null && edge1.PrevInSEL == null)
+              return;
+          if (edge2.NextInSEL == null && edge2.PrevInSEL == null)
+              return;
+
+          if (edge1.NextInSEL == edge2)
+          {
+              TEdge next = edge2.NextInSEL;
+              if (next != null)
+                  next.PrevInSEL = edge1;
+              TEdge prev = edge1.PrevInSEL;
+              if (prev != null)
+                  prev.NextInSEL = edge2;
+              edge2.PrevInSEL = prev;
+              edge2.NextInSEL = edge1;
+              edge1.PrevInSEL = edge2;
+              edge1.NextInSEL = next;
+          }
+          else if (edge2.NextInSEL == edge1)
+          {
+              TEdge next = edge1.NextInSEL;
+              if (next != null)
+                  next.PrevInSEL = edge2;
+              TEdge prev = edge2.PrevInSEL;
+              if (prev != null)
+                  prev.NextInSEL = edge1;
+              edge1.PrevInSEL = prev;
+              edge1.NextInSEL = edge2;
+              edge2.PrevInSEL = edge1;
+              edge2.NextInSEL = next;
+          }
+          else
+          {
+              TEdge next = edge1.NextInSEL;
+              TEdge prev = edge1.PrevInSEL;
+              edge1.NextInSEL = edge2.NextInSEL;
+              if (edge1.NextInSEL != null)
+                  edge1.NextInSEL.PrevInSEL = edge1;
+              edge1.PrevInSEL = edge2.PrevInSEL;
+              if (edge1.PrevInSEL != null)
+                  edge1.PrevInSEL.NextInSEL = edge1;
+              edge2.NextInSEL = next;
+              if (edge2.NextInSEL != null)
+                  edge2.NextInSEL.PrevInSEL = edge2;
+              edge2.PrevInSEL = prev;
+              if (edge2.PrevInSEL != null)
+                  edge2.PrevInSEL.NextInSEL = edge2;
+          }
+
+          if (edge1.PrevInSEL == null)
+              m_SortedEdges = edge1;
+          else if (edge2.PrevInSEL == null)
+              m_SortedEdges = edge2;
+      }
+      //------------------------------------------------------------------------------
+
+
+      private void AddLocalMaxPoly(TEdge e1, TEdge e2, IntPoint pt)
+      {
+          AddOutPt(e1, pt);
+          if (e2.WindDelta == 0) AddOutPt(e2, pt);
+          if (e1.OutIdx == e2.OutIdx)
+          {
+              e1.OutIdx = Unassigned;
+              e2.OutIdx = Unassigned;
+          }
+          else if (e1.OutIdx < e2.OutIdx) 
+              AppendPolygon(e1, e2);
+          else 
+              AppendPolygon(e2, e1);
+      }
+      //------------------------------------------------------------------------------
+
+      private OutPt AddLocalMinPoly(TEdge e1, TEdge e2, IntPoint pt)
+      {
+        OutPt result;
+        TEdge e, prevE;
+        if (IsHorizontal(e2) || (e1.Dx > e2.Dx))
+        {
+          result = AddOutPt(e1, pt);
+          e2.OutIdx = e1.OutIdx;
+          e1.Side = EdgeSide.esLeft;
+          e2.Side = EdgeSide.esRight;
+          e = e1;
+          if (e.PrevInAEL == e2)
+            prevE = e2.PrevInAEL; 
+          else
+            prevE = e.PrevInAEL;
+        }
+        else
+        {
+          result = AddOutPt(e2, pt);
+          e1.OutIdx = e2.OutIdx;
+          e1.Side = EdgeSide.esRight;
+          e2.Side = EdgeSide.esLeft;
+          e = e2;
+          if (e.PrevInAEL == e1)
+              prevE = e1.PrevInAEL;
+          else
+              prevE = e.PrevInAEL;
+        }
+
+        if (prevE != null && prevE.OutIdx >= 0)
+        {
+          cInt xPrev = TopX(prevE, pt.Y);
+          cInt xE = TopX(e, pt.Y);
+          if ((xPrev == xE) && (e.WindDelta != 0) && (prevE.WindDelta != 0) &&
+            SlopesEqual(new IntPoint(xPrev, pt.Y), prevE.Top, new IntPoint(xE, pt.Y), e.Top, m_UseFullRange))
+          {
+            OutPt outPt = AddOutPt(prevE, pt);
+            AddJoin(result, outPt, e.Top);
+          }
+        }
+        return result;
+      }
+      //------------------------------------------------------------------------------
+
+      private OutPt AddOutPt(TEdge e, IntPoint pt)
+      {
+          if (e.OutIdx < 0)
+          {
+              OutRec outRec = CreateOutRec();
+              outRec.IsOpen = (e.WindDelta == 0);
+              OutPt newOp = new OutPt();
+              outRec.Pts = newOp;
+              newOp.Idx = outRec.Idx;
+              newOp.Pt = pt;
+              newOp.Next = newOp;
+              newOp.Prev = newOp;
+              if (!outRec.IsOpen)
+                  SetHoleState(e, outRec);
+              e.OutIdx = outRec.Idx; //nb: do this after SetZ !
+              return newOp;
+          }
+          else
+          {
+              OutRec outRec = m_PolyOuts[e.OutIdx];
+              //OutRec.Pts is the 'Left-most' point & OutRec.Pts.Prev is the 'Right-most'
+              OutPt op = outRec.Pts;
+              bool ToFront = (e.Side == EdgeSide.esLeft);
+              if (ToFront && pt == op.Pt) return op;
+              else if (!ToFront && pt == op.Prev.Pt) return op.Prev;
+
+              OutPt newOp = new OutPt();
+              newOp.Idx = outRec.Idx;
+              newOp.Pt = pt;
+              newOp.Next = op;
+              newOp.Prev = op.Prev;
+              newOp.Prev.Next = newOp;
+              op.Prev = newOp;
+              if (ToFront) outRec.Pts = newOp;
+              return newOp;
+          }
+      }
+      //------------------------------------------------------------------------------
+
+      private OutPt GetLastOutPt(TEdge e)
+      {
+        OutRec outRec = m_PolyOuts[e.OutIdx];
+        if (e.Side == EdgeSide.esLeft) 
+            return outRec.Pts;
+        else
+            return outRec.Pts.Prev;
+      }
+      //------------------------------------------------------------------------------
+
+      internal void SwapPoints(ref IntPoint pt1, ref IntPoint pt2)
+      {
+          IntPoint tmp = new IntPoint(pt1);
+          pt1 = pt2;
+          pt2 = tmp;
+      }
+      //------------------------------------------------------------------------------
+
+      private bool HorzSegmentsOverlap(cInt seg1a, cInt seg1b, cInt seg2a, cInt seg2b)
+      {
+        if (seg1a > seg1b) Swap(ref seg1a, ref seg1b);
+        if (seg2a > seg2b) Swap(ref seg2a, ref seg2b);
+        return (seg1a < seg2b) && (seg2a < seg1b);
+      }
+      //------------------------------------------------------------------------------
+  
+      private void SetHoleState(TEdge e, OutRec outRec)
+      {
+        TEdge e2 = e.PrevInAEL;
+        TEdge eTmp = null;  
+        while (e2 != null)
+          {
+            if (e2.OutIdx >= 0 && e2.WindDelta != 0) 
             {
-                if (e2.Side == EdgeSide.esRight)
-                {
-                    //a b c z y x
-                    ReversePolyPtLinks(p2_lft);
-                    p1_rt.Next = p2_rt;
-                    p2_rt.Prev = p1_rt;
-                    p2_lft.Next = p1_lft;
-                    p1_lft.Prev = p2_lft;
-                }
-                else
-                {
-                    //a b c x y z
-                    p1_rt.Next = p2_lft;
-                    p2_lft.Prev = p1_rt;
-                    p1_lft.Prev = p2_rt;
-                    p2_rt.Next = p1_lft;
-                }
-                side = EdgeSide.esRight;
+              if (eTmp == null)
+                eTmp = e2;
+              else if (eTmp.OutIdx == e2.OutIdx)
+                eTmp = null; //paired               
             }
+            e2 = e2.PrevInAEL;
+          }
 
-            outRec1.BottomPt = null;
-            if (holeStateRec == outRec2)
+        if (eTmp == null)
+        {
+          outRec.FirstLeft = null;
+          outRec.IsHole = false;
+        }
+        else
+        {
+          outRec.FirstLeft = m_PolyOuts[eTmp.OutIdx];
+          outRec.IsHole = !outRec.FirstLeft.IsHole;
+        }
+      }
+      //------------------------------------------------------------------------------
+
+      private double GetDx(IntPoint pt1, IntPoint pt2)
+      {
+          if (pt1.Y == pt2.Y) return horizontal;
+          else return (double)(pt2.X - pt1.X) / (pt2.Y - pt1.Y);
+      }
+      //---------------------------------------------------------------------------
+
+      private bool FirstIsBottomPt(OutPt btmPt1, OutPt btmPt2)
+      {
+        OutPt p = btmPt1.Prev;
+        while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Prev;
+        double dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+        p = btmPt1.Next;
+        while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Next;
+        double dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+
+        p = btmPt2.Prev;
+        while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Prev;
+        double dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+        p = btmPt2.Next;
+        while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Next;
+        double dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+
+        if (Math.Max(dx1p, dx1n) == Math.Max(dx2p, dx2n) &&
+          Math.Min(dx1p, dx1n) == Math.Min(dx2p, dx2n))
+          return Area(btmPt1) > 0; //if otherwise identical use orientation
+        else
+          return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
+      }
+      //------------------------------------------------------------------------------
+
+      private OutPt GetBottomPt(OutPt pp)
+      {
+        OutPt dups = null;
+        OutPt p = pp.Next;
+        while (p != pp)
+        {
+          if (p.Pt.Y > pp.Pt.Y)
+          {
+            pp = p;
+            dups = null;
+          }
+          else if (p.Pt.Y == pp.Pt.Y && p.Pt.X <= pp.Pt.X)
+          {
+            if (p.Pt.X < pp.Pt.X)
             {
-                if (outRec2.FirstLeft != outRec1)
-                    outRec1.FirstLeft = outRec2.FirstLeft;
-                outRec1.IsHole = outRec2.IsHole;
+                dups = null;
+                pp = p;
+            } else
+            {
+              if (p.Next != pp && p.Prev != pp) dups = p;
             }
-            outRec2.Pts = null;
-            outRec2.BottomPt = null;
-
-            outRec2.FirstLeft = outRec1;
-
-            int OKIdx = e1.OutIdx;
-            int ObsoleteIdx = e2.OutIdx;
-
-            e1.OutIdx = Unassigned; //nb: safe because we only get here via AddLocalMaxPoly
-            e2.OutIdx = Unassigned;
-
-            TEdge e = m_ActiveEdges;
-            while (e != null)
-            {
-                if (e.OutIdx == ObsoleteIdx)
-                {
-                    e.OutIdx = OKIdx;
-                    e.Side = side;
-                    break;
-                }
-                e = e.NextInAEL;
-            }
-            outRec2.Idx = outRec1.Idx;
+          }
+          p = p.Next;
         }
-        //------------------------------------------------------------------------------
-
-        private void ReversePolyPtLinks(OutPt pp)
+        if (dups != null)
         {
-            if (pp == null) return;
-            OutPt pp1;
-            OutPt pp2;
-            pp1 = pp;
-            do
-            {
-                pp2 = pp1.Next;
-                pp1.Next = pp1.Prev;
-                pp1.Prev = pp2;
-                pp1 = pp2;
-            } while (pp1 != pp);
+          //there appears to be at least 2 vertices at bottomPt so ...
+          while (dups != p)
+          {
+            if (!FirstIsBottomPt(p, dups)) pp = dups;
+            dups = dups.Next;
+            while (dups.Pt != pp.Pt) dups = dups.Next;
+          }
         }
-        //------------------------------------------------------------------------------
+        return pp;
+      }
+      //------------------------------------------------------------------------------
 
-        private static void SwapSides(TEdge edge1, TEdge edge2)
+      private OutRec GetLowermostRec(OutRec outRec1, OutRec outRec2)
+      {
+          //work out which polygon fragment has the correct hole state ...
+          if (outRec1.BottomPt == null) 
+              outRec1.BottomPt = GetBottomPt(outRec1.Pts);
+          if (outRec2.BottomPt == null) 
+              outRec2.BottomPt = GetBottomPt(outRec2.Pts);
+          OutPt bPt1 = outRec1.BottomPt;
+          OutPt bPt2 = outRec2.BottomPt;
+          if (bPt1.Pt.Y > bPt2.Pt.Y) return outRec1;
+          else if (bPt1.Pt.Y < bPt2.Pt.Y) return outRec2;
+          else if (bPt1.Pt.X < bPt2.Pt.X) return outRec1;
+          else if (bPt1.Pt.X > bPt2.Pt.X) return outRec2;
+          else if (bPt1.Next == bPt1) return outRec2;
+          else if (bPt2.Next == bPt2) return outRec1;
+          else if (FirstIsBottomPt(bPt1, bPt2)) return outRec1;
+          else return outRec2;
+      }
+      //------------------------------------------------------------------------------
+
+      bool OutRec1RightOfOutRec2(OutRec outRec1, OutRec outRec2)
+      {
+          do
+          {
+              outRec1 = outRec1.FirstLeft;
+              if (outRec1 == outRec2) return true;
+          } while (outRec1 != null);
+          return false;
+      }
+      //------------------------------------------------------------------------------
+
+      private OutRec GetOutRec(int idx)
+      {
+        OutRec outrec = m_PolyOuts[idx];
+        while (outrec != m_PolyOuts[outrec.Idx])
+          outrec = m_PolyOuts[outrec.Idx];
+        return outrec;
+      }
+      //------------------------------------------------------------------------------
+
+      private void AppendPolygon(TEdge e1, TEdge e2)
+      {
+        OutRec outRec1 = m_PolyOuts[e1.OutIdx];
+        OutRec outRec2 = m_PolyOuts[e2.OutIdx];
+
+        OutRec holeStateRec;
+        if (OutRec1RightOfOutRec2(outRec1, outRec2)) 
+            holeStateRec = outRec2;
+        else if (OutRec1RightOfOutRec2(outRec2, outRec1))
+            holeStateRec = outRec1;
+        else
+            holeStateRec = GetLowermostRec(outRec1, outRec2);
+
+        //get the start and ends of both output polygons and
+        //join E2 poly onto E1 poly and delete pointers to E2 ...
+        OutPt p1_lft = outRec1.Pts;
+        OutPt p1_rt = p1_lft.Prev;
+        OutPt p2_lft = outRec2.Pts;
+        OutPt p2_rt = p2_lft.Prev;
+
+        //join e2 poly onto e1 poly and delete pointers to e2 ...
+        if(  e1.Side == EdgeSide.esLeft )
         {
-            EdgeSide side = edge1.Side;
-            edge1.Side = edge2.Side;
-            edge2.Side = side;
+          if (e2.Side == EdgeSide.esLeft)
+          {
+            //z y x a b c
+            ReversePolyPtLinks(p2_lft);
+            p2_lft.Next = p1_lft;
+            p1_lft.Prev = p2_lft;
+            p1_rt.Next = p2_rt;
+            p2_rt.Prev = p1_rt;
+            outRec1.Pts = p2_rt;
+          } else
+          {
+            //x y z a b c
+            p2_rt.Next = p1_lft;
+            p1_lft.Prev = p2_rt;
+            p2_lft.Prev = p1_rt;
+            p1_rt.Next = p2_lft;
+            outRec1.Pts = p2_lft;
+          }
+        } else
+        {
+          if (e2.Side == EdgeSide.esRight)
+          {
+            //a b c z y x
+            ReversePolyPtLinks( p2_lft );
+            p1_rt.Next = p2_rt;
+            p2_rt.Prev = p1_rt;
+            p2_lft.Next = p1_lft;
+            p1_lft.Prev = p2_lft;
+          } else
+          {
+            //a b c x y z
+            p1_rt.Next = p2_lft;
+            p2_lft.Prev = p1_rt;
+            p1_lft.Prev = p2_rt;
+            p2_rt.Next = p1_lft;
+          }
         }
-        //------------------------------------------------------------------------------
 
-        private static void SwapPolyIndexes(TEdge edge1, TEdge edge2)
+        outRec1.BottomPt = null; 
+        if (holeStateRec == outRec2)
         {
-            int outIdx = edge1.OutIdx;
-            edge1.OutIdx = edge2.OutIdx;
-            edge2.OutIdx = outIdx;
+            if (outRec2.FirstLeft != outRec1)
+                outRec1.FirstLeft = outRec2.FirstLeft;
+            outRec1.IsHole = outRec2.IsHole;
         }
-        //------------------------------------------------------------------------------
+        outRec2.Pts = null;
+        outRec2.BottomPt = null;
 
-        private void IntersectEdges(TEdge e1, TEdge e2, IntPoint pt)
+        outRec2.FirstLeft = outRec1;
+
+        int OKIdx = e1.OutIdx;
+        int ObsoleteIdx = e2.OutIdx;
+
+        e1.OutIdx = Unassigned; //nb: safe because we only get here via AddLocalMaxPoly
+        e2.OutIdx = Unassigned;
+
+        TEdge e = m_ActiveEdges;
+        while( e != null )
         {
-            //e1 will be to the left of e2 BELOW the intersection. Therefore e1 is before
-            //e2 in AEL except when e1 is being inserted at the intersection point ...
+          if( e.OutIdx == ObsoleteIdx )
+          {
+            e.OutIdx = OKIdx;
+            e.Side = e1.Side;
+            break;
+          }
+          e = e.NextInAEL;
+        }
+        outRec2.Idx = outRec1.Idx;
+      }
+      //------------------------------------------------------------------------------
 
-            bool e1Contributing = (e1.OutIdx >= 0);
-            bool e2Contributing = (e2.OutIdx >= 0);
+      private void ReversePolyPtLinks(OutPt pp)
+      {
+          if (pp == null) return;
+          OutPt pp1;
+          OutPt pp2;
+          pp1 = pp;
+          do
+          {
+              pp2 = pp1.Next;
+              pp1.Next = pp1.Prev;
+              pp1.Prev = pp2;
+              pp1 = pp2;
+          } while (pp1 != pp);
+      }
+      //------------------------------------------------------------------------------
+
+      private static void SwapSides(TEdge edge1, TEdge edge2)
+      {
+          EdgeSide side = edge1.Side;
+          edge1.Side = edge2.Side;
+          edge2.Side = side;
+      }
+      //------------------------------------------------------------------------------
+
+      private static void SwapPolyIndexes(TEdge edge1, TEdge edge2)
+      {
+          int outIdx = edge1.OutIdx;
+          edge1.OutIdx = edge2.OutIdx;
+          edge2.OutIdx = outIdx;
+      }
+      //------------------------------------------------------------------------------
+
+      private void IntersectEdges(TEdge e1, TEdge e2, IntPoint pt)
+      {
+          //e1 will be to the left of e2 BELOW the intersection. Therefore e1 is before
+          //e2 in AEL except when e1 is being inserted at the intersection point ...
+
+        bool e1Contributing = (e1.OutIdx >= 0);
+        bool e2Contributing = (e2.OutIdx >= 0);
 
 #if use_xyz
           SetZ(ref pt, e1, e2);
@@ -5357,740 +5834,768 @@ namespace Tiled2Unity.ClipperLib
           }
 #endif
 
-            //update winding counts...
-            //assumes that e1 will be to the Right of e2 ABOVE the intersection
-            if (e1.PolyTyp == e2.PolyTyp)
+          //update winding counts...
+  //assumes that e1 will be to the Right of e2 ABOVE the intersection
+          if (e1.PolyTyp == e2.PolyTyp)
+          {
+              if (IsEvenOddFillType(e1))
+              {
+                  int oldE1WindCnt = e1.WindCnt;
+                  e1.WindCnt = e2.WindCnt;
+                  e2.WindCnt = oldE1WindCnt;
+              }
+              else
+              {
+                  if (e1.WindCnt + e2.WindDelta == 0) e1.WindCnt = -e1.WindCnt;
+                  else e1.WindCnt += e2.WindDelta;
+                  if (e2.WindCnt - e1.WindDelta == 0) e2.WindCnt = -e2.WindCnt;
+                  else e2.WindCnt -= e1.WindDelta;
+              }
+          }
+          else
+          {
+              if (!IsEvenOddFillType(e2)) e1.WindCnt2 += e2.WindDelta;
+              else e1.WindCnt2 = (e1.WindCnt2 == 0) ? 1 : 0;
+              if (!IsEvenOddFillType(e1)) e2.WindCnt2 -= e1.WindDelta;
+              else e2.WindCnt2 = (e2.WindCnt2 == 0) ? 1 : 0;
+          }
+
+          PolyFillType e1FillType, e2FillType, e1FillType2, e2FillType2;
+          if (e1.PolyTyp == PolyType.ptSubject)
+          {
+              e1FillType = m_SubjFillType;
+              e1FillType2 = m_ClipFillType;
+          }
+          else
+          {
+              e1FillType = m_ClipFillType;
+              e1FillType2 = m_SubjFillType;
+          }
+          if (e2.PolyTyp == PolyType.ptSubject)
+          {
+              e2FillType = m_SubjFillType;
+              e2FillType2 = m_ClipFillType;
+          }
+          else
+          {
+              e2FillType = m_ClipFillType;
+              e2FillType2 = m_SubjFillType;
+          }
+
+          int e1Wc, e2Wc;
+          switch (e1FillType)
+          {
+              case PolyFillType.pftPositive: e1Wc = e1.WindCnt; break;
+              case PolyFillType.pftNegative: e1Wc = -e1.WindCnt; break;
+              default: e1Wc = Math.Abs(e1.WindCnt); break;
+          }
+          switch (e2FillType)
+          {
+              case PolyFillType.pftPositive: e2Wc = e2.WindCnt; break;
+              case PolyFillType.pftNegative: e2Wc = -e2.WindCnt; break;
+              default: e2Wc = Math.Abs(e2.WindCnt); break;
+          }
+
+          if (e1Contributing && e2Contributing)
+          {
+            if ((e1Wc != 0 && e1Wc != 1) || (e2Wc != 0 && e2Wc != 1) ||
+              (e1.PolyTyp != e2.PolyTyp && m_ClipType != ClipType.ctXor))
             {
-                if (IsEvenOddFillType(e1))
-                {
-                    int oldE1WindCnt = e1.WindCnt;
-                    e1.WindCnt = e2.WindCnt;
-                    e2.WindCnt = oldE1WindCnt;
-                }
-                else
-                {
-                    if (e1.WindCnt + e2.WindDelta == 0) e1.WindCnt = -e1.WindCnt;
-                    else e1.WindCnt += e2.WindDelta;
-                    if (e2.WindCnt - e1.WindDelta == 0) e2.WindCnt = -e2.WindCnt;
-                    else e2.WindCnt -= e1.WindDelta;
-                }
+              AddLocalMaxPoly(e1, e2, pt);
             }
             else
             {
-                if (!IsEvenOddFillType(e2)) e1.WindCnt2 += e2.WindDelta;
-                else e1.WindCnt2 = (e1.WindCnt2 == 0) ? 1 : 0;
-                if (!IsEvenOddFillType(e1)) e2.WindCnt2 -= e1.WindDelta;
-                else e2.WindCnt2 = (e2.WindCnt2 == 0) ? 1 : 0;
+              AddOutPt(e1, pt);
+              AddOutPt(e2, pt);
+              SwapSides(e1, e2);
+              SwapPolyIndexes(e1, e2);
             }
+          }
+          else if (e1Contributing)
+          {
+              if (e2Wc == 0 || e2Wc == 1)
+              {
+                AddOutPt(e1, pt);
+                SwapSides(e1, e2);
+                SwapPolyIndexes(e1, e2);
+              }
 
-            PolyFillType e1FillType, e2FillType, e1FillType2, e2FillType2;
-            if (e1.PolyTyp == PolyType.ptSubject)
-            {
-                e1FillType = m_SubjFillType;
-                e1FillType2 = m_ClipFillType;
-            }
-            else
-            {
-                e1FillType = m_ClipFillType;
-                e1FillType2 = m_SubjFillType;
-            }
-            if (e2.PolyTyp == PolyType.ptSubject)
-            {
-                e2FillType = m_SubjFillType;
-                e2FillType2 = m_ClipFillType;
-            }
-            else
-            {
-                e2FillType = m_ClipFillType;
-                e2FillType2 = m_SubjFillType;
-            }
+          }
+          else if (e2Contributing)
+          {
+              if (e1Wc == 0 || e1Wc == 1)
+              {
+                AddOutPt(e2, pt);
+                SwapSides(e1, e2);
+                SwapPolyIndexes(e1, e2);
+              }
+          }
+          else if ( (e1Wc == 0 || e1Wc == 1) && (e2Wc == 0 || e2Wc == 1))
+          {
+              //neither edge is currently contributing ...
+              cInt e1Wc2, e2Wc2;
+              switch (e1FillType2)
+              {
+                  case PolyFillType.pftPositive: e1Wc2 = e1.WindCnt2; break;
+                  case PolyFillType.pftNegative: e1Wc2 = -e1.WindCnt2; break;
+                  default: e1Wc2 = Math.Abs(e1.WindCnt2); break;
+              }
+              switch (e2FillType2)
+              {
+                  case PolyFillType.pftPositive: e2Wc2 = e2.WindCnt2; break;
+                  case PolyFillType.pftNegative: e2Wc2 = -e2.WindCnt2; break;
+                  default: e2Wc2 = Math.Abs(e2.WindCnt2); break;
+              }
 
-            int e1Wc, e2Wc;
-            switch (e1FillType)
-            {
-                case PolyFillType.pftPositive: e1Wc = e1.WindCnt; break;
-                case PolyFillType.pftNegative: e1Wc = -e1.WindCnt; break;
-                default: e1Wc = Math.Abs(e1.WindCnt); break;
-            }
-            switch (e2FillType)
-            {
-                case PolyFillType.pftPositive: e2Wc = e2.WindCnt; break;
-                case PolyFillType.pftNegative: e2Wc = -e2.WindCnt; break;
-                default: e2Wc = Math.Abs(e2.WindCnt); break;
-            }
-
-            if (e1Contributing && e2Contributing)
-            {
-                if ((e1Wc != 0 && e1Wc != 1) || (e2Wc != 0 && e2Wc != 1) ||
-                  (e1.PolyTyp != e2.PolyTyp && m_ClipType != ClipType.ctXor))
+              if (e1.PolyTyp != e2.PolyTyp)
+              {
+                AddLocalMinPoly(e1, e2, pt);
+              }
+              else if (e1Wc == 1 && e2Wc == 1)
+                switch (m_ClipType)
                 {
-                    AddLocalMaxPoly(e1, e2, pt);
-                }
-                else
-                {
-                    AddOutPt(e1, pt);
-                    AddOutPt(e2, pt);
-                    SwapSides(e1, e2);
-                    SwapPolyIndexes(e1, e2);
-                }
-            }
-            else if (e1Contributing)
-            {
-                if (e2Wc == 0 || e2Wc == 1)
-                {
-                    AddOutPt(e1, pt);
-                    SwapSides(e1, e2);
-                    SwapPolyIndexes(e1, e2);
-                }
-
-            }
-            else if (e2Contributing)
-            {
-                if (e1Wc == 0 || e1Wc == 1)
-                {
-                    AddOutPt(e2, pt);
-                    SwapSides(e1, e2);
-                    SwapPolyIndexes(e1, e2);
-                }
-            }
-            else if ((e1Wc == 0 || e1Wc == 1) && (e2Wc == 0 || e2Wc == 1))
-            {
-                //neither edge is currently contributing ...
-                cInt e1Wc2, e2Wc2;
-                switch (e1FillType2)
-                {
-                    case PolyFillType.pftPositive: e1Wc2 = e1.WindCnt2; break;
-                    case PolyFillType.pftNegative: e1Wc2 = -e1.WindCnt2; break;
-                    default: e1Wc2 = Math.Abs(e1.WindCnt2); break;
-                }
-                switch (e2FillType2)
-                {
-                    case PolyFillType.pftPositive: e2Wc2 = e2.WindCnt2; break;
-                    case PolyFillType.pftNegative: e2Wc2 = -e2.WindCnt2; break;
-                    default: e2Wc2 = Math.Abs(e2.WindCnt2); break;
-                }
-
-                if (e1.PolyTyp != e2.PolyTyp)
-                {
-                    AddLocalMinPoly(e1, e2, pt);
-                }
-                else if (e1Wc == 1 && e2Wc == 1)
-                    switch (m_ClipType)
-                    {
-                        case ClipType.ctIntersection:
-                            if (e1Wc2 > 0 && e2Wc2 > 0)
-                                AddLocalMinPoly(e1, e2, pt);
-                            break;
-                        case ClipType.ctUnion:
-                            if (e1Wc2 <= 0 && e2Wc2 <= 0)
-                                AddLocalMinPoly(e1, e2, pt);
-                            break;
-                        case ClipType.ctDifference:
-                            if (((e1.PolyTyp == PolyType.ptClip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
-                                ((e1.PolyTyp == PolyType.ptSubject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
-                                AddLocalMinPoly(e1, e2, pt);
-                            break;
-                        case ClipType.ctXor:
-                            AddLocalMinPoly(e1, e2, pt);
-                            break;
-                    }
-                else
-                    SwapSides(e1, e2);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        private void DeleteFromAEL(TEdge e)
-        {
-            TEdge AelPrev = e.PrevInAEL;
-            TEdge AelNext = e.NextInAEL;
-            if (AelPrev == null && AelNext == null && (e != m_ActiveEdges))
-                return; //already deleted
-            if (AelPrev != null)
-                AelPrev.NextInAEL = AelNext;
-            else m_ActiveEdges = AelNext;
-            if (AelNext != null)
-                AelNext.PrevInAEL = AelPrev;
-            e.NextInAEL = null;
-            e.PrevInAEL = null;
-        }
-        //------------------------------------------------------------------------------
-
-        private void DeleteFromSEL(TEdge e)
-        {
-            TEdge SelPrev = e.PrevInSEL;
-            TEdge SelNext = e.NextInSEL;
-            if (SelPrev == null && SelNext == null && (e != m_SortedEdges))
-                return; //already deleted
-            if (SelPrev != null)
-                SelPrev.NextInSEL = SelNext;
-            else m_SortedEdges = SelNext;
-            if (SelNext != null)
-                SelNext.PrevInSEL = SelPrev;
-            e.NextInSEL = null;
-            e.PrevInSEL = null;
-        }
-        //------------------------------------------------------------------------------
-
-        private void UpdateEdgeIntoAEL(ref TEdge e)
-        {
-            if (e.NextInLML == null)
-                throw new ClipperException("UpdateEdgeIntoAEL: invalid call");
-            TEdge AelPrev = e.PrevInAEL;
-            TEdge AelNext = e.NextInAEL;
-            e.NextInLML.OutIdx = e.OutIdx;
-            if (AelPrev != null)
-                AelPrev.NextInAEL = e.NextInLML;
-            else m_ActiveEdges = e.NextInLML;
-            if (AelNext != null)
-                AelNext.PrevInAEL = e.NextInLML;
-            e.NextInLML.Side = e.Side;
-            e.NextInLML.WindDelta = e.WindDelta;
-            e.NextInLML.WindCnt = e.WindCnt;
-            e.NextInLML.WindCnt2 = e.WindCnt2;
-            e = e.NextInLML;
-            e.Curr = e.Bot;
-            e.PrevInAEL = AelPrev;
-            e.NextInAEL = AelNext;
-            if (!IsHorizontal(e)) InsertScanbeam(e.Top.Y);
-        }
-        //------------------------------------------------------------------------------
-
-        private void ProcessHorizontals(bool isTopOfScanbeam)
-        {
-            TEdge horzEdge = m_SortedEdges;
-            while (horzEdge != null)
-            {
-                DeleteFromSEL(horzEdge);
-                ProcessHorizontal(horzEdge, isTopOfScanbeam);
-                horzEdge = m_SortedEdges;
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        void GetHorzDirection(TEdge HorzEdge, out Direction Dir, out cInt Left, out cInt Right)
-        {
-            if (HorzEdge.Bot.X < HorzEdge.Top.X)
-            {
-                Left = HorzEdge.Bot.X;
-                Right = HorzEdge.Top.X;
-                Dir = Direction.dLeftToRight;
-            }
-            else
-            {
-                Left = HorzEdge.Top.X;
-                Right = HorzEdge.Bot.X;
-                Dir = Direction.dRightToLeft;
-            }
-        }
-        //------------------------------------------------------------------------
-
-        private void ProcessHorizontal(TEdge horzEdge, bool isTopOfScanbeam)
-        {
-            Direction dir;
-            cInt horzLeft, horzRight;
-
-            GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
-
-            TEdge eLastHorz = horzEdge, eMaxPair = null;
-            while (eLastHorz.NextInLML != null && IsHorizontal(eLastHorz.NextInLML))
-                eLastHorz = eLastHorz.NextInLML;
-            if (eLastHorz.NextInLML == null)
-                eMaxPair = GetMaximaPair(eLastHorz);
-
-            for (; ; )
-            {
-                bool IsLastHorz = (horzEdge == eLastHorz);
-                TEdge e = GetNextInAEL(horzEdge, dir);
-                while (e != null)
-                {
-                    //Break if we've got to the end of an intermediate horizontal edge ...
-                    //nb: Smaller Dx's are to the right of larger Dx's ABOVE the horizontal.
-                    if (e.Curr.X == horzEdge.Top.X && horzEdge.NextInLML != null &&
-                      e.Dx < horzEdge.NextInLML.Dx) break;
-
-                    TEdge eNext = GetNextInAEL(e, dir); //saves eNext for later
-
-                    if ((dir == Direction.dLeftToRight && e.Curr.X <= horzRight) ||
-                      (dir == Direction.dRightToLeft && e.Curr.X >= horzLeft))
-                    {
-                        //so far we're still in range of the horizontal Edge  but make sure
-                        //we're at the last of consec. horizontals when matching with eMaxPair
-                        if (e == eMaxPair && IsLastHorz)
-                        {
-                            if (horzEdge.OutIdx >= 0)
-                            {
-                                OutPt op1 = AddOutPt(horzEdge, horzEdge.Top);
-                                TEdge eNextHorz = m_SortedEdges;
-                                while (eNextHorz != null)
-                                {
-                                    if (eNextHorz.OutIdx >= 0 &&
-                                      HorzSegmentsOverlap(horzEdge.Bot.X,
-                                      horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
-                                    {
-                                        OutPt op2 = AddOutPt(eNextHorz, eNextHorz.Bot);
-                                        AddJoin(op2, op1, eNextHorz.Top);
-                                    }
-                                    eNextHorz = eNextHorz.NextInSEL;
-                                }
-                                AddGhostJoin(op1, horzEdge.Bot);
-                                AddLocalMaxPoly(horzEdge, eMaxPair, horzEdge.Top);
-                            }
-                            DeleteFromAEL(horzEdge);
-                            DeleteFromAEL(eMaxPair);
-                            return;
-                        }
-                        else if (dir == Direction.dLeftToRight)
-                        {
-                            IntPoint Pt = new IntPoint(e.Curr.X, horzEdge.Curr.Y);
-                            IntersectEdges(horzEdge, e, Pt);
-                        }
-                        else
-                        {
-                            IntPoint Pt = new IntPoint(e.Curr.X, horzEdge.Curr.Y);
-                            IntersectEdges(e, horzEdge, Pt);
-                        }
-                        SwapPositionsInAEL(horzEdge, e);
-                    }
-                    else if ((dir == Direction.dLeftToRight && e.Curr.X >= horzRight) ||
-                      (dir == Direction.dRightToLeft && e.Curr.X <= horzLeft)) break;
-                    e = eNext;
-                } //end while
-
-                if (horzEdge.NextInLML != null && IsHorizontal(horzEdge.NextInLML))
-                {
-                    UpdateEdgeIntoAEL(ref horzEdge);
-                    if (horzEdge.OutIdx >= 0) AddOutPt(horzEdge, horzEdge.Bot);
-                    GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
-                }
-                else
+                  case ClipType.ctIntersection:
+                    if (e1Wc2 > 0 && e2Wc2 > 0)
+                      AddLocalMinPoly(e1, e2, pt);
                     break;
-            } //end for (;;)
+                  case ClipType.ctUnion:
+                    if (e1Wc2 <= 0 && e2Wc2 <= 0)
+                      AddLocalMinPoly(e1, e2, pt);
+                    break;
+                  case ClipType.ctDifference:
+                    if (((e1.PolyTyp == PolyType.ptClip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
+                        ((e1.PolyTyp == PolyType.ptSubject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
+                          AddLocalMinPoly(e1, e2, pt);
+                    break;
+                  case ClipType.ctXor:
+                    AddLocalMinPoly(e1, e2, pt);
+                    break;
+                }
+              else
+                SwapSides(e1, e2);
+          }
+      }
+      //------------------------------------------------------------------------------
 
-            if (horzEdge.NextInLML != null)
+      private void DeleteFromSEL(TEdge e)
+      {
+          TEdge SelPrev = e.PrevInSEL;
+          TEdge SelNext = e.NextInSEL;
+          if (SelPrev == null && SelNext == null && (e != m_SortedEdges))
+              return; //already deleted
+          if (SelPrev != null)
+              SelPrev.NextInSEL = SelNext;
+          else m_SortedEdges = SelNext;
+          if (SelNext != null)
+              SelNext.PrevInSEL = SelPrev;
+          e.NextInSEL = null;
+          e.PrevInSEL = null;
+      }
+      //------------------------------------------------------------------------------
+
+      private void ProcessHorizontals()
+      {
+          TEdge horzEdge; //m_SortedEdges;
+          while (PopEdgeFromSEL(out horzEdge))
+            ProcessHorizontal(horzEdge);
+      }
+      //------------------------------------------------------------------------------
+
+      void GetHorzDirection(TEdge HorzEdge, out Direction Dir, out cInt Left, out cInt Right)
+      {
+        if (HorzEdge.Bot.X < HorzEdge.Top.X)
+        {
+          Left = HorzEdge.Bot.X;
+          Right = HorzEdge.Top.X;
+          Dir = Direction.dLeftToRight;
+        } else
+        {
+          Left = HorzEdge.Top.X;
+          Right = HorzEdge.Bot.X;
+          Dir = Direction.dRightToLeft;
+        }
+      }
+      //------------------------------------------------------------------------
+
+      private void ProcessHorizontal(TEdge horzEdge)
+      {
+        Direction dir;
+        cInt horzLeft, horzRight;
+        bool IsOpen = horzEdge.WindDelta == 0;
+
+        GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
+
+        TEdge eLastHorz = horzEdge, eMaxPair = null;
+        while (eLastHorz.NextInLML != null && IsHorizontal(eLastHorz.NextInLML)) 
+          eLastHorz = eLastHorz.NextInLML;
+        if (eLastHorz.NextInLML == null)
+          eMaxPair = GetMaximaPair(eLastHorz);
+
+        Maxima currMax = m_Maxima;
+        if (currMax != null)
+        {
+            //get the first maxima in range (X) ...
+            if (dir == Direction.dLeftToRight)
             {
+              while (currMax != null && currMax.X <= horzEdge.Bot.X)
+                  currMax = currMax.Next;
+              if (currMax != null && currMax.X >= eLastHorz.Top.X) 
+                  currMax = null;
+            }
+            else
+            {
+              while (currMax.Next != null && currMax.Next.X < horzEdge.Bot.X) 
+                  currMax = currMax.Next;
+              if (currMax.X <= eLastHorz.Top.X) currMax = null;
+            }
+        }
+
+        OutPt op1 = null;
+        for (;;) //loop through consec. horizontal edges
+        {
+          bool IsLastHorz = (horzEdge == eLastHorz);
+          TEdge e = GetNextInAEL(horzEdge, dir);
+          while(e != null)
+          {
+
+              //this code block inserts extra coords into horizontal edges (in output
+              //polygons) whereever maxima touch these horizontal edges. This helps
+              //'simplifying' polygons (ie if the Simplify property is set).
+              if (currMax != null)
+              {
+                  if (dir == Direction.dLeftToRight)
+                  {
+                      while (currMax != null && currMax.X < e.Curr.X) 
+                      {
+                        if (horzEdge.OutIdx >= 0 && !IsOpen) 
+                          AddOutPt(horzEdge, new IntPoint(currMax.X, horzEdge.Bot.Y));
+                        currMax = currMax.Next;                  
+                      }
+                  }
+                  else
+                  {
+                      while (currMax != null && currMax.X > e.Curr.X)
+                      {
+                          if (horzEdge.OutIdx >= 0 && !IsOpen)
+                            AddOutPt(horzEdge, new IntPoint(currMax.X, horzEdge.Bot.Y));
+                        currMax = currMax.Prev;
+                      }
+                  }
+              };
+
+              if ((dir == Direction.dLeftToRight && e.Curr.X > horzRight) ||
+                (dir == Direction.dRightToLeft && e.Curr.X < horzLeft)) break;
+                                
+              //Also break if we've got to the end of an intermediate horizontal edge ...
+              //nb: Smaller Dx's are to the right of larger Dx's ABOVE the horizontal.
+              if (e.Curr.X == horzEdge.Top.X && horzEdge.NextInLML != null && 
+                e.Dx < horzEdge.NextInLML.Dx) break;
+
+              if (horzEdge.OutIdx >= 0 && !IsOpen)  //note: may be done multiple times
+              {
+                  op1 = AddOutPt(horzEdge, e.Curr);
+                  TEdge eNextHorz = m_SortedEdges;
+                  while (eNextHorz != null)
+                  {
+                      if (eNextHorz.OutIdx >= 0 &&
+                        HorzSegmentsOverlap(horzEdge.Bot.X,
+                        horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
+                      {
+                          OutPt op2 = GetLastOutPt(eNextHorz);
+                          AddJoin(op2, op1, eNextHorz.Top);
+                      }
+                      eNextHorz = eNextHorz.NextInSEL;
+                  }
+                  AddGhostJoin(op1, horzEdge.Bot);
+              }
+            
+              //OK, so far we're still in range of the horizontal Edge  but make sure
+              //we're at the last of consec. horizontals when matching with eMaxPair
+              if(e == eMaxPair && IsLastHorz)
+              {
                 if (horzEdge.OutIdx >= 0)
-                {
-                    OutPt op1 = AddOutPt(horzEdge, horzEdge.Top);
-                    if (isTopOfScanbeam) AddGhostJoin(op1, horzEdge.Bot);
-
-                    UpdateEdgeIntoAEL(ref horzEdge);
-                    if (horzEdge.WindDelta == 0) return;
-                    //nb: HorzEdge is no longer horizontal here
-                    TEdge ePrev = horzEdge.PrevInAEL;
-                    TEdge eNext = horzEdge.NextInAEL;
-                    if (ePrev != null && ePrev.Curr.X == horzEdge.Bot.X &&
-                      ePrev.Curr.Y == horzEdge.Bot.Y && ePrev.WindDelta != 0 &&
-                      (ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
-                      SlopesEqual(horzEdge, ePrev, m_UseFullRange)))
-                    {
-                        OutPt op2 = AddOutPt(ePrev, horzEdge.Bot);
-                        AddJoin(op1, op2, horzEdge.Top);
-                    }
-                    else if (eNext != null && eNext.Curr.X == horzEdge.Bot.X &&
-                      eNext.Curr.Y == horzEdge.Bot.Y && eNext.WindDelta != 0 &&
-                      eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
-                      SlopesEqual(horzEdge, eNext, m_UseFullRange))
-                    {
-                        OutPt op2 = AddOutPt(eNext, horzEdge.Bot);
-                        AddJoin(op1, op2, horzEdge.Top);
-                    }
-                }
-                else
-                    UpdateEdgeIntoAEL(ref horzEdge);
-            }
-            else
-            {
-                if (horzEdge.OutIdx >= 0) AddOutPt(horzEdge, horzEdge.Top);
+                  AddLocalMaxPoly(horzEdge, eMaxPair, horzEdge.Top);
                 DeleteFromAEL(horzEdge);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        private TEdge GetNextInAEL(TEdge e, Direction Direction)
-        {
-            return Direction == Direction.dLeftToRight ? e.NextInAEL : e.PrevInAEL;
-        }
-        //------------------------------------------------------------------------------
-
-        private bool IsMinima(TEdge e)
-        {
-            return e != null && (e.Prev.NextInLML != e) && (e.Next.NextInLML != e);
-        }
-        //------------------------------------------------------------------------------
-
-        private bool IsMaxima(TEdge e, double Y)
-        {
-            return (e != null && e.Top.Y == Y && e.NextInLML == null);
-        }
-        //------------------------------------------------------------------------------
-
-        private bool IsIntermediate(TEdge e, double Y)
-        {
-            return (e.Top.Y == Y && e.NextInLML != null);
-        }
-        //------------------------------------------------------------------------------
-
-        private TEdge GetMaximaPair(TEdge e)
-        {
-            TEdge result = null;
-            if ((e.Next.Top == e.Top) && e.Next.NextInLML == null)
-                result = e.Next;
-            else if ((e.Prev.Top == e.Top) && e.Prev.NextInLML == null)
-                result = e.Prev;
-            if (result != null && (result.OutIdx == Skip ||
-              (result.NextInAEL == result.PrevInAEL && !IsHorizontal(result))))
-                return null;
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        private bool ProcessIntersections(cInt topY)
-        {
-            if (m_ActiveEdges == null) return true;
-            try
-            {
-                BuildIntersectList(topY);
-                if (m_IntersectList.Count == 0) return true;
-                if (m_IntersectList.Count == 1 || FixupIntersectionOrder())
-                    ProcessIntersectList();
-                else
-                    return false;
-            }
-            catch
-            {
-                m_SortedEdges = null;
-                m_IntersectList.Clear();
-                throw new ClipperException("ProcessIntersections error");
-            }
-            m_SortedEdges = null;
-            return true;
-        }
-        //------------------------------------------------------------------------------
-
-        private void BuildIntersectList(cInt topY)
-        {
-            if (m_ActiveEdges == null) return;
-
-            //prepare for sorting ...
-            TEdge e = m_ActiveEdges;
-            m_SortedEdges = e;
-            while (e != null)
-            {
-                e.PrevInSEL = e.PrevInAEL;
-                e.NextInSEL = e.NextInAEL;
-                e.Curr.X = TopX(e, topY);
-                e = e.NextInAEL;
-            }
-
-            //bubblesort ...
-            bool isModified = true;
-            while (isModified && m_SortedEdges != null)
-            {
-                isModified = false;
-                e = m_SortedEdges;
-                while (e.NextInSEL != null)
-                {
-                    TEdge eNext = e.NextInSEL;
-                    IntPoint pt;
-                    if (e.Curr.X > eNext.Curr.X)
-                    {
-                        IntersectPoint(e, eNext, out pt);
-                        IntersectNode newNode = new IntersectNode();
-                        newNode.Edge1 = e;
-                        newNode.Edge2 = eNext;
-                        newNode.Pt = pt;
-                        m_IntersectList.Add(newNode);
-
-                        SwapPositionsInSEL(e, eNext);
-                        isModified = true;
-                    }
-                    else
-                        e = eNext;
-                }
-                if (e.PrevInSEL != null) e.PrevInSEL.NextInSEL = null;
-                else break;
-            }
-            m_SortedEdges = null;
-        }
-        //------------------------------------------------------------------------------
-
-        private bool EdgesAdjacent(IntersectNode inode)
-        {
-            return (inode.Edge1.NextInSEL == inode.Edge2) ||
-              (inode.Edge1.PrevInSEL == inode.Edge2);
-        }
-        //------------------------------------------------------------------------------
-
-        private static int IntersectNodeSort(IntersectNode node1, IntersectNode node2)
-        {
-            //the following typecast is safe because the differences in Pt.Y will
-            //be limited to the height of the scanbeam.
-            return (int)(node2.Pt.Y - node1.Pt.Y);
-        }
-        //------------------------------------------------------------------------------
-
-        private bool FixupIntersectionOrder()
-        {
-            //pre-condition: intersections are sorted bottom-most first.
-            //Now it's crucial that intersections are made only between adjacent edges,
-            //so to ensure this the order of intersections may need adjusting ...
-            m_IntersectList.Sort(m_IntersectNodeComparer);
-
-            CopyAELToSEL();
-            int cnt = m_IntersectList.Count;
-            for (int i = 0; i < cnt; i++)
-            {
-                if (!EdgesAdjacent(m_IntersectList[i]))
-                {
-                    int j = i + 1;
-                    while (j < cnt && !EdgesAdjacent(m_IntersectList[j])) j++;
-                    if (j == cnt) return false;
-
-                    IntersectNode tmp = m_IntersectList[i];
-                    m_IntersectList[i] = m_IntersectList[j];
-                    m_IntersectList[j] = tmp;
-
-                }
-                SwapPositionsInSEL(m_IntersectList[i].Edge1, m_IntersectList[i].Edge2);
-            }
-            return true;
-        }
-        //------------------------------------------------------------------------------
-
-        private void ProcessIntersectList()
-        {
-            for (int i = 0; i < m_IntersectList.Count; i++)
-            {
-                IntersectNode iNode = m_IntersectList[i];
-                {
-                    IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
-                    SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
-                }
-            }
-            m_IntersectList.Clear();
-        }
-        //------------------------------------------------------------------------------
-
-        internal static cInt Round(double value)
-        {
-            return value < 0 ? (cInt)(value - 0.5) : (cInt)(value + 0.5);
-        }
-        //------------------------------------------------------------------------------
-
-        private static cInt TopX(TEdge edge, cInt currentY)
-        {
-            if (currentY == edge.Top.Y)
-                return edge.Top.X;
-            return edge.Bot.X + Round(edge.Dx * (currentY - edge.Bot.Y));
-        }
-        //------------------------------------------------------------------------------
-
-        private void IntersectPoint(TEdge edge1, TEdge edge2, out IntPoint ip)
-        {
-            ip = new IntPoint();
-            double b1, b2;
-            //nb: with very large coordinate values, it's possible for SlopesEqual() to 
-            //return false but for the edge.Dx value be equal due to double precision rounding.
-            if (edge1.Dx == edge2.Dx)
-            {
-                ip.Y = edge1.Curr.Y;
-                ip.X = TopX(edge1, ip.Y);
+                DeleteFromAEL(eMaxPair);
                 return;
-            }
+              }
+              
+              if(dir == Direction.dLeftToRight)
+              {
+                IntPoint Pt = new IntPoint(e.Curr.X, horzEdge.Curr.Y);
+                IntersectEdges(horzEdge, e, Pt);
+              }
+              else
+              {
+                IntPoint Pt = new IntPoint(e.Curr.X, horzEdge.Curr.Y);
+                IntersectEdges(e, horzEdge, Pt);
+              }
+              TEdge eNext = GetNextInAEL(e, dir);
+              SwapPositionsInAEL(horzEdge, e);
+              e = eNext;
+          } //end while(e != null)
 
-            if (edge1.Delta.X == 0)
+          //Break out of loop if HorzEdge.NextInLML is not also horizontal ...
+          if (horzEdge.NextInLML == null || !IsHorizontal(horzEdge.NextInLML)) break;
+
+          UpdateEdgeIntoAEL(ref horzEdge);
+          if (horzEdge.OutIdx >= 0) AddOutPt(horzEdge, horzEdge.Bot);
+          GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
+
+        } //end for (;;)
+
+        if (horzEdge.OutIdx >= 0 && op1 == null)
+        {
+            op1 = GetLastOutPt(horzEdge);
+            TEdge eNextHorz = m_SortedEdges;
+            while (eNextHorz != null)
             {
-                ip.X = edge1.Bot.X;
-                if (IsHorizontal(edge2))
+                if (eNextHorz.OutIdx >= 0 &&
+                  HorzSegmentsOverlap(horzEdge.Bot.X,
+                  horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
                 {
-                    ip.Y = edge2.Bot.Y;
+                    OutPt op2 = GetLastOutPt(eNextHorz);
+                    AddJoin(op2, op1, eNextHorz.Top);
                 }
-                else
-                {
-                    b2 = edge2.Bot.Y - (edge2.Bot.X / edge2.Dx);
-                    ip.Y = Round(ip.X / edge2.Dx + b2);
-                }
+                eNextHorz = eNextHorz.NextInSEL;
             }
-            else if (edge2.Delta.X == 0)
+            AddGhostJoin(op1, horzEdge.Top);
+        }
+
+        if (horzEdge.NextInLML != null)
+        {
+          if(horzEdge.OutIdx >= 0)
+          {
+            op1 = AddOutPt( horzEdge, horzEdge.Top);
+
+            UpdateEdgeIntoAEL(ref horzEdge);
+            if (horzEdge.WindDelta == 0) return;
+            //nb: HorzEdge is no longer horizontal here
+            TEdge ePrev = horzEdge.PrevInAEL;
+            TEdge eNext = horzEdge.NextInAEL;
+            if (ePrev != null && ePrev.Curr.X == horzEdge.Bot.X &&
+              ePrev.Curr.Y == horzEdge.Bot.Y && ePrev.WindDelta != 0 &&
+              (ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
+              SlopesEqual(horzEdge, ePrev, m_UseFullRange)))
             {
-                ip.X = edge2.Bot.X;
-                if (IsHorizontal(edge1))
-                {
-                    ip.Y = edge1.Bot.Y;
-                }
-                else
-                {
-                    b1 = edge1.Bot.Y - (edge1.Bot.X / edge1.Dx);
-                    ip.Y = Round(ip.X / edge1.Dx + b1);
-                }
+              OutPt op2 = AddOutPt(ePrev, horzEdge.Bot);
+              AddJoin(op1, op2, horzEdge.Top);
+            }
+            else if (eNext != null && eNext.Curr.X == horzEdge.Bot.X &&
+              eNext.Curr.Y == horzEdge.Bot.Y && eNext.WindDelta != 0 &&
+              eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
+              SlopesEqual(horzEdge, eNext, m_UseFullRange))
+            {
+              OutPt op2 = AddOutPt(eNext, horzEdge.Bot);
+              AddJoin(op1, op2, horzEdge.Top);
+            }
+          }
+          else
+            UpdateEdgeIntoAEL(ref horzEdge); 
+        }
+        else
+        {
+          if (horzEdge.OutIdx >= 0) AddOutPt(horzEdge, horzEdge.Top);
+          DeleteFromAEL(horzEdge);
+        }
+      }
+      //------------------------------------------------------------------------------
+
+      private TEdge GetNextInAEL(TEdge e, Direction Direction)
+      {
+          return Direction == Direction.dLeftToRight ? e.NextInAEL: e.PrevInAEL;
+      }
+      //------------------------------------------------------------------------------
+
+      private bool IsMinima(TEdge e)
+      {
+          return e != null && (e.Prev.NextInLML != e) && (e.Next.NextInLML != e);
+      }
+      //------------------------------------------------------------------------------
+
+      private bool IsMaxima(TEdge e, double Y)
+      {
+          return (e != null && e.Top.Y == Y && e.NextInLML == null);
+      }
+      //------------------------------------------------------------------------------
+
+      private bool IsIntermediate(TEdge e, double Y)
+      {
+          return (e.Top.Y == Y && e.NextInLML != null);
+      }
+      //------------------------------------------------------------------------------
+
+      internal TEdge GetMaximaPair(TEdge e)
+      {
+        if ((e.Next.Top == e.Top) && e.Next.NextInLML == null)
+          return e.Next;
+        else if ((e.Prev.Top == e.Top) && e.Prev.NextInLML == null)
+          return e.Prev;
+        else 
+					return null;
+      }
+      //------------------------------------------------------------------------------
+
+      internal TEdge GetMaximaPairEx(TEdge e)
+      {
+        //as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
+        TEdge result = GetMaximaPair(e);
+        if (result == null || result.OutIdx == Skip ||
+          ((result.NextInAEL == result.PrevInAEL) && !IsHorizontal(result))) return null;
+        return result;
+      }
+      //------------------------------------------------------------------------------
+
+      private bool ProcessIntersections(cInt topY)
+      {
+        if( m_ActiveEdges == null ) return true;
+        try {
+          BuildIntersectList(topY);
+          if ( m_IntersectList.Count == 0) return true;
+          if (m_IntersectList.Count == 1 || FixupIntersectionOrder()) 
+              ProcessIntersectList();
+          else 
+              return false;
+        }
+        catch {
+          m_SortedEdges = null;
+          m_IntersectList.Clear();
+          throw new ClipperException("ProcessIntersections error");
+        }
+        m_SortedEdges = null;
+        return true;
+      }
+      //------------------------------------------------------------------------------
+
+      private void BuildIntersectList(cInt topY)
+      {
+        if ( m_ActiveEdges == null ) return;
+
+        //prepare for sorting ...
+        TEdge e = m_ActiveEdges;
+        m_SortedEdges = e;
+        while( e != null )
+        {
+          e.PrevInSEL = e.PrevInAEL;
+          e.NextInSEL = e.NextInAEL;
+          e.Curr.X = TopX( e, topY );
+          e = e.NextInAEL;
+        }
+
+        //bubblesort ...
+        bool isModified = true;
+        while( isModified && m_SortedEdges != null )
+        {
+          isModified = false;
+          e = m_SortedEdges;
+          while( e.NextInSEL != null )
+          {
+            TEdge eNext = e.NextInSEL;
+            IntPoint pt;
+            if (e.Curr.X > eNext.Curr.X)
+            {
+                IntersectPoint(e, eNext, out pt);
+                if (pt.Y < topY)
+                  pt = new IntPoint(TopX(e, topY), topY);
+                IntersectNode newNode = new IntersectNode();
+                newNode.Edge1 = e;
+                newNode.Edge2 = eNext;
+                newNode.Pt = pt;
+                m_IntersectList.Add(newNode);
+
+                SwapPositionsInSEL(e, eNext);
+                isModified = true;
+            }
+            else
+              e = eNext;
+          }
+          if( e.PrevInSEL != null ) e.PrevInSEL.NextInSEL = null;
+          else break;
+        }
+        m_SortedEdges = null;
+      }
+      //------------------------------------------------------------------------------
+
+      private bool EdgesAdjacent(IntersectNode inode)
+      {
+        return (inode.Edge1.NextInSEL == inode.Edge2) ||
+          (inode.Edge1.PrevInSEL == inode.Edge2);
+      }
+      //------------------------------------------------------------------------------
+
+      private static int IntersectNodeSort(IntersectNode node1, IntersectNode node2)
+      {
+        //the following typecast is safe because the differences in Pt.Y will
+        //be limited to the height of the scanbeam.
+        return (int)(node2.Pt.Y - node1.Pt.Y); 
+      }
+      //------------------------------------------------------------------------------
+
+      private bool FixupIntersectionOrder()
+      {
+        //pre-condition: intersections are sorted bottom-most first.
+        //Now it's crucial that intersections are made only between adjacent edges,
+        //so to ensure this the order of intersections may need adjusting ...
+        m_IntersectList.Sort(m_IntersectNodeComparer);
+
+        CopyAELToSEL();
+        int cnt = m_IntersectList.Count;
+        for (int i = 0; i < cnt; i++)
+        {
+          if (!EdgesAdjacent(m_IntersectList[i]))
+          {
+            int j = i + 1;
+            while (j < cnt && !EdgesAdjacent(m_IntersectList[j])) j++;
+            if (j == cnt) return false;
+
+            IntersectNode tmp = m_IntersectList[i];
+            m_IntersectList[i] = m_IntersectList[j];
+            m_IntersectList[j] = tmp;
+
+          }
+          SwapPositionsInSEL(m_IntersectList[i].Edge1, m_IntersectList[i].Edge2);
+        }
+          return true;
+      }
+      //------------------------------------------------------------------------------
+
+      private void ProcessIntersectList()
+      {
+        for (int i = 0; i < m_IntersectList.Count; i++)
+        {
+          IntersectNode iNode = m_IntersectList[i];
+          {
+            IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
+            SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
+          }
+        }
+        m_IntersectList.Clear();
+      }
+      //------------------------------------------------------------------------------
+
+      internal static cInt Round(double value)
+      {
+          return value < 0 ? (cInt)(value - 0.5) : (cInt)(value + 0.5);
+      }
+      //------------------------------------------------------------------------------
+
+      private static cInt TopX(TEdge edge, cInt currentY)
+      {
+          if (currentY == edge.Top.Y)
+              return edge.Top.X;
+          return edge.Bot.X + Round(edge.Dx *(currentY - edge.Bot.Y));
+      }
+      //------------------------------------------------------------------------------
+
+      private void IntersectPoint(TEdge edge1, TEdge edge2, out IntPoint ip)
+      {
+        ip = new IntPoint();
+        double b1, b2;
+        //nb: with very large coordinate values, it's possible for SlopesEqual() to 
+        //return false but for the edge.Dx value be equal due to double precision rounding.
+        if (edge1.Dx == edge2.Dx)
+        {
+          ip.Y = edge1.Curr.Y;
+          ip.X = TopX(edge1, ip.Y);
+          return;
+        }
+
+        if (edge1.Delta.X == 0)
+        {
+            ip.X = edge1.Bot.X;
+            if (IsHorizontal(edge2))
+            {
+                ip.Y = edge2.Bot.Y;
             }
             else
             {
-                b1 = edge1.Bot.X - edge1.Bot.Y * edge1.Dx;
-                b2 = edge2.Bot.X - edge2.Bot.Y * edge2.Dx;
-                double q = (b2 - b1) / (edge1.Dx - edge2.Dx);
-                ip.Y = Round(q);
-                if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                    ip.X = Round(edge1.Dx * q + b1);
-                else
-                    ip.X = Round(edge2.Dx * q + b2);
-            }
-
-            if (ip.Y < edge1.Top.Y || ip.Y < edge2.Top.Y)
-            {
-                if (edge1.Top.Y > edge2.Top.Y)
-                    ip.Y = edge1.Top.Y;
-                else
-                    ip.Y = edge2.Top.Y;
-                if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                    ip.X = TopX(edge1, ip.Y);
-                else
-                    ip.X = TopX(edge2, ip.Y);
-            }
-            //finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
-            if (ip.Y > edge1.Curr.Y)
-            {
-                ip.Y = edge1.Curr.Y;
-                //better to use the more vertical edge to derive X ...
-                if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx))
-                    ip.X = TopX(edge2, ip.Y);
-                else
-                    ip.X = TopX(edge1, ip.Y);
+                b2 = edge2.Bot.Y - (edge2.Bot.X / edge2.Dx);
+                ip.Y = Round(ip.X / edge2.Dx + b2);
             }
         }
-        //------------------------------------------------------------------------------
-
-        private void ProcessEdgesAtTopOfScanbeam(cInt topY)
+        else if (edge2.Delta.X == 0)
         {
-            TEdge e = m_ActiveEdges;
-            while (e != null)
+            ip.X = edge2.Bot.X;
+            if (IsHorizontal(edge1))
             {
-                //1. process maxima, treating them as if they're 'bent' horizontal edges,
-                //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
-                bool IsMaximaEdge = IsMaxima(e, topY);
+                ip.Y = edge1.Bot.Y;
+            }
+            else
+            {
+                b1 = edge1.Bot.Y - (edge1.Bot.X / edge1.Dx);
+                ip.Y = Round(ip.X / edge1.Dx + b1);
+            }
+        }
+        else
+        {
+            b1 = edge1.Bot.X - edge1.Bot.Y * edge1.Dx;
+            b2 = edge2.Bot.X - edge2.Bot.Y * edge2.Dx;
+            double q = (b2 - b1) / (edge1.Dx - edge2.Dx);
+            ip.Y = Round(q);
+            if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
+                ip.X = Round(edge1.Dx * q + b1);
+            else
+                ip.X = Round(edge2.Dx * q + b2);
+        }
 
-                if (IsMaximaEdge)
-                {
-                    TEdge eMaxPair = GetMaximaPair(e);
-                    IsMaximaEdge = (eMaxPair == null || !IsHorizontal(eMaxPair));
-                }
+        if (ip.Y < edge1.Top.Y || ip.Y < edge2.Top.Y)
+        {
+          if (edge1.Top.Y > edge2.Top.Y)
+            ip.Y = edge1.Top.Y;
+          else
+            ip.Y = edge2.Top.Y;
+          if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
+            ip.X = TopX(edge1, ip.Y);
+          else
+            ip.X = TopX(edge2, ip.Y);
+        }
+        //finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
+        if (ip.Y > edge1.Curr.Y)
+        {
+          ip.Y = edge1.Curr.Y;
+          //better to use the more vertical edge to derive X ...
+          if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx)) 
+            ip.X = TopX(edge2, ip.Y);
+          else 
+            ip.X = TopX(edge1, ip.Y);
+        }
+      }
+      //------------------------------------------------------------------------------
 
-                if (IsMaximaEdge)
-                {
-                    TEdge ePrev = e.PrevInAEL;
-                    DoMaxima(e);
-                    if (ePrev == null) e = m_ActiveEdges;
-                    else e = ePrev.NextInAEL;
-                }
-                else
-                {
-                    //2. promote horizontal edges, otherwise update Curr.X and Curr.Y ...
-                    if (IsIntermediate(e, topY) && IsHorizontal(e.NextInLML))
-                    {
-                        UpdateEdgeIntoAEL(ref e);
-                        if (e.OutIdx >= 0)
-                            AddOutPt(e, e.Bot);
-                        AddEdgeToSEL(e);
-                    }
-                    else
-                    {
-                        e.Curr.X = TopX(e, topY);
-                        e.Curr.Y = topY;
-                    }
+      private void ProcessEdgesAtTopOfScanbeam(cInt topY)
+      {
+        TEdge e = m_ActiveEdges;
+        while(e != null)
+        {
+          //1. process maxima, treating them as if they're 'bent' horizontal edges,
+          //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
+          bool IsMaximaEdge = IsMaxima(e, topY);
 
-                    if (StrictlySimple)
-                    {
-                        TEdge ePrev = e.PrevInAEL;
-                        if ((e.OutIdx >= 0) && (e.WindDelta != 0) && ePrev != null &&
-                          (ePrev.OutIdx >= 0) && (ePrev.Curr.X == e.Curr.X) &&
-                          (ePrev.WindDelta != 0))
-                        {
-                            IntPoint ip = new IntPoint(e.Curr);
+          if(IsMaximaEdge)
+          {
+            TEdge eMaxPair = GetMaximaPairEx(e);
+            IsMaximaEdge = (eMaxPair == null || !IsHorizontal(eMaxPair));
+          }
+
+          if(IsMaximaEdge)
+          {
+            if (StrictlySimple) InsertMaxima(e.Top.X);
+            TEdge ePrev = e.PrevInAEL;
+            DoMaxima(e);
+            if( ePrev == null) e = m_ActiveEdges;
+            else e = ePrev.NextInAEL;
+          }
+          else
+          {
+            //2. promote horizontal edges, otherwise update Curr.X and Curr.Y ...
+            if (IsIntermediate(e, topY) && IsHorizontal(e.NextInLML))
+            {
+              UpdateEdgeIntoAEL(ref e);
+              if (e.OutIdx >= 0)
+                AddOutPt(e, e.Bot);
+              AddEdgeToSEL(e);
+            } 
+            else
+            {
+              e.Curr.X = TopX( e, topY );
+              e.Curr.Y = topY;
+            }
+
+            //When StrictlySimple and 'e' is being touched by another edge, then
+            //make sure both edges have a vertex here ...
+            if (StrictlySimple)
+            {
+              TEdge ePrev = e.PrevInAEL;
+              if ((e.OutIdx >= 0) && (e.WindDelta != 0) && ePrev != null &&
+                (ePrev.OutIdx >= 0) && (ePrev.Curr.X == e.Curr.X) &&
+                (ePrev.WindDelta != 0))
+              {
+                IntPoint ip = new IntPoint(e.Curr);
 #if use_xyz
                 SetZ(ref ip, ePrev, e);
 #endif
-                            OutPt op = AddOutPt(ePrev, ip);
-                            OutPt op2 = AddOutPt(e, ip);
-                            AddJoin(op, op2, ip); //StrictlySimple (type-3) join
-                        }
-                    }
-
-                    e = e.NextInAEL;
-                }
+                OutPt op = AddOutPt(ePrev, ip);
+                OutPt op2 = AddOutPt(e, ip);
+                AddJoin(op, op2, ip); //StrictlySimple (type-3) join
+              }
             }
 
-            //3. Process horizontals at the Top of the scanbeam ...
-            ProcessHorizontals(true);
-
-            //4. Promote intermediate vertices ...
-            e = m_ActiveEdges;
-            while (e != null)
-            {
-                if (IsIntermediate(e, topY))
-                {
-                    OutPt op = null;
-                    if (e.OutIdx >= 0)
-                        op = AddOutPt(e, e.Top);
-                    UpdateEdgeIntoAEL(ref e);
-
-                    //if output polygons share an edge, they'll need joining later ...
-                    TEdge ePrev = e.PrevInAEL;
-                    TEdge eNext = e.NextInAEL;
-                    if (ePrev != null && ePrev.Curr.X == e.Bot.X &&
-                      ePrev.Curr.Y == e.Bot.Y && op != null &&
-                      ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
-                      SlopesEqual(e, ePrev, m_UseFullRange) &&
-                      (e.WindDelta != 0) && (ePrev.WindDelta != 0))
-                    {
-                        OutPt op2 = AddOutPt(ePrev, e.Bot);
-                        AddJoin(op, op2, e.Top);
-                    }
-                    else if (eNext != null && eNext.Curr.X == e.Bot.X &&
-                      eNext.Curr.Y == e.Bot.Y && op != null &&
-                      eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
-                      SlopesEqual(e, eNext, m_UseFullRange) &&
-                      (e.WindDelta != 0) && (eNext.WindDelta != 0))
-                    {
-                        OutPt op2 = AddOutPt(eNext, e.Bot);
-                        AddJoin(op, op2, e.Top);
-                    }
-                }
-                e = e.NextInAEL;
-            }
+            e = e.NextInAEL;
+          }
         }
-        //------------------------------------------------------------------------------
 
-        private void DoMaxima(TEdge e)
+        //3. Process horizontals at the Top of the scanbeam ...
+        ProcessHorizontals();
+        m_Maxima = null;
+
+        //4. Promote intermediate vertices ...
+        e = m_ActiveEdges;
+        while (e != null)
         {
-            TEdge eMaxPair = GetMaximaPair(e);
-            if (eMaxPair == null)
-            {
-                if (e.OutIdx >= 0)
-                    AddOutPt(e, e.Top);
-                DeleteFromAEL(e);
-                return;
-            }
+          if(IsIntermediate(e, topY))
+          {
+            OutPt op = null;
+            if( e.OutIdx >= 0 ) 
+              op = AddOutPt(e, e.Top);
+            UpdateEdgeIntoAEL(ref e);
 
+            //if output polygons share an edge, they'll need joining later ...
+            TEdge ePrev = e.PrevInAEL;
             TEdge eNext = e.NextInAEL;
-            while (eNext != null && eNext != eMaxPair)
+            if (ePrev != null && ePrev.Curr.X == e.Bot.X &&
+              ePrev.Curr.Y == e.Bot.Y && op != null &&
+              ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
+              SlopesEqual(e.Curr, e.Top, ePrev.Curr, ePrev.Top, m_UseFullRange) &&
+              (e.WindDelta != 0) && (ePrev.WindDelta != 0))
             {
-                IntersectEdges(e, eNext, e.Top);
-                SwapPositionsInAEL(e, eNext);
-                eNext = e.NextInAEL;
+              OutPt op2 = AddOutPt(ePrev, e.Bot);
+              AddJoin(op, op2, e.Top);
             }
+            else if (eNext != null && eNext.Curr.X == e.Bot.X &&
+              eNext.Curr.Y == e.Bot.Y && op != null &&
+              eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
+              SlopesEqual(e.Curr, e.Top, eNext.Curr, eNext.Top, m_UseFullRange) &&
+              (e.WindDelta != 0) && (eNext.WindDelta != 0))
+            {
+              OutPt op2 = AddOutPt(eNext, e.Bot);
+              AddJoin(op, op2, e.Top);
+            }
+          }
+          e = e.NextInAEL;
+        }
+      }
+      //------------------------------------------------------------------------------
 
-            if (e.OutIdx == Unassigned && eMaxPair.OutIdx == Unassigned)
-            {
-                DeleteFromAEL(e);
-                DeleteFromAEL(eMaxPair);
-            }
-            else if (e.OutIdx >= 0 && eMaxPair.OutIdx >= 0)
-            {
-                if (e.OutIdx >= 0) AddLocalMaxPoly(e, eMaxPair, e.Top);
-                DeleteFromAEL(e);
-                DeleteFromAEL(eMaxPair);
-            }
+      private void DoMaxima(TEdge e)
+      {
+        TEdge eMaxPair = GetMaximaPairEx(e);
+        if (eMaxPair == null)
+        {
+          if (e.OutIdx >= 0)
+            AddOutPt(e, e.Top);
+          DeleteFromAEL(e);
+          return;
+        }
+
+        TEdge eNext = e.NextInAEL;
+        while(eNext != null && eNext != eMaxPair)
+        {
+          IntersectEdges(e, eNext, e.Top);
+          SwapPositionsInAEL(e, eNext);
+          eNext = e.NextInAEL;
+        }
+
+        if(e.OutIdx == Unassigned && eMaxPair.OutIdx == Unassigned)
+        {
+          DeleteFromAEL(e);
+          DeleteFromAEL(eMaxPair);
+        }
+        else if( e.OutIdx >= 0 && eMaxPair.OutIdx >= 0 )
+        {
+          if (e.OutIdx >= 0) AddLocalMaxPoly(e, eMaxPair, e.Top);
+          DeleteFromAEL(e);
+          DeleteFromAEL(eMaxPair);
+        }
 #if use_lines
         else if (e.WindDelta == 0)
         {
@@ -6109,11406 +6614,5464 @@ namespace Tiled2Unity.ClipperLib
           DeleteFromAEL(eMaxPair);
         } 
 #endif
-            else throw new ClipperException("DoMaxima error");
-        }
-        //------------------------------------------------------------------------------
+        else throw new ClipperException("DoMaxima error");
+      }
+      //------------------------------------------------------------------------------
 
-        public static void ReversePaths(Paths polys)
+      public static void ReversePaths(Paths polys)
+      {
+        foreach (var poly in polys) { poly.Reverse(); }
+      }
+      //------------------------------------------------------------------------------
+
+      public static bool Orientation(Path poly)
+      {
+          return Area(poly) >= 0;
+      }
+      //------------------------------------------------------------------------------
+
+      private int PointCount(OutPt pts)
+      {
+          if (pts == null) return 0;
+          int result = 0;
+          OutPt p = pts;
+          do
+          {
+              result++;
+              p = p.Next;
+          }
+          while (p != pts);
+          return result;
+      }
+      //------------------------------------------------------------------------------
+
+      private void BuildResult(Paths polyg)
+      {
+          polyg.Clear();
+          polyg.Capacity = m_PolyOuts.Count;
+          for (int i = 0; i < m_PolyOuts.Count; i++)
+          {
+              OutRec outRec = m_PolyOuts[i];
+              if (outRec.Pts == null) continue;
+              OutPt p = outRec.Pts.Prev;
+              int cnt = PointCount(p);
+              if (cnt < 2) continue;
+              Path pg = new Path(cnt);
+              for (int j = 0; j < cnt; j++)
+              {
+                  pg.Add(p.Pt);
+                  p = p.Prev;
+              }
+              polyg.Add(pg);
+          }
+      }
+      //------------------------------------------------------------------------------
+
+      private void BuildResult2(PolyTree polytree)
+      {
+          polytree.Clear();
+
+          //add each output polygon/contour to polytree ...
+          polytree.m_AllPolys.Capacity = m_PolyOuts.Count;
+          for (int i = 0; i < m_PolyOuts.Count; i++)
+          {
+              OutRec outRec = m_PolyOuts[i];
+              int cnt = PointCount(outRec.Pts);
+              if ((outRec.IsOpen && cnt < 2) || 
+                (!outRec.IsOpen && cnt < 3)) continue;
+              FixHoleLinkage(outRec);
+              PolyNode pn = new PolyNode();
+              polytree.m_AllPolys.Add(pn);
+              outRec.PolyNode = pn;
+              pn.m_polygon.Capacity = cnt;
+              OutPt op = outRec.Pts.Prev;
+              for (int j = 0; j < cnt; j++)
+              {
+                  pn.m_polygon.Add(op.Pt);
+                  op = op.Prev;
+              }
+          }
+
+          //fixup PolyNode links etc ...
+          polytree.m_Childs.Capacity = m_PolyOuts.Count;
+          for (int i = 0; i < m_PolyOuts.Count; i++)
+          {
+              OutRec outRec = m_PolyOuts[i];
+              if (outRec.PolyNode == null) continue;
+              else if (outRec.IsOpen)
+              {
+                outRec.PolyNode.IsOpen = true;
+                polytree.AddChild(outRec.PolyNode);
+              }
+              else if (outRec.FirstLeft != null && 
+                outRec.FirstLeft.PolyNode != null)
+                  outRec.FirstLeft.PolyNode.AddChild(outRec.PolyNode);
+              else
+                polytree.AddChild(outRec.PolyNode);
+          }
+      }
+      //------------------------------------------------------------------------------
+
+      private void FixupOutPolyline(OutRec outrec)
+      {
+        OutPt pp = outrec.Pts;
+        OutPt lastPP = pp.Prev;
+        while (pp != lastPP)
         {
-            foreach (var poly in polys) { poly.Reverse(); }
-        }
-        //------------------------------------------------------------------------------
-
-        public static bool Orientation(Path poly)
-        {
-            return Area(poly) >= 0;
-        }
-        //------------------------------------------------------------------------------
-
-        private int PointCount(OutPt pts)
-        {
-            if (pts == null) return 0;
-            int result = 0;
-            OutPt p = pts;
-            do
+            pp = pp.Next;
+            if (pp.Pt == pp.Prev.Pt)
             {
-                result++;
-                p = p.Next;
-            }
-            while (p != pts);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        private void BuildResult(Paths polyg)
-        {
-            polyg.Clear();
-            polyg.Capacity = m_PolyOuts.Count;
-            for (int i = 0; i < m_PolyOuts.Count; i++)
-            {
-                OutRec outRec = m_PolyOuts[i];
-                if (outRec.Pts == null) continue;
-                OutPt p = outRec.Pts.Prev;
-                int cnt = PointCount(p);
-                if (cnt < 2) continue;
-                Path pg = new Path(cnt);
-                for (int j = 0; j < cnt; j++)
-                {
-                    pg.Add(p.Pt);
-                    p = p.Prev;
-                }
-                polyg.Add(pg);
+                if (pp == lastPP) lastPP = pp.Prev;
+                OutPt tmpPP = pp.Prev;
+                tmpPP.Next = pp.Next;
+                pp.Next.Prev = tmpPP;
+                pp = tmpPP;
             }
         }
-        //------------------------------------------------------------------------------
+        if (pp == pp.Prev) outrec.Pts = null;
+      }
+      //------------------------------------------------------------------------------
 
-        private void BuildResult2(PolyTree polytree)
+      private void FixupOutPolygon(OutRec outRec)
+      {
+          //FixupOutPolygon() - removes duplicate points and simplifies consecutive
+          //parallel edges by removing the middle vertex.
+          OutPt lastOK = null;
+          outRec.BottomPt = null;
+          OutPt pp = outRec.Pts;
+          bool preserveCol = PreserveCollinear || StrictlySimple;
+          for (;;)
+          {
+              if (pp.Prev == pp || pp.Prev == pp.Next)
+              {
+                  outRec.Pts = null;
+                  return;
+              }
+              //test for duplicate points and collinear edges ...
+              if ((pp.Pt == pp.Next.Pt) || (pp.Pt == pp.Prev.Pt) ||
+                (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt, m_UseFullRange) &&
+                (!preserveCol || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
+              {
+                  lastOK = null;
+                  pp.Prev.Next = pp.Next;
+                  pp.Next.Prev = pp.Prev;
+                  pp = pp.Prev;
+              }
+              else if (pp == lastOK) break;
+              else
+              {
+                  if (lastOK == null) lastOK = pp;
+                  pp = pp.Next;
+              }
+          }
+          outRec.Pts = pp;
+      }
+      //------------------------------------------------------------------------------
+
+      OutPt DupOutPt(OutPt outPt, bool InsertAfter)
+      {
+        OutPt result = new OutPt();
+        result.Pt = outPt.Pt;
+        result.Idx = outPt.Idx;
+        if (InsertAfter)
         {
-            polytree.Clear();
-
-            //add each output polygon/contour to polytree ...
-            polytree.m_AllPolys.Capacity = m_PolyOuts.Count;
-            for (int i = 0; i < m_PolyOuts.Count; i++)
-            {
-                OutRec outRec = m_PolyOuts[i];
-                int cnt = PointCount(outRec.Pts);
-                if ((outRec.IsOpen && cnt < 2) ||
-                  (!outRec.IsOpen && cnt < 3)) continue;
-                FixHoleLinkage(outRec);
-                PolyNode pn = new PolyNode();
-                polytree.m_AllPolys.Add(pn);
-                outRec.PolyNode = pn;
-                pn.m_polygon.Capacity = cnt;
-                OutPt op = outRec.Pts.Prev;
-                for (int j = 0; j < cnt; j++)
-                {
-                    pn.m_polygon.Add(op.Pt);
-                    op = op.Prev;
-                }
-            }
-
-            //fixup PolyNode links etc ...
-            polytree.m_Childs.Capacity = m_PolyOuts.Count;
-            for (int i = 0; i < m_PolyOuts.Count; i++)
-            {
-                OutRec outRec = m_PolyOuts[i];
-                if (outRec.PolyNode == null) continue;
-                else if (outRec.IsOpen)
-                {
-                    outRec.PolyNode.IsOpen = true;
-                    polytree.AddChild(outRec.PolyNode);
-                }
-                else if (outRec.FirstLeft != null &&
-                  outRec.FirstLeft.PolyNode != null)
-                    outRec.FirstLeft.PolyNode.AddChild(outRec.PolyNode);
-                else
-                    polytree.AddChild(outRec.PolyNode);
-            }
+          result.Next = outPt.Next;
+          result.Prev = outPt;
+          outPt.Next.Prev = result;
+          outPt.Next = result;
+        } 
+        else
+        {
+          result.Prev = outPt.Prev;
+          result.Next = outPt;
+          outPt.Prev.Next = result;
+          outPt.Prev = result;
         }
-        //------------------------------------------------------------------------------
+        return result;
+      }
+      //------------------------------------------------------------------------------
 
-        private void FixupOutPolygon(OutRec outRec)
+      bool GetOverlap(cInt a1, cInt a2, cInt b1, cInt b2, out cInt Left, out cInt Right)
+      {
+        if (a1 < a2)
         {
-            //FixupOutPolygon() - removes duplicate points and simplifies consecutive
-            //parallel edges by removing the middle vertex.
-            OutPt lastOK = null;
-            outRec.BottomPt = null;
-            OutPt pp = outRec.Pts;
-            for (; ; )
-            {
-                if (pp.Prev == pp || pp.Prev == pp.Next)
-                {
-                    outRec.Pts = null;
-                    return;
-                }
-                //test for duplicate points and collinear edges ...
-                if ((pp.Pt == pp.Next.Pt) || (pp.Pt == pp.Prev.Pt) ||
-                  (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt, m_UseFullRange) &&
-                  (!PreserveCollinear || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
-                {
-                    lastOK = null;
-                    pp.Prev.Next = pp.Next;
-                    pp.Next.Prev = pp.Prev;
-                    pp = pp.Prev;
-                }
-                else if (pp == lastOK) break;
-                else
-                {
-                    if (lastOK == null) lastOK = pp;
-                    pp = pp.Next;
-                }
-            }
-            outRec.Pts = pp;
+          if (b1 < b2) {Left = Math.Max(a1,b1); Right = Math.Min(a2,b2);}
+          else {Left = Math.Max(a1,b2); Right = Math.Min(a2,b1);}
+        } 
+        else
+        {
+          if (b1 < b2) {Left = Math.Max(a2,b1); Right = Math.Min(a1,b2);}
+          else { Left = Math.Max(a2, b2); Right = Math.Min(a1, b1); }
         }
-        //------------------------------------------------------------------------------
+        return Left < Right;
+      }
+      //------------------------------------------------------------------------------
 
-        OutPt DupOutPt(OutPt outPt, bool InsertAfter)
+      bool JoinHorz(OutPt op1, OutPt op1b, OutPt op2, OutPt op2b, 
+        IntPoint Pt, bool DiscardLeft)
+      {
+        Direction Dir1 = (op1.Pt.X > op1b.Pt.X ? 
+          Direction.dRightToLeft : Direction.dLeftToRight);
+        Direction Dir2 = (op2.Pt.X > op2b.Pt.X ?
+          Direction.dRightToLeft : Direction.dLeftToRight);
+        if (Dir1 == Dir2) return false;
+
+        //When DiscardLeft, we want Op1b to be on the Left of Op1, otherwise we
+        //want Op1b to be on the Right. (And likewise with Op2 and Op2b.)
+        //So, to facilitate this while inserting Op1b and Op2b ...
+        //when DiscardLeft, make sure we're AT or RIGHT of Pt before adding Op1b,
+        //otherwise make sure we're AT or LEFT of Pt. (Likewise with Op2b.)
+        if (Dir1 == Direction.dLeftToRight) 
         {
-            OutPt result = new OutPt();
-            result.Pt = outPt.Pt;
-            result.Idx = outPt.Idx;
-            if (InsertAfter)
-            {
-                result.Next = outPt.Next;
-                result.Prev = outPt;
-                outPt.Next.Prev = result;
-                outPt.Next = result;
-            }
-            else
-            {
-                result.Prev = outPt.Prev;
-                result.Next = outPt;
-                outPt.Prev.Next = result;
-                outPt.Prev = result;
-            }
-            return result;
+          while (op1.Next.Pt.X <= Pt.X && 
+            op1.Next.Pt.X >= op1.Pt.X && op1.Next.Pt.Y == Pt.Y)  
+              op1 = op1.Next;
+          if (DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
+          op1b = DupOutPt(op1, !DiscardLeft);
+          if (op1b.Pt != Pt) 
+          {
+            op1 = op1b;
+            op1.Pt = Pt;
+            op1b = DupOutPt(op1, !DiscardLeft);
+          }
+        } 
+        else
+        {
+          while (op1.Next.Pt.X >= Pt.X && 
+            op1.Next.Pt.X <= op1.Pt.X && op1.Next.Pt.Y == Pt.Y) 
+              op1 = op1.Next;
+          if (!DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
+          op1b = DupOutPt(op1, DiscardLeft);
+          if (op1b.Pt != Pt)
+          {
+            op1 = op1b;
+            op1.Pt = Pt;
+            op1b = DupOutPt(op1, DiscardLeft);
+          }
         }
-        //------------------------------------------------------------------------------
 
-        bool GetOverlap(cInt a1, cInt a2, cInt b1, cInt b2, out cInt Left, out cInt Right)
+        if (Dir2 == Direction.dLeftToRight)
         {
-            if (a1 < a2)
-            {
-                if (b1 < b2) { Left = Math.Max(a1, b1); Right = Math.Min(a2, b2); }
-                else { Left = Math.Max(a1, b2); Right = Math.Min(a2, b1); }
-            }
-            else
-            {
-                if (b1 < b2) { Left = Math.Max(a2, b1); Right = Math.Min(a1, b2); }
-                else { Left = Math.Max(a2, b2); Right = Math.Min(a1, b1); }
-            }
-            return Left < Right;
+          while (op2.Next.Pt.X <= Pt.X && 
+            op2.Next.Pt.X >= op2.Pt.X && op2.Next.Pt.Y == Pt.Y)
+              op2 = op2.Next;
+          if (DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
+          op2b = DupOutPt(op2, !DiscardLeft);
+          if (op2b.Pt != Pt)
+          {
+            op2 = op2b;
+            op2.Pt = Pt;
+            op2b = DupOutPt(op2, !DiscardLeft);
+          };
+        } else
+        {
+          while (op2.Next.Pt.X >= Pt.X && 
+            op2.Next.Pt.X <= op2.Pt.X && op2.Next.Pt.Y == Pt.Y) 
+              op2 = op2.Next;
+          if (!DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
+          op2b = DupOutPt(op2, DiscardLeft);
+          if (op2b.Pt != Pt)
+          {
+            op2 = op2b;
+            op2.Pt = Pt;
+            op2b = DupOutPt(op2, DiscardLeft);
+          };
+        };
+
+        if ((Dir1 == Direction.dLeftToRight) == DiscardLeft)
+        {
+          op1.Prev = op2;
+          op2.Next = op1;
+          op1b.Next = op2b;
+          op2b.Prev = op1b;
         }
-        //------------------------------------------------------------------------------
-
-        bool JoinHorz(OutPt op1, OutPt op1b, OutPt op2, OutPt op2b,
-          IntPoint Pt, bool DiscardLeft)
+        else
         {
-            Direction Dir1 = (op1.Pt.X > op1b.Pt.X ?
-              Direction.dRightToLeft : Direction.dLeftToRight);
-            Direction Dir2 = (op2.Pt.X > op2b.Pt.X ?
-              Direction.dRightToLeft : Direction.dLeftToRight);
-            if (Dir1 == Dir2) return false;
+          op1.Next = op2;
+          op2.Prev = op1;
+          op1b.Prev = op2b;
+          op2b.Next = op1b;
+        }
+        return true;
+      }
+      //------------------------------------------------------------------------------
 
-            //When DiscardLeft, we want Op1b to be on the Left of Op1, otherwise we
-            //want Op1b to be on the Right. (And likewise with Op2 and Op2b.)
-            //So, to facilitate this while inserting Op1b and Op2b ...
-            //when DiscardLeft, make sure we're AT or RIGHT of Pt before adding Op1b,
-            //otherwise make sure we're AT or LEFT of Pt. (Likewise with Op2b.)
-            if (Dir1 == Direction.dLeftToRight)
-            {
-                while (op1.Next.Pt.X <= Pt.X &&
-                  op1.Next.Pt.X >= op1.Pt.X && op1.Next.Pt.Y == Pt.Y)
-                    op1 = op1.Next;
-                if (DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
-                op1b = DupOutPt(op1, !DiscardLeft);
-                if (op1b.Pt != Pt)
-                {
-                    op1 = op1b;
-                    op1.Pt = Pt;
-                    op1b = DupOutPt(op1, !DiscardLeft);
-                }
-            }
-            else
-            {
-                while (op1.Next.Pt.X >= Pt.X &&
-                  op1.Next.Pt.X <= op1.Pt.X && op1.Next.Pt.Y == Pt.Y)
-                    op1 = op1.Next;
-                if (!DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
-                op1b = DupOutPt(op1, DiscardLeft);
-                if (op1b.Pt != Pt)
-                {
-                    op1 = op1b;
-                    op1.Pt = Pt;
-                    op1b = DupOutPt(op1, DiscardLeft);
-                }
-            }
+      private bool JoinPoints(Join j, OutRec outRec1, OutRec outRec2)
+      {
+        OutPt op1 = j.OutPt1, op1b;
+        OutPt op2 = j.OutPt2, op2b;
 
-            if (Dir2 == Direction.dLeftToRight)
-            {
-                while (op2.Next.Pt.X <= Pt.X &&
-                  op2.Next.Pt.X >= op2.Pt.X && op2.Next.Pt.Y == Pt.Y)
-                    op2 = op2.Next;
-                if (DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
-                op2b = DupOutPt(op2, !DiscardLeft);
-                if (op2b.Pt != Pt)
-                {
-                    op2 = op2b;
-                    op2.Pt = Pt;
-                    op2b = DupOutPt(op2, !DiscardLeft);
-                };
-            }
-            else
-            {
-                while (op2.Next.Pt.X >= Pt.X &&
-                  op2.Next.Pt.X <= op2.Pt.X && op2.Next.Pt.Y == Pt.Y)
-                    op2 = op2.Next;
-                if (!DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
-                op2b = DupOutPt(op2, DiscardLeft);
-                if (op2b.Pt != Pt)
-                {
-                    op2 = op2b;
-                    op2.Pt = Pt;
-                    op2b = DupOutPt(op2, DiscardLeft);
-                };
-            };
+        //There are 3 kinds of joins for output polygons ...
+        //1. Horizontal joins where Join.OutPt1 & Join.OutPt2 are vertices anywhere
+        //along (horizontal) collinear edges (& Join.OffPt is on the same horizontal).
+        //2. Non-horizontal joins where Join.OutPt1 & Join.OutPt2 are at the same
+        //location at the Bottom of the overlapping segment (& Join.OffPt is above).
+        //3. StrictlySimple joins where edges touch but are not collinear and where
+        //Join.OutPt1, Join.OutPt2 & Join.OffPt all share the same point.
+        bool isHorizontal = (j.OutPt1.Pt.Y == j.OffPt.Y);
 
-            if ((Dir1 == Direction.dLeftToRight) == DiscardLeft)
-            {
-                op1.Prev = op2;
-                op2.Next = op1;
-                op1b.Next = op2b;
-                op2b.Prev = op1b;
-            }
-            else
-            {
-                op1.Next = op2;
-                op2.Prev = op1;
-                op1b.Prev = op2b;
-                op2b.Next = op1b;
-            }
+        if (isHorizontal && (j.OffPt == j.OutPt1.Pt) && (j.OffPt == j.OutPt2.Pt))
+        {          
+          //Strictly Simple join ...
+          if (outRec1 != outRec2) return false;
+          op1b = j.OutPt1.Next;
+          while (op1b != op1 && (op1b.Pt == j.OffPt)) 
+            op1b = op1b.Next;
+          bool reverse1 = (op1b.Pt.Y > j.OffPt.Y);
+          op2b = j.OutPt2.Next;
+          while (op2b != op2 && (op2b.Pt == j.OffPt)) 
+            op2b = op2b.Next;
+          bool reverse2 = (op2b.Pt.Y > j.OffPt.Y);
+          if (reverse1 == reverse2) return false;
+          if (reverse1)
+          {
+            op1b = DupOutPt(op1, false);
+            op2b = DupOutPt(op2, true);
+            op1.Prev = op2;
+            op2.Next = op1;
+            op1b.Next = op2b;
+            op2b.Prev = op1b;
+            j.OutPt1 = op1;
+            j.OutPt2 = op1b;
             return true;
-        }
-        //------------------------------------------------------------------------------
-
-        private bool JoinPoints(Join j, OutRec outRec1, OutRec outRec2)
+          } else
+          {
+            op1b = DupOutPt(op1, true);
+            op2b = DupOutPt(op2, false);
+            op1.Next = op2;
+            op2.Prev = op1;
+            op1b.Prev = op2b;
+            op2b.Next = op1b;
+            j.OutPt1 = op1;
+            j.OutPt2 = op1b;
+            return true;
+          }
+        } 
+        else if (isHorizontal)
         {
-            OutPt op1 = j.OutPt1, op1b;
-            OutPt op2 = j.OutPt2, op2b;
+          //treat horizontal joins differently to non-horizontal joins since with
+          //them we're not yet sure where the overlapping is. OutPt1.Pt & OutPt2.Pt
+          //may be anywhere along the horizontal edge.
+          op1b = op1;
+          while (op1.Prev.Pt.Y == op1.Pt.Y && op1.Prev != op1b && op1.Prev != op2)
+            op1 = op1.Prev;
+          while (op1b.Next.Pt.Y == op1b.Pt.Y && op1b.Next != op1 && op1b.Next != op2)
+            op1b = op1b.Next;
+          if (op1b.Next == op1 || op1b.Next == op2) return false; //a flat 'polygon'
 
-            //There are 3 kinds of joins for output polygons ...
-            //1. Horizontal joins where Join.OutPt1 & Join.OutPt2 are a vertices anywhere
-            //along (horizontal) collinear edges (& Join.OffPt is on the same horizontal).
-            //2. Non-horizontal joins where Join.OutPt1 & Join.OutPt2 are at the same
-            //location at the Bottom of the overlapping segment (& Join.OffPt is above).
-            //3. StrictlySimple joins where edges touch but are not collinear and where
-            //Join.OutPt1, Join.OutPt2 & Join.OffPt all share the same point.
-            bool isHorizontal = (j.OutPt1.Pt.Y == j.OffPt.Y);
+          op2b = op2;
+          while (op2.Prev.Pt.Y == op2.Pt.Y && op2.Prev != op2b && op2.Prev != op1b)
+            op2 = op2.Prev;
+          while (op2b.Next.Pt.Y == op2b.Pt.Y && op2b.Next != op2 && op2b.Next != op1)
+            op2b = op2b.Next;
+          if (op2b.Next == op2 || op2b.Next == op1) return false; //a flat 'polygon'
 
-            if (isHorizontal && (j.OffPt == j.OutPt1.Pt) && (j.OffPt == j.OutPt2.Pt))
+          cInt Left, Right;
+          //Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
+          if (!GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X, out Left, out Right))
+            return false;
+
+          //DiscardLeftSide: when overlapping edges are joined, a spike will created
+          //which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
+          //on the discard Side as either may still be needed for other joins ...
+          IntPoint Pt;
+          bool DiscardLeftSide;
+          if (op1.Pt.X >= Left && op1.Pt.X <= Right) 
+          {
+            Pt = op1.Pt; DiscardLeftSide = (op1.Pt.X > op1b.Pt.X);
+          } 
+          else if (op2.Pt.X >= Left&& op2.Pt.X <= Right) 
+          {
+            Pt = op2.Pt; DiscardLeftSide = (op2.Pt.X > op2b.Pt.X);
+          } 
+          else if (op1b.Pt.X >= Left && op1b.Pt.X <= Right)
+          {
+            Pt = op1b.Pt; DiscardLeftSide = op1b.Pt.X > op1.Pt.X;
+          } 
+          else
+          {
+            Pt = op2b.Pt; DiscardLeftSide = (op2b.Pt.X > op2.Pt.X);
+          }
+          j.OutPt1 = op1;
+          j.OutPt2 = op2;
+          return JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
+        } else
+        {
+          //nb: For non-horizontal joins ...
+          //    1. Jr.OutPt1.Pt.Y == Jr.OutPt2.Pt.Y
+          //    2. Jr.OutPt1.Pt > Jr.OffPt.Y
+
+          //make sure the polygons are correctly oriented ...
+          op1b = op1.Next;
+          while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Next;
+          bool Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) ||
+            !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange));
+          if (Reverse1)
+          {
+            op1b = op1.Prev;
+            while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Prev;
+            if ((op1b.Pt.Y > op1.Pt.Y) ||
+              !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange)) return false;
+          };
+          op2b = op2.Next;
+          while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Next;
+          bool Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) ||
+            !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange));
+          if (Reverse2)
+          {
+            op2b = op2.Prev;
+            while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Prev;
+            if ((op2b.Pt.Y > op2.Pt.Y) ||
+              !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange)) return false;
+          }
+
+          if ((op1b == op1) || (op2b == op2) || (op1b == op2b) ||
+            ((outRec1 == outRec2) && (Reverse1 == Reverse2))) return false;
+
+          if (Reverse1)
+          {
+            op1b = DupOutPt(op1, false);
+            op2b = DupOutPt(op2, true);
+            op1.Prev = op2;
+            op2.Next = op1;
+            op1b.Next = op2b;
+            op2b.Prev = op1b;
+            j.OutPt1 = op1;
+            j.OutPt2 = op1b;
+            return true;
+          } else
+          {
+            op1b = DupOutPt(op1, true);
+            op2b = DupOutPt(op2, false);
+            op1.Next = op2;
+            op2.Prev = op1;
+            op1b.Prev = op2b;
+            op2b.Next = op1b;
+            j.OutPt1 = op1;
+            j.OutPt2 = op1b;
+            return true;
+          }
+        }
+      }
+      //----------------------------------------------------------------------
+
+      public static int PointInPolygon(IntPoint pt, Path path)
+      {
+        //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+        //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
+        //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
+        int result = 0, cnt = path.Count;
+        if (cnt < 3) return 0;
+        IntPoint ip = path[0];
+        for (int i = 1; i <= cnt; ++i)
+        {
+          IntPoint ipNext = (i == cnt ? path[0] : path[i]);
+          if (ipNext.Y == pt.Y)
+          {
+            if ((ipNext.X == pt.X) || (ip.Y == pt.Y &&
+              ((ipNext.X > pt.X) == (ip.X < pt.X)))) return -1;
+          }
+          if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
+          {
+            if (ip.X >= pt.X)
             {
-                //Strictly Simple join ...
-                if (outRec1 != outRec2) return false;
-                op1b = j.OutPt1.Next;
-                while (op1b != op1 && (op1b.Pt == j.OffPt))
-                    op1b = op1b.Next;
-                bool reverse1 = (op1b.Pt.Y > j.OffPt.Y);
-                op2b = j.OutPt2.Next;
-                while (op2b != op2 && (op2b.Pt == j.OffPt))
-                    op2b = op2b.Next;
-                bool reverse2 = (op2b.Pt.Y > j.OffPt.Y);
-                if (reverse1 == reverse2) return false;
-                if (reverse1)
-                {
-                    op1b = DupOutPt(op1, false);
-                    op2b = DupOutPt(op2, true);
-                    op1.Prev = op2;
-                    op2.Next = op1;
-                    op1b.Next = op2b;
-                    op2b.Prev = op1b;
-                    j.OutPt1 = op1;
-                    j.OutPt2 = op1b;
-                    return true;
-                }
-                else
-                {
-                    op1b = DupOutPt(op1, true);
-                    op2b = DupOutPt(op2, false);
-                    op1.Next = op2;
-                    op2.Prev = op1;
-                    op1b.Prev = op2b;
-                    op2b.Next = op1b;
-                    j.OutPt1 = op1;
-                    j.OutPt2 = op1b;
-                    return true;
-                }
-            }
-            else if (isHorizontal)
-            {
-                //treat horizontal joins differently to non-horizontal joins since with
-                //them we're not yet sure where the overlapping is. OutPt1.Pt & OutPt2.Pt
-                //may be anywhere along the horizontal edge.
-                op1b = op1;
-                while (op1.Prev.Pt.Y == op1.Pt.Y && op1.Prev != op1b && op1.Prev != op2)
-                    op1 = op1.Prev;
-                while (op1b.Next.Pt.Y == op1b.Pt.Y && op1b.Next != op1 && op1b.Next != op2)
-                    op1b = op1b.Next;
-                if (op1b.Next == op1 || op1b.Next == op2) return false; //a flat 'polygon'
-
-                op2b = op2;
-                while (op2.Prev.Pt.Y == op2.Pt.Y && op2.Prev != op2b && op2.Prev != op1b)
-                    op2 = op2.Prev;
-                while (op2b.Next.Pt.Y == op2b.Pt.Y && op2b.Next != op2 && op2b.Next != op1)
-                    op2b = op2b.Next;
-                if (op2b.Next == op2 || op2b.Next == op1) return false; //a flat 'polygon'
-
-                cInt Left, Right;
-                //Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
-                if (!GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X, out Left, out Right))
-                    return false;
-
-                //DiscardLeftSide: when overlapping edges are joined, a spike will created
-                //which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
-                //on the discard Side as either may still be needed for other joins ...
-                IntPoint Pt;
-                bool DiscardLeftSide;
-                if (op1.Pt.X >= Left && op1.Pt.X <= Right)
-                {
-                    Pt = op1.Pt; DiscardLeftSide = (op1.Pt.X > op1b.Pt.X);
-                }
-                else if (op2.Pt.X >= Left && op2.Pt.X <= Right)
-                {
-                    Pt = op2.Pt; DiscardLeftSide = (op2.Pt.X > op2b.Pt.X);
-                }
-                else if (op1b.Pt.X >= Left && op1b.Pt.X <= Right)
-                {
-                    Pt = op1b.Pt; DiscardLeftSide = op1b.Pt.X > op1.Pt.X;
-                }
-                else
-                {
-                    Pt = op2b.Pt; DiscardLeftSide = (op2b.Pt.X > op2.Pt.X);
-                }
-                j.OutPt1 = op1;
-                j.OutPt2 = op2;
-                return JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
+              if (ipNext.X > pt.X) result = 1 - result;
+              else
+              {
+                double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
+                  (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
+                if (d == 0) return -1;
+                else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
+              }
             }
             else
             {
-                //nb: For non-horizontal joins ...
-                //    1. Jr.OutPt1.Pt.Y == Jr.OutPt2.Pt.Y
-                //    2. Jr.OutPt1.Pt > Jr.OffPt.Y
+              if (ipNext.X > pt.X)
+              {
+                double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
+                  (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
+                if (d == 0) return -1;
+                else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
+              }
+            }
+          }
+          ip = ipNext;
+        }
+        return result;
+      }
+      //------------------------------------------------------------------------------
 
-                //make sure the polygons are correctly oriented ...
-                op1b = op1.Next;
-                while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Next;
-                bool Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) ||
-                  !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange));
-                if (Reverse1)
-                {
-                    op1b = op1.Prev;
-                    while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Prev;
-                    if ((op1b.Pt.Y > op1.Pt.Y) ||
-                      !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange)) return false;
-                };
-                op2b = op2.Next;
-                while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Next;
-                bool Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) ||
-                  !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange));
-                if (Reverse2)
-                {
-                    op2b = op2.Prev;
-                    while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Prev;
-                    if ((op2b.Pt.Y > op2.Pt.Y) ||
-                      !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange)) return false;
-                }
+      //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
+      //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
+      private static int PointInPolygon(IntPoint pt, OutPt op)
+      {
+        //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+        int result = 0;
+        OutPt startOp = op;
+        cInt ptx = pt.X, pty = pt.Y;
+        cInt poly0x = op.Pt.X, poly0y = op.Pt.Y;
+        do
+        {
+          op = op.Next;
+          cInt poly1x = op.Pt.X, poly1y = op.Pt.Y;
 
-                if ((op1b == op1) || (op2b == op2) || (op1b == op2b) ||
-                  ((outRec1 == outRec2) && (Reverse1 == Reverse2))) return false;
+          if (poly1y == pty)
+          {
+            if ((poly1x == ptx) || (poly0y == pty &&
+              ((poly1x > ptx) == (poly0x < ptx)))) return -1;
+          }
+          if ((poly0y < pty) != (poly1y < pty))
+          {
+            if (poly0x >= ptx)
+            {
+              if (poly1x > ptx) result = 1 - result;
+              else
+              {
+                double d = (double)(poly0x - ptx) * (poly1y - pty) -
+                  (double)(poly1x - ptx) * (poly0y - pty);
+                if (d == 0) return -1;
+                if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
+              }
+            }
+            else
+            {
+              if (poly1x > ptx)
+              {
+                double d = (double)(poly0x - ptx) * (poly1y - pty) -
+                  (double)(poly1x - ptx) * (poly0y - pty);
+                if (d == 0) return -1;
+                if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
+              }
+            }
+          }
+          poly0x = poly1x; poly0y = poly1y;
+        } while (startOp != op);
+        return result;
+      }
+      //------------------------------------------------------------------------------
 
-                if (Reverse1)
+      private static bool Poly2ContainsPoly1(OutPt outPt1, OutPt outPt2)
+      {
+        OutPt op = outPt1;
+        do
+        {
+          //nb: PointInPolygon returns 0 if false, +1 if true, -1 if pt on polygon
+          int res = PointInPolygon(op.Pt, outPt2);
+          if (res >= 0) return res > 0;
+          op = op.Next;
+        }
+        while (op != outPt1);
+        return true;
+      }
+      //----------------------------------------------------------------------
+
+      private void FixupFirstLefts1(OutRec OldOutRec, OutRec NewOutRec)
+      { 
+        foreach (OutRec outRec in m_PolyOuts)
+        {
+          OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
+          if (outRec.Pts != null && firstLeft == OldOutRec)
+          {
+            if (Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts))
+                outRec.FirstLeft = NewOutRec;
+          }
+        }
+      }
+      //----------------------------------------------------------------------
+
+      private void FixupFirstLefts2(OutRec innerOutRec, OutRec outerOutRec)
+      {
+        //A polygon has split into two such that one is now the inner of the other.
+        //It's possible that these polygons now wrap around other polygons, so check
+        //every polygon that's also contained by OuterOutRec's FirstLeft container
+        //(including nil) to see if they've become inner to the new inner polygon ...
+        OutRec orfl = outerOutRec.FirstLeft;
+        foreach (OutRec outRec in m_PolyOuts)
+        {
+          if (outRec.Pts == null || outRec == outerOutRec || outRec == innerOutRec) 
+            continue;
+          OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
+          if (firstLeft != orfl && firstLeft != innerOutRec && firstLeft != outerOutRec) 
+            continue;
+          if (Poly2ContainsPoly1(outRec.Pts, innerOutRec.Pts))
+            outRec.FirstLeft = innerOutRec;
+          else if (Poly2ContainsPoly1(outRec.Pts, outerOutRec.Pts))
+            outRec.FirstLeft = outerOutRec;
+          else if (outRec.FirstLeft == innerOutRec || outRec.FirstLeft == outerOutRec) 
+            outRec.FirstLeft = orfl;
+        }
+      }
+      //----------------------------------------------------------------------
+
+      private void FixupFirstLefts3(OutRec OldOutRec, OutRec NewOutRec)
+      {
+        //same as FixupFirstLefts1 but doesn't call Poly2ContainsPoly1()
+        foreach (OutRec outRec in m_PolyOuts)
+        {
+          OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
+          if (outRec.Pts != null && outRec.FirstLeft == OldOutRec) 
+            outRec.FirstLeft = NewOutRec;
+        }
+      }
+      //----------------------------------------------------------------------
+
+      private static OutRec ParseFirstLeft(OutRec FirstLeft)
+      {
+        while (FirstLeft != null && FirstLeft.Pts == null) 
+          FirstLeft = FirstLeft.FirstLeft;
+        return FirstLeft;
+      }
+      //------------------------------------------------------------------------------
+
+    private void JoinCommonEdges()
+      {
+        for (int i = 0; i < m_Joins.Count; i++)
+        {
+          Join join = m_Joins[i];
+
+          OutRec outRec1 = GetOutRec(join.OutPt1.Idx);
+          OutRec outRec2 = GetOutRec(join.OutPt2.Idx);
+
+          if (outRec1.Pts == null || outRec2.Pts == null) continue;
+          if (outRec1.IsOpen || outRec2.IsOpen) continue;
+
+          //get the polygon fragment with the correct hole state (FirstLeft)
+          //before calling JoinPoints() ...
+          OutRec holeStateRec;
+          if (outRec1 == outRec2) holeStateRec = outRec1;
+          else if (OutRec1RightOfOutRec2(outRec1, outRec2)) holeStateRec = outRec2;
+          else if (OutRec1RightOfOutRec2(outRec2, outRec1)) holeStateRec = outRec1;
+          else holeStateRec = GetLowermostRec(outRec1, outRec2);
+
+          if (!JoinPoints(join, outRec1, outRec2)) continue;
+
+          if (outRec1 == outRec2)
+          {
+            //instead of joining two polygons, we've just created a new one by
+            //splitting one polygon into two.
+            outRec1.Pts = join.OutPt1;
+            outRec1.BottomPt = null;
+            outRec2 = CreateOutRec();
+            outRec2.Pts = join.OutPt2;
+
+            //update all OutRec2.Pts Idx's ...
+            UpdateOutPtIdxs(outRec2);
+
+            if (Poly2ContainsPoly1(outRec2.Pts, outRec1.Pts))
+            {
+              //outRec1 contains outRec2 ...
+              outRec2.IsHole = !outRec1.IsHole;
+              outRec2.FirstLeft = outRec1;
+
+              if (m_UsingPolyTree) FixupFirstLefts2(outRec2, outRec1);
+
+              if ((outRec2.IsHole ^ ReverseSolution) == (Area(outRec2) > 0))
+                ReversePolyPtLinks(outRec2.Pts);
+
+            }
+            else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
+            {
+              //outRec2 contains outRec1 ...
+              outRec2.IsHole = outRec1.IsHole;
+              outRec1.IsHole = !outRec2.IsHole;
+              outRec2.FirstLeft = outRec1.FirstLeft;
+              outRec1.FirstLeft = outRec2;
+
+              if (m_UsingPolyTree) FixupFirstLefts2(outRec1, outRec2);
+
+              if ((outRec1.IsHole ^ ReverseSolution) == (Area(outRec1) > 0))
+                ReversePolyPtLinks(outRec1.Pts);
+            }
+            else
+            {
+              //the 2 polygons are completely separate ...
+              outRec2.IsHole = outRec1.IsHole;
+              outRec2.FirstLeft = outRec1.FirstLeft;
+
+              //fixup FirstLeft pointers that may need reassigning to OutRec2
+              if (m_UsingPolyTree) FixupFirstLefts1(outRec1, outRec2);
+            }
+     
+          } else
+          {
+            //joined 2 polygons together ...
+
+            outRec2.Pts = null;
+            outRec2.BottomPt = null;
+            outRec2.Idx = outRec1.Idx;
+
+            outRec1.IsHole = holeStateRec.IsHole;
+            if (holeStateRec == outRec2) 
+              outRec1.FirstLeft = outRec2.FirstLeft;
+            outRec2.FirstLeft = outRec1;
+
+            //fixup FirstLeft pointers that may need reassigning to OutRec1
+            if (m_UsingPolyTree) FixupFirstLefts3(outRec2, outRec1);
+          }
+        }
+      }
+      //------------------------------------------------------------------------------
+
+      private void UpdateOutPtIdxs(OutRec outrec)
+      {  
+        OutPt op = outrec.Pts;
+        do
+        {
+          op.Idx = outrec.Idx;
+          op = op.Prev;
+        }
+        while(op != outrec.Pts);
+      }
+      //------------------------------------------------------------------------------
+
+      private void DoSimplePolygons()
+      {
+        int i = 0;
+        while (i < m_PolyOuts.Count) 
+        {
+          OutRec outrec = m_PolyOuts[i++];
+          OutPt op = outrec.Pts;
+          if (op == null || outrec.IsOpen) continue;
+          do //for each Pt in Polygon until duplicate found do ...
+          {
+            OutPt op2 = op.Next;
+            while (op2 != outrec.Pts) 
+            {
+              if ((op.Pt == op2.Pt) && op2.Next != op && op2.Prev != op) 
+              {
+                //split the polygon into two ...
+                OutPt op3 = op.Prev;
+                OutPt op4 = op2.Prev;
+                op.Prev = op4;
+                op4.Next = op;
+                op2.Prev = op3;
+                op3.Next = op2;
+
+                outrec.Pts = op;
+                OutRec outrec2 = CreateOutRec();
+                outrec2.Pts = op2;
+                UpdateOutPtIdxs(outrec2);
+                if (Poly2ContainsPoly1(outrec2.Pts, outrec.Pts))
                 {
-                    op1b = DupOutPt(op1, false);
-                    op2b = DupOutPt(op2, true);
-                    op1.Prev = op2;
-                    op2.Next = op1;
-                    op1b.Next = op2b;
-                    op2b.Prev = op1b;
-                    j.OutPt1 = op1;
-                    j.OutPt2 = op1b;
-                    return true;
+                  //OutRec2 is contained by OutRec1 ...
+                  outrec2.IsHole = !outrec.IsHole;
+                  outrec2.FirstLeft = outrec;
+                  if (m_UsingPolyTree) FixupFirstLefts2(outrec2, outrec);
                 }
                 else
+                  if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
                 {
-                    op1b = DupOutPt(op1, true);
-                    op2b = DupOutPt(op2, false);
-                    op1.Next = op2;
-                    op2.Prev = op1;
-                    op1b.Prev = op2b;
-                    op2b.Next = op1b;
-                    j.OutPt1 = op1;
-                    j.OutPt2 = op1b;
-                    return true;
+                  //OutRec1 is contained by OutRec2 ...
+                  outrec2.IsHole = outrec.IsHole;
+                  outrec.IsHole = !outrec2.IsHole;
+                  outrec2.FirstLeft = outrec.FirstLeft;
+                  outrec.FirstLeft = outrec2;
+                  if (m_UsingPolyTree) FixupFirstLefts2(outrec, outrec2);
                 }
+                  else
+                {
+                  //the 2 polygons are separate ...
+                  outrec2.IsHole = outrec.IsHole;
+                  outrec2.FirstLeft = outrec.FirstLeft;
+                  if (m_UsingPolyTree) FixupFirstLefts1(outrec, outrec2);
+                }
+                op2 = op; //ie get ready for the next iteration
+              }
+              op2 = op2.Next;
             }
+            op = op.Next;
+          }
+          while (op != outrec.Pts);
         }
-        //----------------------------------------------------------------------
+      }
+      //------------------------------------------------------------------------------
 
-        public static int PointInPolygon(IntPoint pt, Path path)
+      public static double Area(Path poly)
+      {
+        int cnt = (int)poly.Count;
+        if (cnt < 3) return 0;
+        double a = 0;
+        for (int i = 0, j = cnt - 1; i < cnt; ++i)
         {
-            //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-            //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-            //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-            int result = 0, cnt = path.Count;
-            if (cnt < 3) return 0;
-            IntPoint ip = path[0];
-            for (int i = 1; i <= cnt; ++i)
-            {
-                IntPoint ipNext = (i == cnt ? path[0] : path[i]);
-                if (ipNext.Y == pt.Y)
-                {
-                    if ((ipNext.X == pt.X) || (ip.Y == pt.Y &&
-                      ((ipNext.X > pt.X) == (ip.X < pt.X)))) return -1;
-                }
-                if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
-                {
-                    if (ip.X >= pt.X)
-                    {
-                        if (ipNext.X > pt.X) result = 1 - result;
-                        else
-                        {
-                            double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
-                              (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
-                            if (d == 0) return -1;
-                            else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
-                        }
-                    }
-                    else
-                    {
-                        if (ipNext.X > pt.X)
-                        {
-                            double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
-                              (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
-                            if (d == 0) return -1;
-                            else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
-                        }
-                    }
-                }
-                ip = ipNext;
-            }
-            return result;
+          a += ((double)poly[j].X + poly[i].X) * ((double)poly[j].Y - poly[i].Y);
+          j = i;
         }
-        //------------------------------------------------------------------------------
+        return -a * 0.5;
+      }
+      //------------------------------------------------------------------------------
 
-        private static int PointInPolygon(IntPoint pt, OutPt op)
-        {
-            //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-            //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-            //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-            int result = 0;
-            OutPt startOp = op;
-            cInt ptx = pt.X, pty = pt.Y;
-            cInt poly0x = op.Pt.X, poly0y = op.Pt.Y;
-            do
-            {
-                op = op.Next;
-                cInt poly1x = op.Pt.X, poly1y = op.Pt.Y;
+      internal double Area(OutRec outRec)
+      {
+        return Area(outRec.Pts);
+      }
+      //------------------------------------------------------------------------------
 
-                if (poly1y == pty)
-                {
-                    if ((poly1x == ptx) || (poly0y == pty &&
-                      ((poly1x > ptx) == (poly0x < ptx)))) return -1;
-                }
-                if ((poly0y < pty) != (poly1y < pty))
-                {
-                    if (poly0x >= ptx)
-                    {
-                        if (poly1x > ptx) result = 1 - result;
-                        else
-                        {
-                            double d = (double)(poly0x - ptx) * (poly1y - pty) -
-                              (double)(poly1x - ptx) * (poly0y - pty);
-                            if (d == 0) return -1;
-                            if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
-                        }
-                    }
-                    else
-                    {
-                        if (poly1x > ptx)
-                        {
-                            double d = (double)(poly0x - ptx) * (poly1y - pty) -
-                              (double)(poly1x - ptx) * (poly0y - pty);
-                            if (d == 0) return -1;
-                            if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
-                        }
-                    }
-                }
-                poly0x = poly1x; poly0y = poly1y;
-            } while (startOp != op);
-            return result;
-        }
-        //------------------------------------------------------------------------------
+      internal double Area(OutPt op)
+      {
+        OutPt opFirst = op;
+        if (op == null) return 0;
+        double a = 0;
+        do {
+          a = a + (double)(op.Prev.Pt.X + op.Pt.X) * (double)(op.Prev.Pt.Y - op.Pt.Y);
+          op = op.Next;
+        } while (op != opFirst);
+        return a * 0.5;
+      }
 
-        private static bool Poly2ContainsPoly1(OutPt outPt1, OutPt outPt2)
-        {
-            OutPt op = outPt1;
-            do
-            {
-                //nb: PointInPolygon returns 0 if false, +1 if true, -1 if pt on polygon
-                int res = PointInPolygon(op.Pt, outPt2);
-                if (res >= 0) return res > 0;
-                op = op.Next;
-            }
-            while (op != outPt1);
-            return true;
-        }
-        //----------------------------------------------------------------------
+      //------------------------------------------------------------------------------
+      // SimplifyPolygon functions ...
+      // Convert self-intersecting polygons into simple polygons
+      //------------------------------------------------------------------------------
 
-        private void FixupFirstLefts1(OutRec OldOutRec, OutRec NewOutRec)
-        {
-            for (int i = 0; i < m_PolyOuts.Count; i++)
-            {
-                OutRec outRec = m_PolyOuts[i];
-                if (outRec.Pts == null || outRec.FirstLeft == null) continue;
-                OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-                if (firstLeft == OldOutRec)
-                {
-                    if (Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts))
-                        outRec.FirstLeft = NewOutRec;
-                }
-            }
-        }
-        //----------------------------------------------------------------------
-
-        private void FixupFirstLefts2(OutRec OldOutRec, OutRec NewOutRec)
-        {
-            foreach (OutRec outRec in m_PolyOuts)
-                if (outRec.FirstLeft == OldOutRec) outRec.FirstLeft = NewOutRec;
-        }
-        //----------------------------------------------------------------------
-
-        private static OutRec ParseFirstLeft(OutRec FirstLeft)
-        {
-            while (FirstLeft != null && FirstLeft.Pts == null)
-                FirstLeft = FirstLeft.FirstLeft;
-            return FirstLeft;
-        }
-        //------------------------------------------------------------------------------
-
-        private void JoinCommonEdges()
-        {
-            for (int i = 0; i < m_Joins.Count; i++)
-            {
-                Join join = m_Joins[i];
-
-                OutRec outRec1 = GetOutRec(join.OutPt1.Idx);
-                OutRec outRec2 = GetOutRec(join.OutPt2.Idx);
-
-                if (outRec1.Pts == null || outRec2.Pts == null) continue;
-
-                //get the polygon fragment with the correct hole state (FirstLeft)
-                //before calling JoinPoints() ...
-                OutRec holeStateRec;
-                if (outRec1 == outRec2) holeStateRec = outRec1;
-                else if (Param1RightOfParam2(outRec1, outRec2)) holeStateRec = outRec2;
-                else if (Param1RightOfParam2(outRec2, outRec1)) holeStateRec = outRec1;
-                else holeStateRec = GetLowermostRec(outRec1, outRec2);
-
-                if (!JoinPoints(join, outRec1, outRec2)) continue;
-
-                if (outRec1 == outRec2)
-                {
-                    //instead of joining two polygons, we've just created a new one by
-                    //splitting one polygon into two.
-                    outRec1.Pts = join.OutPt1;
-                    outRec1.BottomPt = null;
-                    outRec2 = CreateOutRec();
-                    outRec2.Pts = join.OutPt2;
-
-                    //update all OutRec2.Pts Idx's ...
-                    UpdateOutPtIdxs(outRec2);
-
-                    //We now need to check every OutRec.FirstLeft pointer. If it points
-                    //to OutRec1 it may need to point to OutRec2 instead ...
-                    if (m_UsingPolyTree)
-                        for (int j = 0; j < m_PolyOuts.Count - 1; j++)
-                        {
-                            OutRec oRec = m_PolyOuts[j];
-                            if (oRec.Pts == null || ParseFirstLeft(oRec.FirstLeft) != outRec1 ||
-                              oRec.IsHole == outRec1.IsHole) continue;
-                            if (Poly2ContainsPoly1(oRec.Pts, join.OutPt2))
-                                oRec.FirstLeft = outRec2;
-                        }
-
-                    if (Poly2ContainsPoly1(outRec2.Pts, outRec1.Pts))
-                    {
-                        //outRec2 is contained by outRec1 ...
-                        outRec2.IsHole = !outRec1.IsHole;
-                        outRec2.FirstLeft = outRec1;
-
-                        //fixup FirstLeft pointers that may need reassigning to OutRec1
-                        if (m_UsingPolyTree) FixupFirstLefts2(outRec2, outRec1);
-
-                        if ((outRec2.IsHole ^ ReverseSolution) == (Area(outRec2) > 0))
-                            ReversePolyPtLinks(outRec2.Pts);
-
-                    }
-                    else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
-                    {
-                        //outRec1 is contained by outRec2 ...
-                        outRec2.IsHole = outRec1.IsHole;
-                        outRec1.IsHole = !outRec2.IsHole;
-                        outRec2.FirstLeft = outRec1.FirstLeft;
-                        outRec1.FirstLeft = outRec2;
-
-                        //fixup FirstLeft pointers that may need reassigning to OutRec1
-                        if (m_UsingPolyTree) FixupFirstLefts2(outRec1, outRec2);
-
-                        if ((outRec1.IsHole ^ ReverseSolution) == (Area(outRec1) > 0))
-                            ReversePolyPtLinks(outRec1.Pts);
-                    }
-                    else
-                    {
-                        //the 2 polygons are completely separate ...
-                        outRec2.IsHole = outRec1.IsHole;
-                        outRec2.FirstLeft = outRec1.FirstLeft;
-
-                        //fixup FirstLeft pointers that may need reassigning to OutRec2
-                        if (m_UsingPolyTree) FixupFirstLefts1(outRec1, outRec2);
-                    }
-
-                }
-                else
-                {
-                    //joined 2 polygons together ...
-
-                    outRec2.Pts = null;
-                    outRec2.BottomPt = null;
-                    outRec2.Idx = outRec1.Idx;
-
-                    outRec1.IsHole = holeStateRec.IsHole;
-                    if (holeStateRec == outRec2)
-                        outRec1.FirstLeft = outRec2.FirstLeft;
-                    outRec2.FirstLeft = outRec1;
-
-                    //fixup FirstLeft pointers that may need reassigning to OutRec1
-                    if (m_UsingPolyTree) FixupFirstLefts2(outRec2, outRec1);
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        private void UpdateOutPtIdxs(OutRec outrec)
-        {
-            OutPt op = outrec.Pts;
-            do
-            {
-                op.Idx = outrec.Idx;
-                op = op.Prev;
-            }
-            while (op != outrec.Pts);
-        }
-        //------------------------------------------------------------------------------
-
-        private void DoSimplePolygons()
-        {
-            int i = 0;
-            while (i < m_PolyOuts.Count)
-            {
-                OutRec outrec = m_PolyOuts[i++];
-                OutPt op = outrec.Pts;
-                if (op == null || outrec.IsOpen) continue;
-                do //for each Pt in Polygon until duplicate found do ...
-                {
-                    OutPt op2 = op.Next;
-                    while (op2 != outrec.Pts)
-                    {
-                        if ((op.Pt == op2.Pt) && op2.Next != op && op2.Prev != op)
-                        {
-                            //split the polygon into two ...
-                            OutPt op3 = op.Prev;
-                            OutPt op4 = op2.Prev;
-                            op.Prev = op4;
-                            op4.Next = op;
-                            op2.Prev = op3;
-                            op3.Next = op2;
-
-                            outrec.Pts = op;
-                            OutRec outrec2 = CreateOutRec();
-                            outrec2.Pts = op2;
-                            UpdateOutPtIdxs(outrec2);
-                            if (Poly2ContainsPoly1(outrec2.Pts, outrec.Pts))
-                            {
-                                //OutRec2 is contained by OutRec1 ...
-                                outrec2.IsHole = !outrec.IsHole;
-                                outrec2.FirstLeft = outrec;
-                                if (m_UsingPolyTree) FixupFirstLefts2(outrec2, outrec);
-                            }
-                            else
-                                if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
-                                {
-                                    //OutRec1 is contained by OutRec2 ...
-                                    outrec2.IsHole = outrec.IsHole;
-                                    outrec.IsHole = !outrec2.IsHole;
-                                    outrec2.FirstLeft = outrec.FirstLeft;
-                                    outrec.FirstLeft = outrec2;
-                                    if (m_UsingPolyTree) FixupFirstLefts2(outrec, outrec2);
-                                }
-                                else
-                                {
-                                    //the 2 polygons are separate ...
-                                    outrec2.IsHole = outrec.IsHole;
-                                    outrec2.FirstLeft = outrec.FirstLeft;
-                                    if (m_UsingPolyTree) FixupFirstLefts1(outrec, outrec2);
-                                }
-                            op2 = op; //ie get ready for the next iteration
-                        }
-                        op2 = op2.Next;
-                    }
-                    op = op.Next;
-                }
-                while (op != outrec.Pts);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public static double Area(Path poly)
-        {
-            int cnt = (int)poly.Count;
-            if (cnt < 3) return 0;
-            double a = 0;
-            for (int i = 0, j = cnt - 1; i < cnt; ++i)
-            {
-                a += ((double)poly[j].X + poly[i].X) * ((double)poly[j].Y - poly[i].Y);
-                j = i;
-            }
-            return -a * 0.5;
-        }
-        //------------------------------------------------------------------------------
-
-        double Area(OutRec outRec)
-        {
-            OutPt op = outRec.Pts;
-            if (op == null) return 0;
-            double a = 0;
-            do
-            {
-                a = a + (double)(op.Prev.Pt.X + op.Pt.X) * (double)(op.Prev.Pt.Y - op.Pt.Y);
-                op = op.Next;
-            } while (op != outRec.Pts);
-            return a * 0.5;
-        }
-
-        //------------------------------------------------------------------------------
-        // SimplifyPolygon functions ...
-        // Convert self-intersecting polygons into simple polygons
-        //------------------------------------------------------------------------------
-
-        public static Paths SimplifyPolygon(Path poly,
-              PolyFillType fillType = PolyFillType.pftEvenOdd)
-        {
-            Paths result = new Paths();
-            Clipper c = new Clipper();
-            c.StrictlySimple = true;
-            c.AddPath(poly, PolyType.ptSubject, true);
-            c.Execute(ClipType.ctUnion, result, fillType, fillType);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        public static Paths SimplifyPolygons(Paths polys,
+      public static Paths SimplifyPolygon(Path poly, 
             PolyFillType fillType = PolyFillType.pftEvenOdd)
+      {
+          Paths result = new Paths();
+          Clipper c = new Clipper();
+          c.StrictlySimple = true;
+          c.AddPath(poly, PolyType.ptSubject, true);
+          c.Execute(ClipType.ctUnion, result, fillType, fillType);
+          return result;
+      }
+      //------------------------------------------------------------------------------
+
+      public static Paths SimplifyPolygons(Paths polys,
+          PolyFillType fillType = PolyFillType.pftEvenOdd)
+      {
+          Paths result = new Paths();
+          Clipper c = new Clipper();
+          c.StrictlySimple = true;
+          c.AddPaths(polys, PolyType.ptSubject, true);
+          c.Execute(ClipType.ctUnion, result, fillType, fillType);
+          return result;
+      }
+      //------------------------------------------------------------------------------
+
+      private static double DistanceSqrd(IntPoint pt1, IntPoint pt2)
+      {
+        double dx = ((double)pt1.X - pt2.X);
+        double dy = ((double)pt1.Y - pt2.Y);
+        return (dx*dx + dy*dy);
+      }
+      //------------------------------------------------------------------------------
+
+      private static double DistanceFromLineSqrd(IntPoint pt, IntPoint ln1, IntPoint ln2)
+      {
+        //The equation of a line in general form (Ax + By + C = 0)
+        //given 2 points (x¹,y¹) & (x²,y²) is ...
+        //(y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
+        //A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
+        //perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
+        //see http://en.wikipedia.org/wiki/Perpendicular_distance
+        double A = ln1.Y - ln2.Y;
+        double B = ln2.X - ln1.X;
+        double C = A * ln1.X  + B * ln1.Y;
+        C = A * pt.X + B * pt.Y - C;
+        return (C * C) / (A * A + B * B);
+      }
+      //---------------------------------------------------------------------------
+
+      private static bool SlopesNearCollinear(IntPoint pt1, 
+          IntPoint pt2, IntPoint pt3, double distSqrd)
+      {
+        //this function is more accurate when the point that's GEOMETRICALLY 
+        //between the other 2 points is the one that's tested for distance.  
+        //nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts                    
+        if (Math.Abs(pt1.X - pt2.X) > Math.Abs(pt1.Y - pt2.Y))
+	      {
+          if ((pt1.X > pt2.X) == (pt1.X < pt3.X))
+            return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
+          else if ((pt2.X > pt1.X) == (pt2.X < pt3.X))
+            return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
+		      else
+	          return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
+	      }
+	      else
+	      {
+          if ((pt1.Y > pt2.Y) == (pt1.Y < pt3.Y))
+            return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
+          else if ((pt2.Y > pt1.Y) == (pt2.Y < pt3.Y))
+            return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
+		      else
+            return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
+	      }
+      }
+      //------------------------------------------------------------------------------
+
+      private static bool PointsAreClose(IntPoint pt1, IntPoint pt2, double distSqrd)
+      {
+          double dx = (double)pt1.X - pt2.X;
+          double dy = (double)pt1.Y - pt2.Y;
+          return ((dx * dx) + (dy * dy) <= distSqrd);
+      }
+      //------------------------------------------------------------------------------
+
+      private static OutPt ExcludeOp(OutPt op)
+      {
+        OutPt result = op.Prev;
+        result.Next = op.Next;
+        op.Next.Prev = result;
+        result.Idx = 0;
+        return result;
+      }
+      //------------------------------------------------------------------------------
+
+      public static Path CleanPolygon(Path path, double distance = 1.415)
+      {
+        //distance = proximity in units/pixels below which vertices will be stripped. 
+        //Default ~= sqrt(2) so when adjacent vertices or semi-adjacent vertices have 
+        //both x & y coords within 1 unit, then the second vertex will be stripped.
+
+        int cnt = path.Count;
+
+        if (cnt == 0) return new Path();
+
+        OutPt [] outPts = new OutPt[cnt];
+        for (int i = 0; i < cnt; ++i) outPts[i] = new OutPt();
+
+        for (int i = 0; i < cnt; ++i)
         {
-            Paths result = new Paths();
-            Clipper c = new Clipper();
-            c.StrictlySimple = true;
-            c.AddPaths(polys, PolyType.ptSubject, true);
-            c.Execute(ClipType.ctUnion, result, fillType, fillType);
-            return result;
+          outPts[i].Pt = path[i];
+          outPts[i].Next = outPts[(i + 1) % cnt];
+          outPts[i].Next.Prev = outPts[i];
+          outPts[i].Idx = 0;
         }
-        //------------------------------------------------------------------------------
 
-        private static double DistanceSqrd(IntPoint pt1, IntPoint pt2)
+        double distSqrd = distance * distance;
+        OutPt op = outPts[0];
+        while (op.Idx == 0 && op.Next != op.Prev)
         {
-            double dx = ((double)pt1.X - pt2.X);
-            double dy = ((double)pt1.Y - pt2.Y);
-            return (dx * dx + dy * dy);
+          if (PointsAreClose(op.Pt, op.Prev.Pt, distSqrd))
+          {
+            op = ExcludeOp(op);
+            cnt--;
+          }
+          else if (PointsAreClose(op.Prev.Pt, op.Next.Pt, distSqrd))
+          {
+            ExcludeOp(op.Next);
+            op = ExcludeOp(op);
+            cnt -= 2;
+          }
+          else if (SlopesNearCollinear(op.Prev.Pt, op.Pt, op.Next.Pt, distSqrd))
+          {
+            op = ExcludeOp(op);
+            cnt--;
+          }
+          else
+          {
+            op.Idx = 1;
+            op = op.Next;
+          }
         }
-        //------------------------------------------------------------------------------
 
-        private static double DistanceFromLineSqrd(IntPoint pt, IntPoint ln1, IntPoint ln2)
+        if (cnt < 3) cnt = 0;
+        Path result = new Path(cnt);
+        for (int i = 0; i < cnt; ++i)
         {
-            //The equation of a line in general form (Ax + By + C = 0)
-            //given 2 points (x¹,y¹) & (x²,y²) is ...
-            //(y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
-            //A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
-            //perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
-            //see http://en.wikipedia.org/wiki/Perpendicular_distance
-            double A = ln1.Y - ln2.Y;
-            double B = ln2.X - ln1.X;
-            double C = A * ln1.X + B * ln1.Y;
-            C = A * pt.X + B * pt.Y - C;
-            return (C * C) / (A * A + B * B);
+          result.Add(op.Pt);
+          op = op.Next;
         }
-        //---------------------------------------------------------------------------
+        outPts = null;
+        return result;
+      }
+      //------------------------------------------------------------------------------
 
-        private static bool SlopesNearCollinear(IntPoint pt1,
-            IntPoint pt2, IntPoint pt3, double distSqrd)
+      public static Paths CleanPolygons(Paths polys,
+          double distance = 1.415)
+      {
+        Paths result = new Paths(polys.Count);
+        for (int i = 0; i < polys.Count; i++)
+          result.Add(CleanPolygon(polys[i], distance));
+        return result;
+      }
+      //------------------------------------------------------------------------------
+
+      internal static Paths Minkowski(Path pattern, Path path, bool IsSum, bool IsClosed)
+      {
+        int delta = (IsClosed ? 1 : 0);
+        int polyCnt = pattern.Count;
+        int pathCnt = path.Count;
+        Paths result = new Paths(pathCnt);
+        if (IsSum)
+          for (int i = 0; i < pathCnt; i++)
+          {
+            Path p = new Path(polyCnt);
+            foreach (IntPoint ip in pattern)
+              p.Add(new IntPoint(path[i].X + ip.X, path[i].Y + ip.Y));
+            result.Add(p);
+          }
+        else
+          for (int i = 0; i < pathCnt; i++)
+          {
+            Path p = new Path(polyCnt);
+            foreach (IntPoint ip in pattern)
+              p.Add(new IntPoint(path[i].X - ip.X, path[i].Y - ip.Y));
+            result.Add(p);
+          }
+
+        Paths quads = new Paths((pathCnt + delta) * (polyCnt + 1));
+        for (int i = 0; i < pathCnt - 1 + delta; i++)
+          for (int j = 0; j < polyCnt; j++)
+          {
+            Path quad = new Path(4);
+            quad.Add(result[i % pathCnt][j % polyCnt]);
+            quad.Add(result[(i + 1) % pathCnt][j % polyCnt]);
+            quad.Add(result[(i + 1) % pathCnt][(j + 1) % polyCnt]);
+            quad.Add(result[i % pathCnt][(j + 1) % polyCnt]);
+            if (!Orientation(quad)) quad.Reverse();
+            quads.Add(quad);
+          }
+        return quads;
+      }
+      //------------------------------------------------------------------------------
+
+      public static Paths MinkowskiSum(Path pattern, Path path, bool pathIsClosed)
+      {
+        Paths paths = Minkowski(pattern, path, true, pathIsClosed);
+        Clipper c = new Clipper();
+        c.AddPaths(paths, PolyType.ptSubject, true);
+        c.Execute(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+        return paths;
+      }
+      //------------------------------------------------------------------------------
+
+      private static Path TranslatePath(Path path, IntPoint delta) 
+      {
+        Path outPath = new Path(path.Count);
+        for (int i = 0; i < path.Count; i++)
+          outPath.Add(new IntPoint(path[i].X + delta.X, path[i].Y + delta.Y));
+        return outPath;
+      }
+      //------------------------------------------------------------------------------
+
+      public static Paths MinkowskiSum(Path pattern, Paths paths, bool pathIsClosed)
+      {
+        Paths solution = new Paths();
+        Clipper c = new Clipper();
+        for (int i = 0; i < paths.Count; ++i)
         {
-            //this function is more accurate when the point that's GEOMETRICALLY 
-            //between the other 2 points is the one that's tested for distance.  
-            //nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts                    
-            if (Math.Abs(pt1.X - pt2.X) > Math.Abs(pt1.Y - pt2.Y))
-            {
-                if ((pt1.X > pt2.X) == (pt1.X < pt3.X))
-                    return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
-                else if ((pt2.X > pt1.X) == (pt2.X < pt3.X))
-                    return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
-                else
-                    return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
-            }
-            else
-            {
-                if ((pt1.Y > pt2.Y) == (pt1.Y < pt3.Y))
-                    return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
-                else if ((pt2.Y > pt1.Y) == (pt2.Y < pt3.Y))
-                    return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
-                else
-                    return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
-            }
+          Paths tmp = Minkowski(pattern, paths[i], true, pathIsClosed);
+          c.AddPaths(tmp, PolyType.ptSubject, true);
+          if (pathIsClosed)
+          {
+            Path path = TranslatePath(paths[i], pattern[0]);
+            c.AddPath(path, PolyType.ptClip, true);
+          }
         }
-        //------------------------------------------------------------------------------
+        c.Execute(ClipType.ctUnion, solution, 
+          PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+        return solution;
+      }
+      //------------------------------------------------------------------------------
 
-        private static bool PointsAreClose(IntPoint pt1, IntPoint pt2, double distSqrd)
+      public static Paths MinkowskiDiff(Path poly1, Path poly2)
+      {
+        Paths paths = Minkowski(poly1, poly2, false, true);
+        Clipper c = new Clipper();
+        c.AddPaths(paths, PolyType.ptSubject, true);
+        c.Execute(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+        return paths;
+      }
+      //------------------------------------------------------------------------------
+
+      internal enum NodeType { ntAny, ntOpen, ntClosed };
+
+      public static Paths PolyTreeToPaths(PolyTree polytree)
+      {
+
+        Paths result = new Paths();
+        result.Capacity = polytree.Total;
+        AddPolyNodeToPaths(polytree, NodeType.ntAny, result);
+        return result;
+      }
+      //------------------------------------------------------------------------------
+
+      internal static void AddPolyNodeToPaths(PolyNode polynode, NodeType nt, Paths paths)
+      {
+        bool match = true;
+        switch (nt)
         {
-            double dx = (double)pt1.X - pt2.X;
-            double dy = (double)pt1.Y - pt2.Y;
-            return ((dx * dx) + (dy * dy) <= distSqrd);
+          case NodeType.ntOpen: return;
+          case NodeType.ntClosed: match = !polynode.IsOpen; break;
+          default: break;
         }
-        //------------------------------------------------------------------------------
 
-        private static OutPt ExcludeOp(OutPt op)
-        {
-            OutPt result = op.Prev;
-            result.Next = op.Next;
-            op.Next.Prev = result;
-            result.Idx = 0;
-            return result;
-        }
-        //------------------------------------------------------------------------------
+        if (polynode.m_polygon.Count > 0 && match)
+          paths.Add(polynode.m_polygon);
+        foreach (PolyNode pn in polynode.Childs)
+          AddPolyNodeToPaths(pn, nt, paths);
+      }
+      //------------------------------------------------------------------------------
 
-        public static Path CleanPolygon(Path path, double distance = 1.415)
-        {
-            //distance = proximity in units/pixels below which vertices will be stripped. 
-            //Default ~= sqrt(2) so when adjacent vertices or semi-adjacent vertices have 
-            //both x & y coords within 1 unit, then the second vertex will be stripped.
+      public static Paths OpenPathsFromPolyTree(PolyTree polytree)
+      {
+        Paths result = new Paths();
+        result.Capacity = polytree.ChildCount;
+        for (int i = 0; i < polytree.ChildCount; i++)
+          if (polytree.Childs[i].IsOpen)
+            result.Add(polytree.Childs[i].m_polygon);
+        return result;
+      }
+      //------------------------------------------------------------------------------
 
-            int cnt = path.Count;
+      public static Paths ClosedPathsFromPolyTree(PolyTree polytree)
+      {
+        Paths result = new Paths();
+        result.Capacity = polytree.Total;
+        AddPolyNodeToPaths(polytree, NodeType.ntClosed, result);
+        return result;
+      }
+      //------------------------------------------------------------------------------
 
-            if (cnt == 0) return new Path();
+  } //end Clipper
 
-            OutPt[] outPts = new OutPt[cnt];
-            for (int i = 0; i < cnt; ++i) outPts[i] = new OutPt();
+  public class ClipperOffset
+  {
+    private Paths m_destPolys;
+    private Path m_srcPoly;
+    private Path m_destPoly;
+    private List<DoublePoint> m_normals = new List<DoublePoint>();
+    private double m_delta, m_sinA, m_sin, m_cos;
+    private double m_miterLim, m_StepsPerRad;
 
-            for (int i = 0; i < cnt; ++i)
-            {
-                outPts[i].Pt = path[i];
-                outPts[i].Next = outPts[(i + 1) % cnt];
-                outPts[i].Next.Prev = outPts[i];
-                outPts[i].Idx = 0;
-            }
+    private IntPoint m_lowest;
+    private PolyNode m_polyNodes = new PolyNode();
 
-            double distSqrd = distance * distance;
-            OutPt op = outPts[0];
-            while (op.Idx == 0 && op.Next != op.Prev)
-            {
-                if (PointsAreClose(op.Pt, op.Prev.Pt, distSqrd))
-                {
-                    op = ExcludeOp(op);
-                    cnt--;
-                }
-                else if (PointsAreClose(op.Prev.Pt, op.Next.Pt, distSqrd))
-                {
-                    ExcludeOp(op.Next);
-                    op = ExcludeOp(op);
-                    cnt -= 2;
-                }
-                else if (SlopesNearCollinear(op.Prev.Pt, op.Pt, op.Next.Pt, distSqrd))
-                {
-                    op = ExcludeOp(op);
-                    cnt--;
-                }
-                else
-                {
-                    op.Idx = 1;
-                    op = op.Next;
-                }
-            }
+    public double ArcTolerance { get; set; }
+    public double MiterLimit { get; set; }
 
-            if (cnt < 3) cnt = 0;
-            Path result = new Path(cnt);
-            for (int i = 0; i < cnt; ++i)
-            {
-                result.Add(op.Pt);
-                op = op.Next;
-            }
-            outPts = null;
-            return result;
-        }
-        //------------------------------------------------------------------------------
+    private const double two_pi = Math.PI * 2;
+    private const double def_arc_tolerance = 0.25;
 
-        public static Paths CleanPolygons(Paths polys,
-            double distance = 1.415)
-        {
-            Paths result = new Paths(polys.Count);
-            for (int i = 0; i < polys.Count; i++)
-                result.Add(CleanPolygon(polys[i], distance));
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static Paths Minkowski(Path pattern, Path path, bool IsSum, bool IsClosed)
-        {
-            int delta = (IsClosed ? 1 : 0);
-            int polyCnt = pattern.Count;
-            int pathCnt = path.Count;
-            Paths result = new Paths(pathCnt);
-            if (IsSum)
-                for (int i = 0; i < pathCnt; i++)
-                {
-                    Path p = new Path(polyCnt);
-                    foreach (IntPoint ip in pattern)
-                        p.Add(new IntPoint(path[i].X + ip.X, path[i].Y + ip.Y));
-                    result.Add(p);
-                }
-            else
-                for (int i = 0; i < pathCnt; i++)
-                {
-                    Path p = new Path(polyCnt);
-                    foreach (IntPoint ip in pattern)
-                        p.Add(new IntPoint(path[i].X - ip.X, path[i].Y - ip.Y));
-                    result.Add(p);
-                }
-
-            Paths quads = new Paths((pathCnt + delta) * (polyCnt + 1));
-            for (int i = 0; i < pathCnt - 1 + delta; i++)
-                for (int j = 0; j < polyCnt; j++)
-                {
-                    Path quad = new Path(4);
-                    quad.Add(result[i % pathCnt][j % polyCnt]);
-                    quad.Add(result[(i + 1) % pathCnt][j % polyCnt]);
-                    quad.Add(result[(i + 1) % pathCnt][(j + 1) % polyCnt]);
-                    quad.Add(result[i % pathCnt][(j + 1) % polyCnt]);
-                    if (!Orientation(quad)) quad.Reverse();
-                    quads.Add(quad);
-                }
-            return quads;
-        }
-        //------------------------------------------------------------------------------
-
-        public static Paths MinkowskiSum(Path pattern, Path path, bool pathIsClosed)
-        {
-            Paths paths = Minkowski(pattern, path, true, pathIsClosed);
-            Clipper c = new Clipper();
-            c.AddPaths(paths, PolyType.ptSubject, true);
-            c.Execute(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
-            return paths;
-        }
-        //------------------------------------------------------------------------------
-
-        private static Path TranslatePath(Path path, IntPoint delta)
-        {
-            Path outPath = new Path(path.Count);
-            for (int i = 0; i < path.Count; i++)
-                outPath.Add(new IntPoint(path[i].X + delta.X, path[i].Y + delta.Y));
-            return outPath;
-        }
-        //------------------------------------------------------------------------------
-
-        public static Paths MinkowskiSum(Path pattern, Paths paths, bool pathIsClosed)
-        {
-            Paths solution = new Paths();
-            Clipper c = new Clipper();
-            for (int i = 0; i < paths.Count; ++i)
-            {
-                Paths tmp = Minkowski(pattern, paths[i], true, pathIsClosed);
-                c.AddPaths(tmp, PolyType.ptSubject, true);
-                if (pathIsClosed)
-                {
-                    Path path = TranslatePath(paths[i], pattern[0]);
-                    c.AddPath(path, PolyType.ptClip, true);
-                }
-            }
-            c.Execute(ClipType.ctUnion, solution,
-              PolyFillType.pftNonZero, PolyFillType.pftNonZero);
-            return solution;
-        }
-        //------------------------------------------------------------------------------
-
-        public static Paths MinkowskiDiff(Path poly1, Path poly2)
-        {
-            Paths paths = Minkowski(poly1, poly2, false, true);
-            Clipper c = new Clipper();
-            c.AddPaths(paths, PolyType.ptSubject, true);
-            c.Execute(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
-            return paths;
-        }
-        //------------------------------------------------------------------------------
-
-        internal enum NodeType { ntAny, ntOpen, ntClosed };
-
-        public static Paths PolyTreeToPaths(PolyTree polytree)
-        {
-
-            Paths result = new Paths();
-            result.Capacity = polytree.Total;
-            AddPolyNodeToPaths(polytree, NodeType.ntAny, result);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static void AddPolyNodeToPaths(PolyNode polynode, NodeType nt, Paths paths)
-        {
-            bool match = true;
-            switch (nt)
-            {
-                case NodeType.ntOpen: return;
-                case NodeType.ntClosed: match = !polynode.IsOpen; break;
-                default: break;
-            }
-
-            if (polynode.m_polygon.Count > 0 && match)
-                paths.Add(polynode.m_polygon);
-            foreach (PolyNode pn in polynode.Childs)
-                AddPolyNodeToPaths(pn, nt, paths);
-        }
-        //------------------------------------------------------------------------------
-
-        public static Paths OpenPathsFromPolyTree(PolyTree polytree)
-        {
-            Paths result = new Paths();
-            result.Capacity = polytree.ChildCount;
-            for (int i = 0; i < polytree.ChildCount; i++)
-                if (polytree.Childs[i].IsOpen)
-                    result.Add(polytree.Childs[i].m_polygon);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        public static Paths ClosedPathsFromPolyTree(PolyTree polytree)
-        {
-            Paths result = new Paths();
-            result.Capacity = polytree.Total;
-            AddPolyNodeToPaths(polytree, NodeType.ntClosed, result);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-    } //end Clipper
-
-    public class ClipperOffset
+    public ClipperOffset(
+      double miterLimit = 2.0, double arcTolerance = def_arc_tolerance)
     {
-        private Paths m_destPolys;
-        private Path m_srcPoly;
-        private Path m_destPoly;
-        private List<DoublePoint> m_normals = new List<DoublePoint>();
-        private double m_delta, m_sinA, m_sin, m_cos;
-        private double m_miterLim, m_StepsPerRad;
-
-        private IntPoint m_lowest;
-        private PolyNode m_polyNodes = new PolyNode();
-
-        public double ArcTolerance { get; set; }
-        public double MiterLimit { get; set; }
-
-        private const double two_pi = Math.PI * 2;
-        private const double def_arc_tolerance = 0.25;
-
-        public ClipperOffset(
-          double miterLimit = 2.0, double arcTolerance = def_arc_tolerance)
-        {
-            MiterLimit = miterLimit;
-            ArcTolerance = arcTolerance;
-            m_lowest.X = -1;
-        }
-        //------------------------------------------------------------------------------
-
-        public void Clear()
-        {
-            m_polyNodes.Childs.Clear();
-            m_lowest.X = -1;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static cInt Round(double value)
-        {
-            return value < 0 ? (cInt)(value - 0.5) : (cInt)(value + 0.5);
-        }
-        //------------------------------------------------------------------------------
-
-        public void AddPath(Path path, JoinType joinType, EndType endType)
-        {
-            int highI = path.Count - 1;
-            if (highI < 0) return;
-            PolyNode newNode = new PolyNode();
-            newNode.m_jointype = joinType;
-            newNode.m_endtype = endType;
-
-            //strip duplicate points from path and also get index to the lowest point ...
-            if (endType == EndType.etClosedLine || endType == EndType.etClosedPolygon)
-                while (highI > 0 && path[0] == path[highI]) highI--;
-            newNode.m_polygon.Capacity = highI + 1;
-            newNode.m_polygon.Add(path[0]);
-            int j = 0, k = 0;
-            for (int i = 1; i <= highI; i++)
-                if (newNode.m_polygon[j] != path[i])
-                {
-                    j++;
-                    newNode.m_polygon.Add(path[i]);
-                    if (path[i].Y > newNode.m_polygon[k].Y ||
-                      (path[i].Y == newNode.m_polygon[k].Y &&
-                      path[i].X < newNode.m_polygon[k].X)) k = j;
-                }
-            if (endType == EndType.etClosedPolygon && j < 2) return;
-
-            m_polyNodes.AddChild(newNode);
-
-            //if this path's lowest pt is lower than all the others then update m_lowest
-            if (endType != EndType.etClosedPolygon) return;
-            if (m_lowest.X < 0)
-                m_lowest = new IntPoint(m_polyNodes.ChildCount - 1, k);
-            else
-            {
-                IntPoint ip = m_polyNodes.Childs[(int)m_lowest.X].m_polygon[(int)m_lowest.Y];
-                if (newNode.m_polygon[k].Y > ip.Y ||
-                  (newNode.m_polygon[k].Y == ip.Y &&
-                  newNode.m_polygon[k].X < ip.X))
-                    m_lowest = new IntPoint(m_polyNodes.ChildCount - 1, k);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public void AddPaths(Paths paths, JoinType joinType, EndType endType)
-        {
-            foreach (Path p in paths)
-                AddPath(p, joinType, endType);
-        }
-        //------------------------------------------------------------------------------
-
-        private void FixOrientations()
-        {
-            //fixup orientations of all closed paths if the orientation of the
-            //closed path with the lowermost vertex is wrong ...
-            if (m_lowest.X >= 0 &&
-              !Clipper.Orientation(m_polyNodes.Childs[(int)m_lowest.X].m_polygon))
-            {
-                for (int i = 0; i < m_polyNodes.ChildCount; i++)
-                {
-                    PolyNode node = m_polyNodes.Childs[i];
-                    if (node.m_endtype == EndType.etClosedPolygon ||
-                      (node.m_endtype == EndType.etClosedLine &&
-                      Clipper.Orientation(node.m_polygon)))
-                        node.m_polygon.Reverse();
-                }
-            }
-            else
-            {
-                for (int i = 0; i < m_polyNodes.ChildCount; i++)
-                {
-                    PolyNode node = m_polyNodes.Childs[i];
-                    if (node.m_endtype == EndType.etClosedLine &&
-                      !Clipper.Orientation(node.m_polygon))
-                        node.m_polygon.Reverse();
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        internal static DoublePoint GetUnitNormal(IntPoint pt1, IntPoint pt2)
-        {
-            double dx = (pt2.X - pt1.X);
-            double dy = (pt2.Y - pt1.Y);
-            if ((dx == 0) && (dy == 0)) return new DoublePoint();
-
-            double f = 1 * 1.0 / Math.Sqrt(dx * dx + dy * dy);
-            dx *= f;
-            dy *= f;
-
-            return new DoublePoint(dy, -dx);
-        }
-        //------------------------------------------------------------------------------
-
-        private void DoOffset(double delta)
-        {
-            m_destPolys = new Paths();
-            m_delta = delta;
-
-            //if Zero offset, just copy any CLOSED polygons to m_p and return ...
-            if (ClipperBase.near_zero(delta))
-            {
-                m_destPolys.Capacity = m_polyNodes.ChildCount;
-                for (int i = 0; i < m_polyNodes.ChildCount; i++)
-                {
-                    PolyNode node = m_polyNodes.Childs[i];
-                    if (node.m_endtype == EndType.etClosedPolygon)
-                        m_destPolys.Add(node.m_polygon);
-                }
-                return;
-            }
-
-            //see offset_triginometry3.svg in the documentation folder ...
-            if (MiterLimit > 2) m_miterLim = 2 / (MiterLimit * MiterLimit);
-            else m_miterLim = 0.5;
-
-            double y;
-            if (ArcTolerance <= 0.0)
-                y = def_arc_tolerance;
-            else if (ArcTolerance > Math.Abs(delta) * def_arc_tolerance)
-                y = Math.Abs(delta) * def_arc_tolerance;
-            else
-                y = ArcTolerance;
-            //see offset_triginometry2.svg in the documentation folder ...
-            double steps = Math.PI / Math.Acos(1 - y / Math.Abs(delta));
-            m_sin = Math.Sin(two_pi / steps);
-            m_cos = Math.Cos(two_pi / steps);
-            m_StepsPerRad = steps / two_pi;
-            if (delta < 0.0) m_sin = -m_sin;
-
-            m_destPolys.Capacity = m_polyNodes.ChildCount * 2;
-            for (int i = 0; i < m_polyNodes.ChildCount; i++)
-            {
-                PolyNode node = m_polyNodes.Childs[i];
-                m_srcPoly = node.m_polygon;
-
-                int len = m_srcPoly.Count;
-
-                if (len == 0 || (delta <= 0 && (len < 3 ||
-                  node.m_endtype != EndType.etClosedPolygon)))
-                    continue;
-
-                m_destPoly = new Path();
-
-                if (len == 1)
-                {
-                    if (node.m_jointype == JoinType.jtRound)
-                    {
-                        double X = 1.0, Y = 0.0;
-                        for (int j = 1; j <= steps; j++)
-                        {
-                            m_destPoly.Add(new IntPoint(
-                              Round(m_srcPoly[0].X + X * delta),
-                              Round(m_srcPoly[0].Y + Y * delta)));
-                            double X2 = X;
-                            X = X * m_cos - m_sin * Y;
-                            Y = X2 * m_sin + Y * m_cos;
-                        }
-                    }
-                    else
-                    {
-                        double X = -1.0, Y = -1.0;
-                        for (int j = 0; j < 4; ++j)
-                        {
-                            m_destPoly.Add(new IntPoint(
-                              Round(m_srcPoly[0].X + X * delta),
-                              Round(m_srcPoly[0].Y + Y * delta)));
-                            if (X < 0) X = 1;
-                            else if (Y < 0) Y = 1;
-                            else X = -1;
-                        }
-                    }
-                    m_destPolys.Add(m_destPoly);
-                    continue;
-                }
-
-                //build m_normals ...
-                m_normals.Clear();
-                m_normals.Capacity = len;
-                for (int j = 0; j < len - 1; j++)
-                    m_normals.Add(GetUnitNormal(m_srcPoly[j], m_srcPoly[j + 1]));
-                if (node.m_endtype == EndType.etClosedLine ||
-                  node.m_endtype == EndType.etClosedPolygon)
-                    m_normals.Add(GetUnitNormal(m_srcPoly[len - 1], m_srcPoly[0]));
-                else
-                    m_normals.Add(new DoublePoint(m_normals[len - 2]));
-
-                if (node.m_endtype == EndType.etClosedPolygon)
-                {
-                    int k = len - 1;
-                    for (int j = 0; j < len; j++)
-                        OffsetPoint(j, ref k, node.m_jointype);
-                    m_destPolys.Add(m_destPoly);
-                }
-                else if (node.m_endtype == EndType.etClosedLine)
-                {
-                    int k = len - 1;
-                    for (int j = 0; j < len; j++)
-                        OffsetPoint(j, ref k, node.m_jointype);
-                    m_destPolys.Add(m_destPoly);
-                    m_destPoly = new Path();
-                    //re-build m_normals ...
-                    DoublePoint n = m_normals[len - 1];
-                    for (int j = len - 1; j > 0; j--)
-                        m_normals[j] = new DoublePoint(-m_normals[j - 1].X, -m_normals[j - 1].Y);
-                    m_normals[0] = new DoublePoint(-n.X, -n.Y);
-                    k = 0;
-                    for (int j = len - 1; j >= 0; j--)
-                        OffsetPoint(j, ref k, node.m_jointype);
-                    m_destPolys.Add(m_destPoly);
-                }
-                else
-                {
-                    int k = 0;
-                    for (int j = 1; j < len - 1; ++j)
-                        OffsetPoint(j, ref k, node.m_jointype);
-
-                    IntPoint pt1;
-                    if (node.m_endtype == EndType.etOpenButt)
-                    {
-                        int j = len - 1;
-                        pt1 = new IntPoint((cInt)Round(m_srcPoly[j].X + m_normals[j].X *
-                          delta), (cInt)Round(m_srcPoly[j].Y + m_normals[j].Y * delta));
-                        m_destPoly.Add(pt1);
-                        pt1 = new IntPoint((cInt)Round(m_srcPoly[j].X - m_normals[j].X *
-                          delta), (cInt)Round(m_srcPoly[j].Y - m_normals[j].Y * delta));
-                        m_destPoly.Add(pt1);
-                    }
-                    else
-                    {
-                        int j = len - 1;
-                        k = len - 2;
-                        m_sinA = 0;
-                        m_normals[j] = new DoublePoint(-m_normals[j].X, -m_normals[j].Y);
-                        if (node.m_endtype == EndType.etOpenSquare)
-                            DoSquare(j, k);
-                        else
-                            DoRound(j, k);
-                    }
-
-                    //re-build m_normals ...
-                    for (int j = len - 1; j > 0; j--)
-                        m_normals[j] = new DoublePoint(-m_normals[j - 1].X, -m_normals[j - 1].Y);
-
-                    m_normals[0] = new DoublePoint(-m_normals[1].X, -m_normals[1].Y);
-
-                    k = len - 1;
-                    for (int j = k - 1; j > 0; --j)
-                        OffsetPoint(j, ref k, node.m_jointype);
-
-                    if (node.m_endtype == EndType.etOpenButt)
-                    {
-                        pt1 = new IntPoint((cInt)Round(m_srcPoly[0].X - m_normals[0].X * delta),
-                          (cInt)Round(m_srcPoly[0].Y - m_normals[0].Y * delta));
-                        m_destPoly.Add(pt1);
-                        pt1 = new IntPoint((cInt)Round(m_srcPoly[0].X + m_normals[0].X * delta),
-                          (cInt)Round(m_srcPoly[0].Y + m_normals[0].Y * delta));
-                        m_destPoly.Add(pt1);
-                    }
-                    else
-                    {
-                        k = 1;
-                        m_sinA = 0;
-                        if (node.m_endtype == EndType.etOpenSquare)
-                            DoSquare(0, 1);
-                        else
-                            DoRound(0, 1);
-                    }
-                    m_destPolys.Add(m_destPoly);
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public void Execute(ref Paths solution, double delta)
-        {
-            solution.Clear();
-            FixOrientations();
-            DoOffset(delta);
-            //now clean up 'corners' ...
-            Clipper clpr = new Clipper();
-            clpr.AddPaths(m_destPolys, PolyType.ptSubject, true);
-            if (delta > 0)
-            {
-                clpr.Execute(ClipType.ctUnion, solution,
-                  PolyFillType.pftPositive, PolyFillType.pftPositive);
-            }
-            else
-            {
-                IntRect r = Clipper.GetBounds(m_destPolys);
-                Path outer = new Path(4);
-
-                outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.top - 10));
-                outer.Add(new IntPoint(r.left - 10, r.top - 10));
-
-                clpr.AddPath(outer, PolyType.ptSubject, true);
-                clpr.ReverseSolution = true;
-                clpr.Execute(ClipType.ctUnion, solution, PolyFillType.pftNegative, PolyFillType.pftNegative);
-                if (solution.Count > 0) solution.RemoveAt(0);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public void Execute(ref PolyTree solution, double delta)
-        {
-            solution.Clear();
-            FixOrientations();
-            DoOffset(delta);
-
-            //now clean up 'corners' ...
-            Clipper clpr = new Clipper();
-            clpr.AddPaths(m_destPolys, PolyType.ptSubject, true);
-            if (delta > 0)
-            {
-                clpr.Execute(ClipType.ctUnion, solution,
-                  PolyFillType.pftPositive, PolyFillType.pftPositive);
-            }
-            else
-            {
-                IntRect r = Clipper.GetBounds(m_destPolys);
-                Path outer = new Path(4);
-
-                outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.top - 10));
-                outer.Add(new IntPoint(r.left - 10, r.top - 10));
-
-                clpr.AddPath(outer, PolyType.ptSubject, true);
-                clpr.ReverseSolution = true;
-                clpr.Execute(ClipType.ctUnion, solution, PolyFillType.pftNegative, PolyFillType.pftNegative);
-                //remove the outer PolyNode rectangle ...
-                if (solution.ChildCount == 1 && solution.Childs[0].ChildCount > 0)
-                {
-                    PolyNode outerNode = solution.Childs[0];
-                    solution.Childs.Capacity = outerNode.ChildCount;
-                    solution.Childs[0] = outerNode.Childs[0];
-                    solution.Childs[0].m_Parent = solution;
-                    for (int i = 1; i < outerNode.ChildCount; i++)
-                        solution.AddChild(outerNode.Childs[i]);
-                }
-                else
-                    solution.Clear();
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        void OffsetPoint(int j, ref int k, JoinType jointype)
-        {
-            //cross product ...
-            m_sinA = (m_normals[k].X * m_normals[j].Y - m_normals[j].X * m_normals[k].Y);
-
-            if (Math.Abs(m_sinA * m_delta) < 1.0)
-            {
-                //dot product ...
-                double cosA = (m_normals[k].X * m_normals[j].X + m_normals[j].Y * m_normals[k].Y);
-                if (cosA > 0) // angle ==> 0 degrees
-                {
-                    m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[k].X * m_delta),
-                      Round(m_srcPoly[j].Y + m_normals[k].Y * m_delta)));
-                    return;
-                }
-                //else angle ==> 180 degrees   
-            }
-            else if (m_sinA > 1.0) m_sinA = 1.0;
-            else if (m_sinA < -1.0) m_sinA = -1.0;
-
-            if (m_sinA * m_delta < 0)
-            {
-                m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[k].X * m_delta),
-                  Round(m_srcPoly[j].Y + m_normals[k].Y * m_delta)));
-                m_destPoly.Add(m_srcPoly[j]);
-                m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[j].X * m_delta),
-                  Round(m_srcPoly[j].Y + m_normals[j].Y * m_delta)));
-            }
-            else
-                switch (jointype)
-                {
-                    case JoinType.jtMiter:
-                        {
-                            double r = 1 + (m_normals[j].X * m_normals[k].X +
-                              m_normals[j].Y * m_normals[k].Y);
-                            if (r >= m_miterLim) DoMiter(j, k, r); else DoSquare(j, k);
-                            break;
-                        }
-                    case JoinType.jtSquare: DoSquare(j, k); break;
-                    case JoinType.jtRound: DoRound(j, k); break;
-                }
-            k = j;
-        }
-        //------------------------------------------------------------------------------
-
-        internal void DoSquare(int j, int k)
-        {
-            double dx = Math.Tan(Math.Atan2(m_sinA,
-                m_normals[k].X * m_normals[j].X + m_normals[k].Y * m_normals[j].Y) / 4);
-            m_destPoly.Add(new IntPoint(
-                Round(m_srcPoly[j].X + m_delta * (m_normals[k].X - m_normals[k].Y * dx)),
-                Round(m_srcPoly[j].Y + m_delta * (m_normals[k].Y + m_normals[k].X * dx))));
-            m_destPoly.Add(new IntPoint(
-                Round(m_srcPoly[j].X + m_delta * (m_normals[j].X + m_normals[j].Y * dx)),
-                Round(m_srcPoly[j].Y + m_delta * (m_normals[j].Y - m_normals[j].X * dx))));
-        }
-        //------------------------------------------------------------------------------
-
-        internal void DoMiter(int j, int k, double r)
-        {
-            double q = m_delta / r;
-            m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + (m_normals[k].X + m_normals[j].X) * q),
-                Round(m_srcPoly[j].Y + (m_normals[k].Y + m_normals[j].Y) * q)));
-        }
-        //------------------------------------------------------------------------------
-
-        internal void DoRound(int j, int k)
-        {
-            double a = Math.Atan2(m_sinA,
-            m_normals[k].X * m_normals[j].X + m_normals[k].Y * m_normals[j].Y);
-            int steps = Math.Max((int)Round(m_StepsPerRad * Math.Abs(a)), 1);
-
-            double X = m_normals[k].X, Y = m_normals[k].Y, X2;
-            for (int i = 0; i < steps; ++i)
-            {
-                m_destPoly.Add(new IntPoint(
-                    Round(m_srcPoly[j].X + X * m_delta),
-                    Round(m_srcPoly[j].Y + Y * m_delta)));
-                X2 = X;
-                X = X * m_cos - m_sin * Y;
-                Y = X2 * m_sin + Y * m_cos;
-            }
-            m_destPoly.Add(new IntPoint(
-            Round(m_srcPoly[j].X + m_normals[j].X * m_delta),
-            Round(m_srcPoly[j].Y + m_normals[j].Y * m_delta)));
-        }
-        //------------------------------------------------------------------------------
-    }
-
-    class ClipperException : Exception
-    {
-        public ClipperException(string description) : base(description) { }
+      MiterLimit = miterLimit;
+      ArcTolerance = arcTolerance;
+      m_lowest.X = -1;
     }
     //------------------------------------------------------------------------------
+
+    public void Clear()
+    {
+      m_polyNodes.Childs.Clear();
+      m_lowest.X = -1;
+    }
+    //------------------------------------------------------------------------------
+
+    internal static cInt Round(double value)
+    {
+      return value < 0 ? (cInt)(value - 0.5) : (cInt)(value + 0.5);
+    }
+    //------------------------------------------------------------------------------
+
+    public void AddPath(Path path, JoinType joinType, EndType endType)
+    {
+      int highI = path.Count - 1;
+      if (highI < 0) return;
+      PolyNode newNode = new PolyNode();
+      newNode.m_jointype = joinType;
+      newNode.m_endtype = endType;
+
+      //strip duplicate points from path and also get index to the lowest point ...
+      if (endType == EndType.etClosedLine || endType == EndType.etClosedPolygon)
+        while (highI > 0 && path[0] == path[highI]) highI--;
+      newNode.m_polygon.Capacity = highI + 1;
+      newNode.m_polygon.Add(path[0]);
+      int j = 0, k = 0;
+      for (int i = 1; i <= highI; i++)
+        if (newNode.m_polygon[j] != path[i])
+        {
+          j++;
+          newNode.m_polygon.Add(path[i]);
+          if (path[i].Y > newNode.m_polygon[k].Y ||
+            (path[i].Y == newNode.m_polygon[k].Y &&
+            path[i].X < newNode.m_polygon[k].X)) k = j;
+        }
+      if (endType == EndType.etClosedPolygon && j < 2) return;
+
+      m_polyNodes.AddChild(newNode);
+
+      //if this path's lowest pt is lower than all the others then update m_lowest
+      if (endType != EndType.etClosedPolygon) return;
+      if (m_lowest.X < 0)
+        m_lowest = new IntPoint(m_polyNodes.ChildCount - 1, k);
+      else
+      {
+        IntPoint ip = m_polyNodes.Childs[(int)m_lowest.X].m_polygon[(int)m_lowest.Y];
+        if (newNode.m_polygon[k].Y > ip.Y ||
+          (newNode.m_polygon[k].Y == ip.Y &&
+          newNode.m_polygon[k].X < ip.X))
+          m_lowest = new IntPoint(m_polyNodes.ChildCount - 1, k);
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    public void AddPaths(Paths paths, JoinType joinType, EndType endType)
+    {
+      foreach (Path p in paths)
+        AddPath(p, joinType, endType);
+    }
+    //------------------------------------------------------------------------------
+
+    private void FixOrientations()
+    {
+      //fixup orientations of all closed paths if the orientation of the
+      //closed path with the lowermost vertex is wrong ...
+      if (m_lowest.X >= 0 && 
+        !Clipper.Orientation(m_polyNodes.Childs[(int)m_lowest.X].m_polygon))
+      {
+        for (int i = 0; i < m_polyNodes.ChildCount; i++)
+        {
+          PolyNode node = m_polyNodes.Childs[i];
+          if (node.m_endtype == EndType.etClosedPolygon ||
+            (node.m_endtype == EndType.etClosedLine && 
+            Clipper.Orientation(node.m_polygon)))
+            node.m_polygon.Reverse();
+        }
+      }
+      else
+      {
+        for (int i = 0; i < m_polyNodes.ChildCount; i++)
+        {
+          PolyNode node = m_polyNodes.Childs[i];
+          if (node.m_endtype == EndType.etClosedLine &&
+            !Clipper.Orientation(node.m_polygon))
+          node.m_polygon.Reverse();
+        }
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    internal static DoublePoint GetUnitNormal(IntPoint pt1, IntPoint pt2)
+    {
+      double dx = (pt2.X - pt1.X);
+      double dy = (pt2.Y - pt1.Y);
+      if ((dx == 0) && (dy == 0)) return new DoublePoint();
+
+      double f = 1 * 1.0 / Math.Sqrt(dx * dx + dy * dy);
+      dx *= f;
+      dy *= f;
+
+      return new DoublePoint(dy, -dx);
+    }
+    //------------------------------------------------------------------------------
+
+    private void DoOffset(double delta)
+    {
+      m_destPolys = new Paths();
+      m_delta = delta;
+
+      //if Zero offset, just copy any CLOSED polygons to m_p and return ...
+      if (ClipperBase.near_zero(delta)) 
+      {
+        m_destPolys.Capacity = m_polyNodes.ChildCount;
+        for (int i = 0; i < m_polyNodes.ChildCount; i++)
+        {
+          PolyNode node = m_polyNodes.Childs[i];
+          if (node.m_endtype == EndType.etClosedPolygon)
+            m_destPolys.Add(node.m_polygon);
+        }
+        return;
+      }
+
+      //see offset_triginometry3.svg in the documentation folder ...
+      if (MiterLimit > 2) m_miterLim = 2 / (MiterLimit * MiterLimit);
+      else m_miterLim = 0.5;
+
+      double y;
+      if (ArcTolerance <= 0.0) 
+        y = def_arc_tolerance;
+      else if (ArcTolerance > Math.Abs(delta) * def_arc_tolerance)
+        y = Math.Abs(delta) * def_arc_tolerance;
+      else 
+        y = ArcTolerance;
+      //see offset_triginometry2.svg in the documentation folder ...
+      double steps = Math.PI / Math.Acos(1 - y / Math.Abs(delta));
+      m_sin = Math.Sin(two_pi / steps);
+      m_cos = Math.Cos(two_pi / steps);
+      m_StepsPerRad = steps / two_pi;
+      if (delta < 0.0) m_sin = -m_sin;
+
+      m_destPolys.Capacity = m_polyNodes.ChildCount * 2;
+      for (int i = 0; i < m_polyNodes.ChildCount; i++)
+      {
+        PolyNode node = m_polyNodes.Childs[i];
+        m_srcPoly = node.m_polygon;
+
+        int len = m_srcPoly.Count;
+
+        if (len == 0 || (delta <= 0 && (len < 3 || 
+          node.m_endtype != EndType.etClosedPolygon)))
+            continue;
+
+        m_destPoly = new Path();
+
+        if (len == 1)
+        {
+          if (node.m_jointype == JoinType.jtRound)
+          {
+            double X = 1.0, Y = 0.0;
+            for (int j = 1; j <= steps; j++)
+            {
+              m_destPoly.Add(new IntPoint(
+                Round(m_srcPoly[0].X + X * delta),
+                Round(m_srcPoly[0].Y + Y * delta)));
+              double X2 = X;
+              X = X * m_cos - m_sin * Y;
+              Y = X2 * m_sin + Y * m_cos;
+            }
+          }
+          else
+          {
+            double X = -1.0, Y = -1.0;
+            for (int j = 0; j < 4; ++j)
+            {
+              m_destPoly.Add(new IntPoint(
+                Round(m_srcPoly[0].X + X * delta),
+                Round(m_srcPoly[0].Y + Y * delta)));
+              if (X < 0) X = 1;
+              else if (Y < 0) Y = 1;
+              else X = -1;
+            }
+          }
+          m_destPolys.Add(m_destPoly);
+          continue;
+        }
+
+        //build m_normals ...
+        m_normals.Clear();
+        m_normals.Capacity = len;
+        for (int j = 0; j < len - 1; j++)
+          m_normals.Add(GetUnitNormal(m_srcPoly[j], m_srcPoly[j + 1]));
+        if (node.m_endtype == EndType.etClosedLine || 
+          node.m_endtype == EndType.etClosedPolygon)
+          m_normals.Add(GetUnitNormal(m_srcPoly[len - 1], m_srcPoly[0]));
+        else
+          m_normals.Add(new DoublePoint(m_normals[len - 2]));
+
+        if (node.m_endtype == EndType.etClosedPolygon)
+        {
+          int k = len - 1;
+          for (int j = 0; j < len; j++)
+            OffsetPoint(j, ref k, node.m_jointype);
+          m_destPolys.Add(m_destPoly);
+        }
+        else if (node.m_endtype == EndType.etClosedLine)
+        {
+          int k = len - 1;
+          for (int j = 0; j < len; j++)
+            OffsetPoint(j, ref k, node.m_jointype);
+          m_destPolys.Add(m_destPoly);
+          m_destPoly = new Path();
+          //re-build m_normals ...
+          DoublePoint n = m_normals[len - 1];
+          for (int j = len - 1; j > 0; j--)
+            m_normals[j] = new DoublePoint(-m_normals[j - 1].X, -m_normals[j - 1].Y);
+          m_normals[0] = new DoublePoint(-n.X, -n.Y);
+          k = 0;
+          for (int j = len - 1; j >= 0; j--)
+            OffsetPoint(j, ref k, node.m_jointype);
+          m_destPolys.Add(m_destPoly);
+        }
+        else
+        {
+          int k = 0;
+          for (int j = 1; j < len - 1; ++j)
+            OffsetPoint(j, ref k, node.m_jointype);
+
+          IntPoint pt1;
+          if (node.m_endtype == EndType.etOpenButt)
+          {
+            int j = len - 1;
+            pt1 = new IntPoint((cInt)Round(m_srcPoly[j].X + m_normals[j].X *
+              delta), (cInt)Round(m_srcPoly[j].Y + m_normals[j].Y * delta));
+            m_destPoly.Add(pt1);
+            pt1 = new IntPoint((cInt)Round(m_srcPoly[j].X - m_normals[j].X *
+              delta), (cInt)Round(m_srcPoly[j].Y - m_normals[j].Y * delta));
+            m_destPoly.Add(pt1);
+          }
+          else
+          {
+            int j = len - 1;
+            k = len - 2;
+            m_sinA = 0;
+            m_normals[j] = new DoublePoint(-m_normals[j].X, -m_normals[j].Y);
+            if (node.m_endtype == EndType.etOpenSquare)
+              DoSquare(j, k);
+            else
+              DoRound(j, k);
+          }
+
+          //re-build m_normals ...
+          for (int j = len - 1; j > 0; j--)
+            m_normals[j] = new DoublePoint(-m_normals[j - 1].X, -m_normals[j - 1].Y);
+
+          m_normals[0] = new DoublePoint(-m_normals[1].X, -m_normals[1].Y);
+
+          k = len - 1;
+          for (int j = k - 1; j > 0; --j)
+            OffsetPoint(j, ref k, node.m_jointype);
+
+          if (node.m_endtype == EndType.etOpenButt)
+          {
+            pt1 = new IntPoint((cInt)Round(m_srcPoly[0].X - m_normals[0].X * delta),
+              (cInt)Round(m_srcPoly[0].Y - m_normals[0].Y * delta));
+            m_destPoly.Add(pt1);
+            pt1 = new IntPoint((cInt)Round(m_srcPoly[0].X + m_normals[0].X * delta),
+              (cInt)Round(m_srcPoly[0].Y + m_normals[0].Y * delta));
+            m_destPoly.Add(pt1);
+          }
+          else
+          {
+            k = 1;
+            m_sinA = 0;
+            if (node.m_endtype == EndType.etOpenSquare)
+              DoSquare(0, 1);
+            else
+              DoRound(0, 1);
+          }
+          m_destPolys.Add(m_destPoly);
+        }
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    public void Execute(ref Paths solution, double delta)
+    {
+      solution.Clear();
+      FixOrientations();
+      DoOffset(delta);
+      //now clean up 'corners' ...
+      Clipper clpr = new Clipper();
+      clpr.AddPaths(m_destPolys, PolyType.ptSubject, true);
+      if (delta > 0)
+      {
+        clpr.Execute(ClipType.ctUnion, solution,
+          PolyFillType.pftPositive, PolyFillType.pftPositive);
+      }
+      else
+      {
+        IntRect r = Clipper.GetBounds(m_destPolys);
+        Path outer = new Path(4);
+
+        outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
+        outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
+        outer.Add(new IntPoint(r.right + 10, r.top - 10));
+        outer.Add(new IntPoint(r.left - 10, r.top - 10));
+
+        clpr.AddPath(outer, PolyType.ptSubject, true);
+        clpr.ReverseSolution = true;
+        clpr.Execute(ClipType.ctUnion, solution, PolyFillType.pftNegative, PolyFillType.pftNegative);
+        if (solution.Count > 0) solution.RemoveAt(0);
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    public void Execute(ref PolyTree solution, double delta)
+    {
+      solution.Clear();
+      FixOrientations();
+      DoOffset(delta);
+
+      //now clean up 'corners' ...
+      Clipper clpr = new Clipper();
+      clpr.AddPaths(m_destPolys, PolyType.ptSubject, true);
+      if (delta > 0)
+      {
+        clpr.Execute(ClipType.ctUnion, solution,
+          PolyFillType.pftPositive, PolyFillType.pftPositive);
+      }
+      else
+      {
+        IntRect r = Clipper.GetBounds(m_destPolys);
+        Path outer = new Path(4);
+
+        outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
+        outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
+        outer.Add(new IntPoint(r.right + 10, r.top - 10));
+        outer.Add(new IntPoint(r.left - 10, r.top - 10));
+
+        clpr.AddPath(outer, PolyType.ptSubject, true);
+        clpr.ReverseSolution = true;
+        clpr.Execute(ClipType.ctUnion, solution, PolyFillType.pftNegative, PolyFillType.pftNegative);
+        //remove the outer PolyNode rectangle ...
+        if (solution.ChildCount == 1 && solution.Childs[0].ChildCount > 0)
+        {
+          PolyNode outerNode = solution.Childs[0];
+          solution.Childs.Capacity = outerNode.ChildCount;
+          solution.Childs[0] = outerNode.Childs[0];
+          solution.Childs[0].m_Parent = solution;
+          for (int i = 1; i < outerNode.ChildCount; i++)
+            solution.AddChild(outerNode.Childs[i]);
+        }
+        else
+          solution.Clear();
+      }
+    }
+    //------------------------------------------------------------------------------
+
+    void OffsetPoint(int j, ref int k, JoinType jointype)
+    {
+      //cross product ...
+      m_sinA = (m_normals[k].X * m_normals[j].Y - m_normals[j].X * m_normals[k].Y);
+
+      if (Math.Abs(m_sinA * m_delta) < 1.0) 
+      {
+        //dot product ...
+        double cosA = (m_normals[k].X * m_normals[j].X + m_normals[j].Y * m_normals[k].Y); 
+        if (cosA > 0) // angle ==> 0 degrees
+        {
+          m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[k].X * m_delta),
+            Round(m_srcPoly[j].Y + m_normals[k].Y * m_delta)));
+          return; 
+        }
+        //else angle ==> 180 degrees   
+      }
+      else if (m_sinA > 1.0) m_sinA = 1.0;
+      else if (m_sinA < -1.0) m_sinA = -1.0;
+      
+      if (m_sinA * m_delta < 0)
+      {
+        m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[k].X * m_delta),
+          Round(m_srcPoly[j].Y + m_normals[k].Y * m_delta)));
+        m_destPoly.Add(m_srcPoly[j]);
+        m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[j].X * m_delta),
+          Round(m_srcPoly[j].Y + m_normals[j].Y * m_delta)));
+      }
+      else
+        switch (jointype)
+        {
+          case JoinType.jtMiter:
+            {
+              double r = 1 + (m_normals[j].X * m_normals[k].X +
+                m_normals[j].Y * m_normals[k].Y);
+              if (r >= m_miterLim) DoMiter(j, k, r); else DoSquare(j, k);
+              break;
+            }
+          case JoinType.jtSquare: DoSquare(j, k); break;
+          case JoinType.jtRound: DoRound(j, k); break;
+        }
+      k = j;
+    }
+    //------------------------------------------------------------------------------
+
+    internal void DoSquare(int j, int k)
+    {
+      double dx = Math.Tan(Math.Atan2(m_sinA,
+          m_normals[k].X * m_normals[j].X + m_normals[k].Y * m_normals[j].Y) / 4);
+      m_destPoly.Add(new IntPoint(
+          Round(m_srcPoly[j].X + m_delta * (m_normals[k].X - m_normals[k].Y * dx)),
+          Round(m_srcPoly[j].Y + m_delta * (m_normals[k].Y + m_normals[k].X * dx))));
+      m_destPoly.Add(new IntPoint(
+          Round(m_srcPoly[j].X + m_delta * (m_normals[j].X + m_normals[j].Y * dx)),
+          Round(m_srcPoly[j].Y + m_delta * (m_normals[j].Y - m_normals[j].X * dx))));
+    }
+    //------------------------------------------------------------------------------
+
+    internal void DoMiter(int j, int k, double r)
+    {
+      double q = m_delta / r;
+      m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + (m_normals[k].X + m_normals[j].X) * q),
+          Round(m_srcPoly[j].Y + (m_normals[k].Y + m_normals[j].Y) * q)));
+    }
+    //------------------------------------------------------------------------------
+
+    internal void DoRound(int j, int k)
+    {
+      double a = Math.Atan2(m_sinA,
+      m_normals[k].X * m_normals[j].X + m_normals[k].Y * m_normals[j].Y);
+      int steps = Math.Max((int)Round(m_StepsPerRad * Math.Abs(a)),1);
+
+      double X = m_normals[k].X, Y = m_normals[k].Y, X2;
+      for (int i = 0; i < steps; ++i)
+      {
+        m_destPoly.Add(new IntPoint(
+            Round(m_srcPoly[j].X + X * m_delta),
+            Round(m_srcPoly[j].Y + Y * m_delta)));
+        X2 = X;
+        X = X * m_cos - m_sin * Y;
+        Y = X2 * m_sin + Y * m_cos;
+      }
+      m_destPoly.Add(new IntPoint(
+      Round(m_srcPoly[j].X + m_normals[j].X * m_delta),
+      Round(m_srcPoly[j].Y + m_normals[j].Y * m_delta)));
+    }
+    //------------------------------------------------------------------------------
+  }
+
+  class ClipperException : Exception
+  {
+      public ClipperException(string description) : base(description){}
+  }
+  //------------------------------------------------------------------------------
 
 } //end ClipperLib namespace
 
 // ----------------------------------------------------------------------
-// P2T.cs
+// Dict.cs
 
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
 
-// using System.Diagnostics;
-
-
-namespace Poly2Tri
-{
-    public static class P2T
-    {
-        private static TriangulationAlgorithm _defaultAlgorithm = TriangulationAlgorithm.DTSweep;
-
-        public static void Triangulate(PolygonSet ps)
-        {
-            TriangulationContext tcx = CreateContext(_defaultAlgorithm);
-            foreach (Polygon p in ps.Polygons)
-            {
-                Triangulate(p);
-            }
-        }
-
-
-        public static void Triangulate(Polygon p)
-        {
-            Triangulate(_defaultAlgorithm, p);
-        }
-
-        
-        public static void Triangulate(ConstrainedPointSet cps)
-        {
-            Triangulate(_defaultAlgorithm, cps);
-        }
-
-        
-        public static void Triangulate(PointSet ps)
-        {
-            Triangulate(_defaultAlgorithm, ps);
-        }
-
-        
-        public static TriangulationContext CreateContext(TriangulationAlgorithm algorithm)
-        {
-            switch (algorithm)
-            {
-                case TriangulationAlgorithm.DTSweep:
-                default:
-                    return new DTSweepContext();
-            }
-        }
-
-        
-        public static void Triangulate(TriangulationAlgorithm algorithm, ITriangulatable t)
-        {
-            TriangulationContext tcx;
-
-            System.Console.WriteLine("Triangulating " + t.FileName);
-            //        long time = System.nanoTime();
-            tcx = CreateContext(algorithm);
-            tcx.PrepareTriangulation(t);
-            Triangulate(tcx);
-            //        logger.info( "Triangulation of {} points [{}ms]", tcx.getPoints().size(), ( System.nanoTime() - time ) / 1e6 );
-        }
-
-        
-        public static void Triangulate(TriangulationContext tcx)
-        {
-            switch (tcx.Algorithm)
-            {
-                case TriangulationAlgorithm.DTSweep:
-                default:
-                    DTSweep.Triangulate((DTSweepContext)tcx);
-                    break;
-            }
-        }
-
-
-        /// <summary>
-        /// Will do a warmup run to let the JVM optimize the triangulation code -- or would if this were Java --MM
-        /// </summary>
-        public static void Warmup()
-        {
-#if false
-			/*
-			 * After a method is run 10000 times, the Hotspot compiler will compile
-			 * it into native code. Periodically, the Hotspot compiler may recompile
-			 * the method. After an unspecified amount of time, then the compilation
-			 * system should become quiet.
-			 */
-			Polygon poly = PolygonGenerator.RandomCircleSweep2(50, 50000);
-			TriangulationProcess process = new TriangulationProcess();
-			process.triangulate(poly);
+#if DOUBLE
+namespace LibTessDotNet.Double
+#else
+namespace LibTessDotNet
 #endif
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// ITriangulatable.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System.Collections.Generic;
-
-namespace Poly2Tri
 {
-    public interface ITriangulatable
+    internal class Dict<TValue> where TValue : class
     {
-        //IList<TriangulationPoint> Points { get; } // MM: Neither of these are used via interface (yet?)
-        IList<DelaunayTriangle> Triangles { get; }
-        TriangulationMode TriangulationMode { get; }
-        string FileName { get; set; }
-        bool DisplayFlipX { get; set; }
-        bool DisplayFlipY { get; set; }
-        float DisplayRotate { get; set; }
-        double Precision { get; set; }
-        double MinX { get; }
-        double MaxX { get; }
-        double MinY { get; }
-        double MaxY { get; }
-        Rect2D Bounds { get; }
-
-        void Prepare(TriangulationContext tcx);
-        void AddTriangle(DelaunayTriangle t);
-        void AddTriangles(IEnumerable<DelaunayTriangle> list);
-        void ClearTriangles();
-    }
-}
-
-// ----------------------------------------------------------------------
-// Orientation.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    public enum Orientation
-    {
-        CW,
-        CCW,
-        Collinear
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationAlgorithm.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    public enum TriangulationAlgorithm
-    {
-        DTSweep
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationConstraint.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-/**
- * Forces a triangle edge between two points p and q
- * when triangulating. For example used to enforce
- * Polygon Edges during a polygon triangulation.
- * 
- * @author Thomas Åhlén, thahlen@gmail.com
- */
-
-// using System;
-
-
-namespace Poly2Tri
-{
-    public class Edge
-    {
-        protected Point2D mP = null;
-        protected Point2D mQ = null;
-
-        public Point2D EdgeStart { get { return mP; } set { mP= value;} }
-        public Point2D EdgeEnd { get { return mQ; } set { mQ = value; } }
-
-        public Edge() { mP = null; mQ = null; }
-        public Edge(Point2D edgeStart, Point2D edgeEnd)
-        {
-            mP = edgeStart;
-            mQ = edgeEnd;
-        }
-    }
-
- 
-    public class TriangulationConstraint : Edge
-    {
-        private uint mContraintCode = 0;
-
-        public TriangulationPoint P
-        {
-            get { return mP as TriangulationPoint; } 
-            set 
-            {
-                // Note:  intentionally use != instead of !Equals() because we
-                // WANT to compare pointer values here rather than VertexCode values
-                if (value != null && mP != value)
-                {
-                    mP = value;
-                    CalculateContraintCode();
-                }
-            }
-        }
-        public TriangulationPoint Q
-        {
-            get { return mQ as TriangulationPoint; }
-            set
-            {
-                // Note:  intentionally use != instead of !Equals() because we
-                // WANT to compare pointer values here rather than VertexCode values
-                if (value != null && mQ != value)
-                {
-                    mQ = value;
-                    CalculateContraintCode();
-                }
-            }
-        }
-        public uint ConstraintCode { get { return mContraintCode; } }
-
-
-        /// <summary>
-        /// Give two points in any order. Will always be ordered so
-        /// that q.y > p.y and q.x > p.x if same y value 
-        /// </summary>
-        public TriangulationConstraint(TriangulationPoint p1, TriangulationPoint p2)
-        {
-            mP = p1;
-            mQ = p2;
-            if (p1.Y > p2.Y)
-            {
-                mQ = p1;
-                mP = p2;
-            }
-            else if (p1.Y == p2.Y)
-            {
-                if (p1.X > p2.X)
-                {
-                    mQ = p1;
-                    mP = p2;
-                }
-                else if (p1.X == p2.X)
-                {
-                    //                logger.info( "Failed to create constraint {}={}", p1, p2 );
-                    //                throw new DuplicatePointException( p1 + "=" + p2 );
-                    //                return;
-                }
-            }
-            CalculateContraintCode();
-        }
-
-
-        public override string ToString()
-        {
-            return "[P=" + P.ToString() + ", Q=" + Q.ToString() + " : {" + mContraintCode.ToString() + "}]";
-        }
-
-        
-        public void CalculateContraintCode()
-        {
-            mContraintCode = TriangulationConstraint.CalculateContraintCode(P, Q);
-        }
-
-
-        public static uint CalculateContraintCode(TriangulationPoint p, TriangulationPoint q)
-        {
-            if (p == null || p == null)
-            {
-                throw new ArgumentNullException();
-            }
-
-            uint constraintCode = MathUtil.Jenkins32Hash(BitConverter.GetBytes(p.VertexCode), 0);
-            constraintCode = MathUtil.Jenkins32Hash(BitConverter.GetBytes(q.VertexCode), constraintCode);
-
-            return constraintCode;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationContext.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-    public abstract class TriangulationContext
-    {
-        public TriangulationDebugContext DebugContext { get; protected set; }
-
-        public readonly List<DelaunayTriangle> Triangles = new List<DelaunayTriangle>();
-        public readonly List<TriangulationPoint> Points = new List<TriangulationPoint>(200);
-        public TriangulationMode TriangulationMode { get; protected set; }
-        public ITriangulatable Triangulatable { get; private set; }
-
-        public int StepCount { get; private set; }
-
-        public void Done()
-        {
-            StepCount++;
-        }
-
-        public abstract TriangulationAlgorithm Algorithm { get; }
-
-
-        public virtual void PrepareTriangulation(ITriangulatable t)
-        {
-            Triangulatable = t;
-            TriangulationMode = t.TriangulationMode;
-            t.Prepare(this);
-
-            //List<TriangulationConstraint> constraints = new List<TriangulationConstraint>();
-
-            //Console.WriteLine("Points for " + t.FileName + ":");
-            //Console.WriteLine("Idx,X,Y,VC,Edges");
-            //int numPoints = Points.Count;
-            //for (int i = 0; i < numPoints; ++i)
-            //{
-            //    StringBuilder sb = new StringBuilder(128);
-            //    sb.Append(i.ToString());
-            //    sb.Append(",");
-            //    sb.Append(Points[i].X.ToString());
-            //    sb.Append(",");
-            //    sb.Append(Points[i].Y.ToString());
-            //    sb.Append(",");
-            //    sb.Append(Points[i].VertexCode.ToString());
-            //    int numEdges = (Points[i].Edges != null) ? Points[i].Edges.Count : 0;
-            //    for (int j = 0; j < numEdges; ++j)
-            //    {
-            //        TriangulationConstraint tc = Points[i].Edges[j];
-            //        sb.Append(",");
-            //        sb.Append(tc.ConstraintCode.ToString());
-            //        constraints.Add(tc);
-            //    }
-            //    Console.WriteLine(sb.ToString());
-            //}
-
-            //int idx = 0;
-            //Console.WriteLine("Constraints " + t.FileName + ":");
-            //Console.WriteLine("EdgeIdx,Px,Py,PVC,Qx,Qy,QVC,ConstraintCode,Owner");
-            //foreach (TriangulationConstraint tc in constraints)
-            //{
-            //    StringBuilder sb = new StringBuilder(128);
-
-            //    sb.Append(idx.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.P.X.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.P.Y.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.P.VertexCode.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.Q.X.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.Q.Y.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.Q.VertexCode.ToString());
-            //    sb.Append(",");
-            //    sb.Append(tc.ConstraintCode.ToString());
-            //    sb.Append(",");
-            //    if (tc.Q.HasEdge(tc.P))
-            //    {
-            //        sb.Append("Q");
-            //    }
-            //    else
-            //    {
-            //        sb.Append("P");
-            //    }
-            //    Console.WriteLine(sb.ToString());
-
-            //    ++idx;
-            //}
-        }
-
-
-        public abstract TriangulationConstraint NewConstraint(TriangulationPoint a, TriangulationPoint b);
-
-
-        public void Update(string message) { }
-
-
-        public virtual void Clear()
-        {
-            Points.Clear();
-            if (DebugContext != null)
-            {
-                DebugContext.Clear();
-            }
-            StepCount = 0;
-        }
-
-
-        public virtual bool IsDebugEnabled { get; protected set; }
-
-        public DTSweepDebugContext DTDebugContext { get { return DebugContext as DTSweepDebugContext; } }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationDebugContext.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    public abstract class TriangulationDebugContext
-    {
-        protected TriangulationContext _tcx;
-
-        public TriangulationDebugContext(TriangulationContext tcx)
-        {
-            _tcx = tcx;
-        }
-
-        public abstract void Clear();
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationMode.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    public enum TriangulationMode
-    {
-        Unconstrained,
-        Constrained,
-        Polygon
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationPoint.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections;
-// using System.Collections.Generic;
-
-
-namespace Poly2Tri
-{
-
-    public class TriangulationPoint : Point2D
-    {
-        public static readonly double kVertexCodeDefaultPrecision = 3.0;
-
-        public override double X
-        {
-            get { return mX; }
-            set
-            {
-                if (value != mX)
-                {
-                    mX = value;
-                    mVertexCode = TriangulationPoint.CreateVertexCode(mX, mY, kVertexCodeDefaultPrecision);
-
-                    // Technically, we should change the ConstraintCodes of any edges that contain this point.
-                    // We don't for 2 reasons:
-                    // 1) Currently the only time we care about Vertex/Constraint Codes is when entering data in the point-set.
-                    //    Once the data is being used by the algorithm, the point locations are (currently) not modified.
-                    // 2) Since this Point's Edge list will only contain SOME of the edges that this point is a part of, 
-                    //    there currently isn't a way to (easily) get any edges that contain this point but are not in this
-                    //    point's edge list.
-                }
-            }
-        }
-        public override double Y
-        {
-            get { return mY; }
-            set
-            {
-                if (value != mY)
-                {
-                    mY = value;
-                    mVertexCode = TriangulationPoint.CreateVertexCode(mX, mY, kVertexCodeDefaultPrecision);
-
-                    // Technically, we should change the ConstraintCodes of any edges that contain this point.
-                    // We don't for 2 reasons:
-                    // 1) Currently the only time we care about Vertex/Constraint Codes is when entering data in the point-set.
-                    //    Once the data is being used by the algorithm, the point locations are (currently) not modified.
-                    // 2) Since this Point's Edge list will only contain SOME of the edges that this point is a part of, 
-                    //    there currently isn't a way to (easily) get any edges that contain this point but are not in this
-                    //    point's edge list.
-                }
-            }
-        }
-
-        protected uint mVertexCode = 0;
-        public uint VertexCode { get { return mVertexCode; } }
-
-        // List of edges this point constitutes an upper ending point (CDT)
-        public List<DTSweepConstraint> Edges { get; private set; }
-        public bool HasEdges { get { return Edges != null; } }
-
-
-        public TriangulationPoint(double x, double y)
-            : this(x, y, kVertexCodeDefaultPrecision)
-        {
-        }
-
-
-        public TriangulationPoint(double x, double y, double precision)
-            : base(x,y)
-        {
-            mVertexCode = TriangulationPoint.CreateVertexCode(x, y, precision);
-        }
-
-
-        public override string ToString()
-        {
-            return base.ToString() + ":{" + mVertexCode.ToString() + "}";
-        }
-
-
-        public override int GetHashCode()
-        {
-            return (int)mVertexCode;
-        }
-
-
-        public override bool Equals(object obj)
-        {
-            TriangulationPoint p2 = obj as TriangulationPoint;
-            if (p2 != null)
-            {
-                return mVertexCode == p2.VertexCode;
-            }
-            else
-            {
-                return base.Equals(obj);
-            }
-        }
-
-
-        public override void Set(double x, double y)
-        {
-            if (x != mX || y != mY)
-            {
-                mX = x;
-                mY = y;
-                mVertexCode = TriangulationPoint.CreateVertexCode(mX, mY, kVertexCodeDefaultPrecision);
-            }
-        }
-
-        
-        public static uint CreateVertexCode(double x, double y, double precision)
-        {
-            float fx = (float)MathUtil.RoundWithPrecision(x, precision);
-            float fy = (float)MathUtil.RoundWithPrecision(y, precision);
-            uint vc = MathUtil.Jenkins32Hash(BitConverter.GetBytes(fx), 0);
-            vc = MathUtil.Jenkins32Hash(BitConverter.GetBytes(fy), vc);
-
-            return vc;
-        }
-
-
-        public void AddEdge(DTSweepConstraint e)
-        {
-            if (Edges == null)
-            {
-                Edges = new List<DTSweepConstraint>();
-            }
-            Edges.Add(e);
-        }
-
-        
-        public bool HasEdge(TriangulationPoint p)
-        {
-            DTSweepConstraint tmp = null;
-            return GetEdge(p, out tmp);
-        }
-
-
-        public bool GetEdge(TriangulationPoint p, out DTSweepConstraint edge)
-        {
-            edge = null;
-            if (Edges == null || Edges.Count < 1 || p == null || p.Equals(this))
-            {
-                return false;
-            }
-
-            foreach (DTSweepConstraint sc in Edges)
-            {
-                if ((sc.P.Equals(this) && sc.Q.Equals(p)) || (sc.P.Equals(p) && sc.Q.Equals(this)))
-                {
-                    edge = sc;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-
-        public static Point2D ToPoint2D(TriangulationPoint p)
-        {
-            return p as Point2D;
-        }
-    }
-
-
-    public class TriangulationPointEnumerator : IEnumerator<TriangulationPoint>
-    {
-        protected IList<Point2D> mPoints;
-        protected int position = -1;  // Enumerators are positioned before the first element until the first MoveNext() call.
-
-
-        public TriangulationPointEnumerator(IList<Point2D> points)
-        {
-            mPoints = points;
-        }
-
-        public bool MoveNext()
-        {
-            position++;
-            return (position < mPoints.Count);
-        }
-
-        public void Reset()
-        {
-            position = -1;
-        }
-
-        void IDisposable.Dispose() { }
-
-        Object IEnumerator.Current { get { return Current; } }
-
-        public TriangulationPoint Current
-        {
-            get
-            {
-                if (position < 0 || position >= mPoints.Count)
-                {
-                    return null;
-                }
-                return mPoints[position] as TriangulationPoint;
-            }
-        }
-    }
-
-
-    public class TriangulationPointList : Point2DList
-    {
-
-    }
-
-}
-
-// ----------------------------------------------------------------------
-// DelaunayTriangle.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/// Changes from the Java version
-///   attributification
-/// Future possibilities
-///   Flattening out the number of indirections
-///     Replacing arrays of 3 with fixed-length arrays?
-///     Replacing bool[3] with a bit array of some sort?
-///     Bundling everything into an AoS mess?
-///     Hardcode them all as ABC ?
-
-// using System;
-// using System.Diagnostics;
-// using System.Collections.Generic;
-
-namespace Poly2Tri
-{
-    public class DelaunayTriangle
-    {
-
-        public FixedArray3<TriangulationPoint> Points;
-        public FixedArray3<DelaunayTriangle> Neighbors;
-        private FixedBitArray3 mEdgeIsConstrained;
-        public FixedBitArray3 EdgeIsConstrained { get { return mEdgeIsConstrained; } }
-        public FixedBitArray3 EdgeIsDelaunay;
-        public bool IsInterior { get; set; }
-
-        public DelaunayTriangle(TriangulationPoint p1, TriangulationPoint p2, TriangulationPoint p3)
-        {
-            Points[0] = p1;
-            Points[1] = p2;
-            Points[2] = p3;
-        }
-
-
-        public int IndexOf(TriangulationPoint p)
-        {
-            int i = Points.IndexOf(p);
-            if (i == -1)
-            {
-                throw new Exception("Calling index with a point that doesn't exist in triangle");
-            }
-
-            return i;
-        }
-
-        
-        public int IndexCWFrom(TriangulationPoint p)
-        {
-            return (IndexOf(p) + 2) % 3;
-        }
-
-
-        public int IndexCCWFrom(TriangulationPoint p)
-        {
-            return (IndexOf(p) + 1) % 3;
-        }
-
-        
-        public bool Contains(TriangulationPoint p)
-        {
-            return Points.Contains(p);
-        }
-
-        
-        /// <summary>
-        /// Update neighbor pointers
-        /// </summary>
-        /// <param name="p1">Point 1 of the shared edge</param>
-        /// <param name="p2">Point 2 of the shared edge</param>
-        /// <param name="t">This triangle's new neighbor</param>
-        private void MarkNeighbor(TriangulationPoint p1, TriangulationPoint p2, DelaunayTriangle t)
-        {
-            int i = EdgeIndex(p1, p2);
-            if (i == -1)
-            {
-                throw new Exception("Error marking neighbors -- t doesn't contain edge p1-p2!");
-            }
-            Neighbors[i] = t;
-        }
-
-
-        /// <summary>
-        /// Exhaustive search to update neighbor pointers
-        /// </summary>
-        public void MarkNeighbor(DelaunayTriangle t)
-        {
-            // Points of this triangle also belonging to t
-            bool a = t.Contains(Points[0]);
-            bool b = t.Contains(Points[1]);
-            bool c = t.Contains(Points[2]);
-
-            if (b && c)
-            {
-                Neighbors[0] = t;
-                t.MarkNeighbor(Points[1], Points[2], this);
-            }
-            else if (a && c)
-            {
-                Neighbors[1] = t;
-                t.MarkNeighbor(Points[0], Points[2], this);
-            }
-            else if (a && b)
-            {
-                Neighbors[2] = t;
-                t.MarkNeighbor(Points[0], Points[1], this);
-            }
-            else
-            {
-                throw new Exception("Failed to mark neighbor, doesn't share an edge!");
-            }
-        }
-
-
-        public void ClearNeighbors()
-        {
-            Neighbors[0] = Neighbors[1] = Neighbors[2] = null;
-        }
-
-
-        public void ClearNeighbor(DelaunayTriangle triangle)
-        {
-            if (Neighbors[0] == triangle)
-            {
-                Neighbors[0] = null;
-            }
-            else if (Neighbors[1] == triangle)
-            {
-                Neighbors[1] = null;
-            }
-            else if( Neighbors[2] == triangle)
-            {
-                Neighbors[2] = null;
-            }
-        }
-
-        /// <summary>
-        /// Clears all references to all other triangles and points
-        /// </summary>
-        public void Clear()
-        {
-            DelaunayTriangle t;
-            for (int i = 0; i < 3; i++)
-            {
-                t = Neighbors[i];
-                if (t != null)
-                {
-                    t.ClearNeighbor(this);
-                }
-            }
-            ClearNeighbors();
-            Points[0] = Points[1] = Points[2] = null;
-        }
-
-        /// <param name="t">Opposite triangle</param>
-        /// <param name="p">The point in t that isn't shared between the triangles</param>
-        public TriangulationPoint OppositePoint(DelaunayTriangle t, TriangulationPoint p)
-        {
-            Debug.Assert(t != this, "self-pointer error");
-            return PointCWFrom(t.PointCWFrom(p));
-        }
-
-
-        public DelaunayTriangle NeighborCWFrom(TriangulationPoint point)
-        {
-            return Neighbors[(Points.IndexOf(point) + 1) % 3];
-        }
-        
-        
-        public DelaunayTriangle NeighborCCWFrom(TriangulationPoint point)
-        {
-            return Neighbors[(Points.IndexOf(point) + 2) % 3];
-        }
-        
-        
-        public DelaunayTriangle NeighborAcrossFrom(TriangulationPoint point)
-        {
-            return Neighbors[Points.IndexOf(point)];
-        }
-
-        
-        public TriangulationPoint PointCCWFrom(TriangulationPoint point)
-        {
-            return Points[(IndexOf(point) + 1) % 3];
-        }
-        
-        
-        public TriangulationPoint PointCWFrom(TriangulationPoint point)
-        {
-            return Points[(IndexOf(point) + 2) % 3];
-        }
-
-        
-        private void RotateCW()
-        {
-            var t = Points[2];
-            Points[2] = Points[1];
-            Points[1] = Points[0];
-            Points[0] = t;
-        }
-
-        
-        /// <summary>
-        /// Legalize triangle by rotating clockwise around oPoint
-        /// </summary>
-        /// <param name="oPoint">The origin point to rotate around</param>
-        /// <param name="nPoint">???</param>
-        public void Legalize(TriangulationPoint oPoint, TriangulationPoint nPoint)
-        {
-            RotateCW();
-            Points[IndexCCWFrom(oPoint)] = nPoint;
-        }
-
-        
-        public override string ToString()
+        public class Node
         {
-            return Points[0] + "," + Points[1] + "," + Points[2];
-        }
-
-        
-        /// <summary>
-        /// Finalize edge marking
-        /// </summary>
-        public void MarkNeighborEdges()
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                if (EdgeIsConstrained[i] && Neighbors[i] != null)
-                {
-                    Neighbors[i].MarkConstrainedEdge(Points[(i + 1) % 3], Points[(i + 2) % 3]);
-                }
-            }
-        }
-
-
-        public void MarkEdge(DelaunayTriangle triangle)
-        {
-            for (int i = 0; i < 3; i++) if (EdgeIsConstrained[i])
-                {
-                    triangle.MarkConstrainedEdge(Points[(i + 1) % 3], Points[(i + 2) % 3]);
-                }
-        }
-
-        public void MarkEdge(List<DelaunayTriangle> tList)
-        {
-            foreach (DelaunayTriangle t in tList)
-            {
-                for (int i = 0; i < 3; i++)
-                {
-                    if (t.EdgeIsConstrained[i])
-                    {
-                        MarkConstrainedEdge(t.Points[(i + 1) % 3], t.Points[(i + 2) % 3]);
-                    }
-                }
-            }
-        }
-
-
-        public void MarkConstrainedEdge(int index)
-        {
-            mEdgeIsConstrained[index] = true;
-        }
-
-
-        public void MarkConstrainedEdge(DTSweepConstraint edge)
-        {
-            MarkConstrainedEdge(edge.P, edge.Q);
-        }
-
-
-        /// <summary>
-        /// Mark edge as constrained
-        /// </summary>
-        public void MarkConstrainedEdge(TriangulationPoint p, TriangulationPoint q)
-        {
-            int i = EdgeIndex(p, q);
-            if (i != -1)
-            {
-                mEdgeIsConstrained[i] = true;
-            }
-        }
-
-
-        public double Area()
-        {
-            double b = Points[0].X - Points[1].X;
-            double h = Points[2].Y - Points[1].Y;
-
-            return Math.Abs((b * h * 0.5f));
-        }
-
-        public TriangulationPoint Centroid()
-        {
-            double cx = (Points[0].X + Points[1].X + Points[2].X) / 3f;
-            double cy = (Points[0].Y + Points[1].Y + Points[2].Y) / 3f;
-            return new TriangulationPoint(cx, cy);
-        }
-
-
-        /// <summary>
-        /// Get the index of the neighbor that shares this edge (or -1 if it isn't shared)
-        /// </summary>
-        /// <returns>index of the shared edge or -1 if edge isn't shared</returns>
-        public int EdgeIndex(TriangulationPoint p1, TriangulationPoint p2)
-        {
-            int i1 = Points.IndexOf(p1);
-            int i2 = Points.IndexOf(p2);
-
-            // Points of this triangle in the edge p1-p2
-            bool a = (i1 == 0 || i2 == 0);
-            bool b = (i1 == 1 || i2 == 1);
-            bool c = (i1 == 2 || i2 == 2);
-
-            if (b && c)
-            {
-                return 0;
-            }
-            if (a && c)
-            {
-                return 1;
-            }
-            if (a && b)
-            {
-                return 2;
-            }
-
-            return -1;
-        }
+            internal TValue _key;
+            internal Node _prev, _next;
 
-
-        public bool GetConstrainedEdgeCCW(TriangulationPoint p) { return EdgeIsConstrained[(IndexOf(p) + 2) % 3]; }
-        public bool GetConstrainedEdgeCW(TriangulationPoint p) { return EdgeIsConstrained[(IndexOf(p) + 1) % 3]; }
-        public bool GetConstrainedEdgeAcross(TriangulationPoint p) { return EdgeIsConstrained[IndexOf(p)]; }
-
-        protected void SetConstrainedEdge(int idx, bool ce)
-        {
-            //if (ce == false && EdgeIsConstrained[idx])
-            //{
-            //    DTSweepConstraint edge = null;
-            //    if (GetEdge(idx, out edge))
-            //    {
-            //        Console.WriteLine("Removing pre-defined constraint from edge " + edge.ToString());
-            //    }
-            //}
-            mEdgeIsConstrained[idx] = ce;
-        }
-        public void SetConstrainedEdgeCCW(TriangulationPoint p, bool ce)
-        {
-            int idx = (IndexOf(p) + 2) % 3;
-            SetConstrainedEdge(idx, ce);
-        }
-        public void SetConstrainedEdgeCW(TriangulationPoint p, bool ce)
-        {
-            int idx = (IndexOf(p) + 1) % 3;
-            SetConstrainedEdge(idx, ce);
-        }
-        public void SetConstrainedEdgeAcross(TriangulationPoint p, bool ce)
-        {
-            int idx = IndexOf(p);
-            SetConstrainedEdge(idx, ce);
-        }
-
-        public bool GetDelaunayEdgeCCW(TriangulationPoint p) { return EdgeIsDelaunay[(IndexOf(p) + 2) % 3]; }
-        public bool GetDelaunayEdgeCW(TriangulationPoint p) { return EdgeIsDelaunay[(IndexOf(p) + 1) % 3]; }
-        public bool GetDelaunayEdgeAcross(TriangulationPoint p) { return EdgeIsDelaunay[IndexOf(p)]; }
-        public void SetDelaunayEdgeCCW(TriangulationPoint p, bool ce) { EdgeIsDelaunay[(IndexOf(p) + 2) % 3] = ce; }
-        public void SetDelaunayEdgeCW(TriangulationPoint p, bool ce) { EdgeIsDelaunay[(IndexOf(p) + 1) % 3] = ce; }
-        public void SetDelaunayEdgeAcross(TriangulationPoint p, bool ce) { EdgeIsDelaunay[IndexOf(p)] = ce; }
-
-
-        public bool GetEdge(int idx, out DTSweepConstraint edge)
-        {
-            edge = null;
-            if (idx < 0 || idx > 2)
-            {
-                return false;
-            }
-            TriangulationPoint p1 = Points[(idx + 1) % 3];
-            TriangulationPoint p2 = Points[(idx + 2) % 3];
-            if (p1.GetEdge(p2, out edge))
-            {
-                return true;
-            }
-            else if (p2.GetEdge(p1, out edge))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-
-        public bool GetEdgeCCW(TriangulationPoint p, out DTSweepConstraint edge)
-        {
-            int pointIndex = IndexOf(p);
-            int edgeIdx = (pointIndex + 2)%3;
-
-            return GetEdge(edgeIdx, out edge);
-        }
-
-        public bool GetEdgeCW(TriangulationPoint p, out DTSweepConstraint edge)
-        {
-            int pointIndex = IndexOf(p);
-            int edgeIdx = (pointIndex + 1) % 3;
-
-            return GetEdge(edgeIdx, out edge);
+            public TValue Key { get { return _key; } }
+            public Node Prev { get { return _prev; } }
+            public Node Next { get { return _next; } }
         }
-        
-        public bool GetEdgeAcross(TriangulationPoint p, out DTSweepConstraint edge)
-        {
-            int pointIndex = IndexOf(p);
-            int edgeIdx = pointIndex;
-
-            return GetEdge(edgeIdx, out edge);
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// AdvancingFront.cs
 
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+        public delegate bool LessOrEqual(TValue lhs, TValue rhs);
 
-/// Changes from the Java version
-///   Removed BST code, but not all artifacts of it
-/// Future possibilities
-///   Eliminate Add/RemoveNode ?
-///   Comments comments and more comments!
+        private LessOrEqual _leq;
+        Node _head;
 
-// using System.Text;
-// using System;
-
-namespace Poly2Tri
-{
-    /**
-     * @author Thomas Åhlen (thahlen@gmail.com)
-     */
-    public class AdvancingFront
-    {
-        public AdvancingFrontNode Head;
-        public AdvancingFrontNode Tail;
-        protected AdvancingFrontNode Search;
-
-        public AdvancingFront(AdvancingFrontNode head, AdvancingFrontNode tail)
+        public Dict(LessOrEqual leq)
         {
-            this.Head = head;
-            this.Tail = tail;
-            this.Search = head;
-            AddNode(head);
-            AddNode(tail);
-        }
+            _leq = leq;
 
-        public void AddNode(AdvancingFrontNode node) { }
-        public void RemoveNode(AdvancingFrontNode node) { }
-
-        public override string ToString()
-        {
-            StringBuilder sb = new StringBuilder();
-            AdvancingFrontNode node = Head;
-            while (node != Tail)
-            {
-                sb.Append(node.Point.X).Append("->");
-                node = node.Next;
-            }
-            sb.Append(Tail.Point.X);
-            return sb.ToString();
+            _head = new Node { _key = null };
+            _head._prev = _head;
+            _head._next = _head;
         }
 
-        /// <summary>
-        /// MM:  This seems to be used by LocateNode to guess a position in the implicit linked list of AdvancingFrontNodes near x
-        ///      Removed an overload that depended on this being exact
-        /// </summary>
-        private AdvancingFrontNode FindSearchNode(double x)
+        public Node Insert(TValue key)
         {
-            return Search;
+            return InsertBefore(_head, key);
         }
 
-        /// <summary>
-        /// We use a balancing tree to locate a node smaller or equal to given key value (in theory)
-        /// </summary>
-        public AdvancingFrontNode LocateNode(TriangulationPoint point)
+        public Node InsertBefore(Node node, TValue key)
         {
-            return LocateNode(point.X);
-        }
+            do {
+                node = node._prev;
+            } while (node._key != null && !_leq(node._key, key));
 
-        private AdvancingFrontNode LocateNode(double x)
-        {
-            AdvancingFrontNode node = FindSearchNode(x);
-            if (x < node.Value)
-            {
-                while ((node = node.Prev) != null)
-                {
-                    if (x >= node.Value)
-                    {
-                        Search = node;
-                        return node;
-                    }
-                }
-            }
-            else
-            {
-                while ((node = node.Next) != null)
-                {
-                    if (x < node.Value)
-                    {
-                        Search = node.Prev;
-                        return node.Prev;
-                    }
-                }
-            }
+            var newNode = new Node { _key = key };
+            newNode._next = node._next;
+            node._next._prev = newNode;
+            newNode._prev = node;
+            node._next = newNode;
 
-            return null;
+            return newNode;
         }
 
-
-        /// <summary>
-        /// This implementation will use simple node traversal algorithm to find a point on the front
-        /// </summary>
-        public AdvancingFrontNode LocatePoint(TriangulationPoint point)
+        public Node Find(TValue key)
         {
-            double px = point.X;
-            AdvancingFrontNode node = FindSearchNode(px);
-            double nx = node.Point.X;
-
-            if (px == nx)
-            {
-                if (point != node.Point)
-                {
-                    // We might have two nodes with same x value for a short time
-                    if (point == node.Prev.Point)
-                    {
-                        node = node.Prev;
-                    }
-                    else if (point == node.Next.Point)
-                    {
-                        node = node.Next;
-                    }
-                    else
-                    {
-                        throw new Exception("Failed to find Node for given afront point");
-                    }
-                }
-            }
-            else if (px < nx)
-            {
-                while ((node = node.Prev) != null)
-                {
-                    if (point == node.Point)
-                    {
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                while ((node = node.Next) != null)
-                {
-                    if (point == node.Point)
-                    {
-                        break;
-                    }
-                }
-            }
-            Search = node;
-
+            var node = _head;
+            do {
+                node = node._next;
+            } while (node._key != null && !_leq(key, node._key));
             return node;
         }
-    }
-}
 
-// ----------------------------------------------------------------------
-// AdvancingFrontNode.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/// Changes from the Java version
-///   Removed getters
-///   Has* turned into attributes
-/// Future possibilities
-///   Comments!
-
-namespace Poly2Tri
-{
-    public class AdvancingFrontNode
-    {
-        public AdvancingFrontNode Next;
-        public AdvancingFrontNode Prev;
-        public double Value;
-        public TriangulationPoint Point;
-        public DelaunayTriangle Triangle;
-
-        public AdvancingFrontNode(TriangulationPoint point)
+        public Node Min()
         {
-            this.Point = point;
-            Value = point.X;
+            return _head._next;
         }
 
-        public bool HasNext { get { return Next != null; } }
-        public bool HasPrev { get { return Prev != null; } }
+        public void Remove(Node node)
+        {
+            node._next._prev = node._prev;
+            node._prev._next = node._next;
+        }
     }
 }
 
 // ----------------------------------------------------------------------
-// DTSweep.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Geom.cs
 
 /*
- * Sweep-line, Constrained Delauney Triangulation (CDT) See: Domiter, V. and
- * Zalik, B.(2008)'Sweep-line algorithm for constrained Delaunay triangulation',
- * International Journal of Geographical Information Science
- * 
- * "FlipScan" Constrained Edge Algorithm invented by author of this code.
- * 
- * Author: Thomas Åhlén, thahlen@gmail.com 
- */
-
-/// Changes from the Java version
-///   Turned DTSweep into a static class
-///   Lots of deindentation via early bailout
-/// Future possibilities
-///   Comments!
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
 
 // using System;
-// using System.Collections.Generic;
 // using System.Diagnostics;
-// using System.Linq;
 
-namespace Poly2Tri
+#if DOUBLE
+// using Real = System.Double;
+namespace LibTessDotNet.Double
+#else
+// using Real = System.Single;
+namespace LibTessDotNet
+#endif
 {
-    public static class DTSweep
+    internal static class Geom
     {
-        private const double PI_div2 = Math.PI / 2;
-        private const double PI_3div4 = 3 * Math.PI / 4;
-
-        
-        /// <summary>
-        /// Triangulate simple polygon with holes
-        /// </summary>
-        public static void Triangulate(DTSweepContext tcx)
+        public static bool IsWindingInside(WindingRule rule, int n)
         {
-            tcx.CreateAdvancingFront();
-
-            Sweep(tcx);
-
-            FixupConstrainedEdges(tcx);
-
-            // Finalize triangulation
-            if (tcx.TriangulationMode == TriangulationMode.Polygon)
+            switch (rule)
             {
-                FinalizationPolygon(tcx);
+                case WindingRule.EvenOdd:
+                    return (n & 1) == 1;
+                case WindingRule.NonZero:
+                    return n != 0;
+                case WindingRule.Positive:
+                    return n > 0;
+                case WindingRule.Negative:
+                    return n < 0;
+                case WindingRule.AbsGeqTwo:
+                    return n >= 2 || n <= -2;
             }
-            else 
-            {
-                FinalizationConvexHull(tcx);
-                if (tcx.TriangulationMode == TriangulationMode.Constrained)
-                {
-                    // work in progress.  When it's done, call FinalizationConstraints INSTEAD of tcx.FinalizeTriangulation
-                    //FinalizationConstraints(tcx);
-
-                    tcx.FinalizeTriangulation();
-                }
-                else
-                {
-                    tcx.FinalizeTriangulation();
-                }
-            }
-
-            tcx.Done();
+            throw new Exception("Wrong winding rule");
         }
 
-        
-        /// <summary>
-        /// Start sweeping the Y-sorted point set from bottom to top
-        /// </summary>
-        private static void Sweep(DTSweepContext tcx)
+        public static bool VertCCW(MeshUtils.Vertex u, MeshUtils.Vertex v, MeshUtils.Vertex w)
         {
-            var points = tcx.Points;
-            TriangulationPoint point;
-            AdvancingFrontNode node;
-
-            for (int i = 1; i < points.Count; i++)
-            {
-                point = points[i];
-                node = PointEvent(tcx, point);
-
-                if (node != null && point.HasEdges)
-                {
-                    foreach (DTSweepConstraint e in point.Edges)
-                    {
-                        if (tcx.IsDebugEnabled)
-                        {
-                            tcx.DTDebugContext.ActiveConstraint = e;
-                        }
-                        EdgeEvent(tcx, e, node);
-                    }
-                }
-                tcx.Update(null);
-            }
+            return (u._s * (v._t - w._t) + v._s * (w._t - u._t) + w._s * (u._t - v._t)) >= 0.0f;
         }
-
-
-        private static void FixupConstrainedEdges(DTSweepContext tcx)
+        public static bool VertEq(MeshUtils.Vertex lhs, MeshUtils.Vertex rhs)
         {
-            foreach(DelaunayTriangle t in tcx.Triangles)
-            {
-                for (int i = 0; i < 3; ++i)
-                {
-                    bool isConstrained = t.GetConstrainedEdgeCCW(t.Points[i]);
-                    if (!isConstrained)
-                    {
-                        DTSweepConstraint edge = null;
-                        bool hasConstrainedEdge = t.GetEdgeCCW(t.Points[i], out edge);
-                        if (hasConstrainedEdge)
-                        {
-                            t.MarkConstrainedEdge((i + 2) % 3);
-                            //t.MarkConstrainedEdgeCCW(t.Points[i]);
-                        }
-                    }
-                }
-            }
+            return lhs._s == rhs._s && lhs._t == rhs._t;
         }
-
+        public static bool VertLeq(MeshUtils.Vertex lhs, MeshUtils.Vertex rhs)
+        {
+            return (lhs._s < rhs._s) || (lhs._s == rhs._s && lhs._t <= rhs._t);
+        }
 
         /// <summary>
-        /// If this is a Delaunay Triangulation of a pointset we need to fill so the triangle mesh gets a ConvexHull 
-        /// </summary>
-        private static void FinalizationConvexHull(DTSweepContext tcx)
-        {
-            AdvancingFrontNode n1, n2;
-            DelaunayTriangle t1, t2;
-            TriangulationPoint first, p1;
-
-            n1 = tcx.Front.Head.Next;
-            n2 = n1.Next;
-            first = n1.Point;
-
-            TurnAdvancingFrontConvex(tcx, n1, n2);
-
-            // Lets remove triangles connected to the two "algorithm" points
-            // XXX: When the first three nodes are points in a triangle we need to do a flip before
-            // removing triangles or we will lose a valid triangle.
-            // Same for last three nodes!
-            // !!! If I implement ConvexHull for lower right and left boundary this fix should not be
-            // needed and the removed triangles will be added again by default
-
-            n1 = tcx.Front.Tail.Prev;
-            if (n1.Triangle.Contains(n1.Next.Point) && n1.Triangle.Contains(n1.Prev.Point))
-            {
-                t1 = n1.Triangle.NeighborAcrossFrom(n1.Point);
-                RotateTrianglePair(n1.Triangle, n1.Point, t1, t1.OppositePoint(n1.Triangle, n1.Point));
-                tcx.MapTriangleToNodes(n1.Triangle);
-                tcx.MapTriangleToNodes(t1);
-            }
-            n1 = tcx.Front.Head.Next;
-            if (n1.Triangle.Contains(n1.Prev.Point) && n1.Triangle.Contains(n1.Next.Point))
-            {
-                t1 = n1.Triangle.NeighborAcrossFrom(n1.Point);
-                RotateTrianglePair(n1.Triangle, n1.Point, t1, t1.OppositePoint(n1.Triangle, n1.Point));
-                tcx.MapTriangleToNodes(n1.Triangle);
-                tcx.MapTriangleToNodes(t1);
-            }
-
-            // Lower right boundary 
-            first = tcx.Front.Head.Point;
-            n2 = tcx.Front.Tail.Prev;
-            t1 = n2.Triangle;
-            p1 = n2.Point;
-            n2.Triangle = null;
-            do
-            {
-                tcx.RemoveFromList(t1);
-                p1 = t1.PointCCWFrom(p1);
-                if (p1 == first)
-                {
-                    break;
-                }
-                t2 = t1.NeighborCCWFrom(p1);
-                t1.Clear();
-                t1 = t2;
-            } while (true);
-
-            // Lower left boundary
-            first = tcx.Front.Head.Next.Point;
-            p1 = t1.PointCWFrom(tcx.Front.Head.Point);
-            t2 = t1.NeighborCWFrom(tcx.Front.Head.Point);
-            t1.Clear();
-            t1 = t2;
-            while (p1 != first)
-            {
-                tcx.RemoveFromList(t1);
-                p1 = t1.PointCCWFrom(p1);
-                t2 = t1.NeighborCCWFrom(p1);
-                t1.Clear();
-                t1 = t2;
-            }
-
-            // Remove current head and tail node now that we have removed all triangles attached
-            // to them. Then set new head and tail node points
-            tcx.Front.Head = tcx.Front.Head.Next;
-            tcx.Front.Head.Prev = null;
-            tcx.Front.Tail = tcx.Front.Tail.Prev;
-            tcx.Front.Tail.Next = null; 
-        }
-
-        
-        /// <summary>
-        /// We will traverse the entire advancing front and fill it to form a convex hull.
-        /// </summary>
-        private static void TurnAdvancingFrontConvex(DTSweepContext tcx, AdvancingFrontNode b, AdvancingFrontNode c)
-        {
-            AdvancingFrontNode first = b;
-            while (c != tcx.Front.Tail)
-            {
-                if (tcx.IsDebugEnabled)
-                {
-                    tcx.DTDebugContext.ActiveNode = c;
-                }
-
-                if (TriangulationUtil.Orient2d(b.Point, c.Point, c.Next.Point) == Orientation.CCW)
-                {
-                    // [b,c,d] Concave - fill around c
-                    Fill(tcx, c);
-                    c = c.Next;
-                }
-                else
-                {
-                    // [b,c,d] Convex
-                    if (b != first && TriangulationUtil.Orient2d(b.Prev.Point, b.Point, c.Point) == Orientation.CCW)
-                    {
-                        // [a,b,c] Concave - fill around b
-                        Fill(tcx, b);
-                        b = b.Prev;
-                    }
-                    else
-                    {
-                        // [a,b,c] Convex - nothing to fill
-                        b = c;
-                        c = c.Next;
-                    }
-                }
-            }
-        }
-
-        
-        private static void FinalizationPolygon(DTSweepContext tcx)
-        {
-            // Get an Internal triangle to start with
-            DelaunayTriangle t = tcx.Front.Head.Next.Triangle;
-            TriangulationPoint p = tcx.Front.Head.Next.Point;
-            while (!t.GetConstrainedEdgeCW(p))
-            {
-                DelaunayTriangle tTmp = t.NeighborCCWFrom(p);
-                if (tTmp == null)
-                {
-                    break;
-                }
-                t = tTmp;
-            }
-
-            // Collect interior triangles constrained by edges
-            tcx.MeshClean(t);
-        }
-
-
-        /// <summary>
-        /// NOTE: WORK IN PROGRESS - for now this will just clean out all triangles from
-        /// inside the outermost holes without paying attention to holes within holes..
-        /// hence the work in progress :)
+        /// Given three vertices u,v,w such that VertLeq(u,v) && VertLeq(v,w),
+        /// evaluates the t-coord of the edge uw at the s-coord of the vertex v.
+        /// Returns v->t - (uw)(v->s), ie. the signed distance from uw to v.
+        /// If uw is vertical (and thus passes thru v), the result is zero.
         /// 
-        /// Removes triangles inside "holes" (that are not inside of other holes already)
-        /// 
-        /// In the example below, assume that triangle ABC is a user-defined "hole".  Thus
-        /// any triangles inside it (that aren't inside yet another user-defined hole inside
-        /// triangle ABC) should get removed.  In this case, since there are no user-defined
-        /// holes inside ABC, we would remove triangles ADE, BCE, and CDE.  We would also 
-        /// need to combine the appropriate edges so that we end up with just triangle ABC
-        ///
-        ///          E
-        /// A +------+-----+ B              A +-----------+ B
-        ///    \    /|    /                    \         /
-        ///     \  / |   /                      \       /
-        ///    D +   |  /        ======>         \     /
-        ///       \  | /                          \   /
-        ///        \ |/                            \ /
-        ///          +                              +
-        ///          C                              C
-        ///          
+        /// The calculation is extremely accurate and stable, even when v
+        /// is very close to u or w.  In particular if we set v->t = 0 and
+        /// let r be the negated result (this evaluates (uw)(v->s)), then
+        /// r is guaranteed to satisfy MIN(u->t,w->t) <= r <= MAX(u->t,w->t).
         /// </summary>
-        private static void FinalizationConstraints(DTSweepContext tcx)
+        public static Real EdgeEval(MeshUtils.Vertex u, MeshUtils.Vertex v, MeshUtils.Vertex w)
         {
-            // Get an Internal triangle to start with
-            DelaunayTriangle t = tcx.Front.Head.Triangle;
-            TriangulationPoint p = tcx.Front.Head.Point;
-            while (!t.GetConstrainedEdgeCW(p))
+            Debug.Assert(VertLeq(u, v) && VertLeq(v, w));
+
+            var gapL = v._s - u._s;
+            var gapR = w._s - v._s;
+
+            if (gapL + gapR > 0.0f)
             {
-                DelaunayTriangle tTmp = t.NeighborCCWFrom(p);
-                if (tTmp == null)
+                if (gapL < gapR)
                 {
-                    break;
-                }
-                t = tTmp;
-            }
-
-            // Collect interior triangles constrained by edges
-            tcx.MeshClean(t);
-        }
-
-
-        /// <summary>
-        /// Find closes node to the left of the new point and
-        /// create a new triangle. If needed new holes and basins
-        /// will be filled to.
-        /// </summary>
-        private static AdvancingFrontNode PointEvent(DTSweepContext tcx, TriangulationPoint point)
-        {
-            AdvancingFrontNode node, newNode;
-
-            node = tcx.LocateNode(point);
-            if (tcx.IsDebugEnabled)
-            {
-                tcx.DTDebugContext.ActiveNode = node;
-            }
-            if (node == null || point == null)
-            {
-                return null;
-            }
-            newNode = NewFrontTriangle(tcx, point, node);
-
-            // Only need to check +epsilon since point never have smaller 
-            // x value than node due to how we fetch nodes from the front
-            if (point.X <= node.Point.X + MathUtil.EPSILON)
-            {
-                Fill(tcx, node);
-            }
-
-            tcx.AddNode(newNode);
-
-            FillAdvancingFront(tcx, newNode);
-            return newNode;
-        }
-
-        
-        /// <summary>
-        /// Creates a new front triangle and legalize it
-        /// </summary>
-        private static AdvancingFrontNode NewFrontTriangle(DTSweepContext tcx, TriangulationPoint point, AdvancingFrontNode node)
-        {
-            AdvancingFrontNode newNode;
-            DelaunayTriangle triangle;
-
-            triangle = new DelaunayTriangle(point, node.Point, node.Next.Point);
-            triangle.MarkNeighbor(node.Triangle);
-            tcx.Triangles.Add(triangle);
-
-            newNode = new AdvancingFrontNode(point);
-            newNode.Next = node.Next;
-            newNode.Prev = node;
-            node.Next.Prev = newNode;
-            node.Next = newNode;
-
-            tcx.AddNode(newNode); // XXX: BST
-
-            if (tcx.IsDebugEnabled)
-            {
-                tcx.DTDebugContext.ActiveNode = newNode;
-            }
-
-            if (!Legalize(tcx, triangle))
-            {
-                tcx.MapTriangleToNodes(triangle);
-            }
-
-            return newNode;
-        }
-
-        
-        private static void EdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            try
-            {
-                tcx.EdgeEvent.ConstrainedEdge = edge;
-                tcx.EdgeEvent.Right = edge.P.X > edge.Q.X;
-
-                if (tcx.IsDebugEnabled)
-                {
-                    tcx.DTDebugContext.PrimaryTriangle = node.Triangle;
-                }
-
-                if (IsEdgeSideOfTriangle(node.Triangle, edge.P, edge.Q))
-                {
-                    return;
-                }
-
-                // For now we will do all needed filling
-                // TODO: integrate with flip process might give some better performance 
-                //       but for now this avoid the issue with cases that needs both flips and fills
-                FillEdgeEvent(tcx, edge, node);
-
-                EdgeEvent(tcx, edge.P, edge.Q, node.Triangle, edge.Q);
-            }
-            catch (PointOnEdgeException)
-            {
-                //Debug.WriteLine( String.Format( "Warning: Skipping Edge: {0}", e.Message ) );
-                throw;
-            }
-        }
-
-
-        private static void FillEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            if (tcx.EdgeEvent.Right)
-            {
-                FillRightAboveEdgeEvent(tcx, edge, node);
-            }
-            else
-            {
-                FillLeftAboveEdgeEvent(tcx, edge, node);
-            }
-        }
-
-        
-        private static void FillRightConcaveEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            Fill(tcx, node.Next);
-            if (node.Next.Point != edge.P)
-            {
-                // Next above or below edge?
-                if (TriangulationUtil.Orient2d(edge.Q, node.Next.Point, edge.P) == Orientation.CCW)
-                {
-                    // Below
-                    if (TriangulationUtil.Orient2d(node.Point, node.Next.Point, node.Next.Next.Point) == Orientation.CCW)
-                    {
-                        // Next is concave
-                        FillRightConcaveEdgeEvent(tcx, edge, node);
-                    }
-                    else
-                    {
-                        // Next is convex
-                    }
-                }
-            }
-        }
-
-
-        private static void FillRightConvexEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            // Next concave or convex?
-            if (TriangulationUtil.Orient2d(node.Next.Point, node.Next.Next.Point, node.Next.Next.Next.Point) == Orientation.CCW)
-            {
-                // Concave
-                FillRightConcaveEdgeEvent(tcx, edge, node.Next);
-            }
-            else
-            {
-                // Convex
-                // Next above or below edge?
-                if (TriangulationUtil.Orient2d(edge.Q, node.Next.Next.Point, edge.P) == Orientation.CCW)
-                {
-                    // Below
-                    FillRightConvexEdgeEvent(tcx, edge, node.Next);
+                    return (v._t - u._t) + (u._t - w._t) * (gapL / (gapL + gapR));
                 }
                 else
                 {
-                    // Above
+                    return (v._t - w._t) + (w._t - u._t) * (gapR / (gapL + gapR));
                 }
             }
+            /* vertical line */
+            return 0;
         }
 
-        private static void FillRightBelowEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
+        /// <summary>
+        /// Returns a number whose sign matches EdgeEval(u,v,w) but which
+        /// is cheaper to evaluate. Returns > 0, == 0 , or < 0
+        /// as v is above, on, or below the edge uw.
+        /// </summary>
+        public static Real EdgeSign(MeshUtils.Vertex u, MeshUtils.Vertex v, MeshUtils.Vertex w)
         {
-            if (tcx.IsDebugEnabled)
-            {
-                tcx.DTDebugContext.ActiveNode = node;
-            }
+            Debug.Assert(VertLeq(u, v) && VertLeq(v, w));
 
-            if (node.Point.X < edge.P.X)
+            var gapL = v._s - u._s;
+            var gapR = w._s - v._s;
+
+            if (gapL + gapR > 0.0f)
             {
-                // needed?
-                if (TriangulationUtil.Orient2d(node.Point, node.Next.Point, node.Next.Next.Point) == Orientation.CCW)
+                return (v._t - w._t) * gapL + (v._t - u._t) * gapR;
+            }
+            /* vertical line */
+            return 0;
+        }
+
+        public static bool TransLeq(MeshUtils.Vertex lhs, MeshUtils.Vertex rhs)
+        {
+            return (lhs._t < rhs._t) || (lhs._t == rhs._t && lhs._s <= rhs._s);
+        }
+
+        public static Real TransEval(MeshUtils.Vertex u, MeshUtils.Vertex v, MeshUtils.Vertex w)
+        {
+            Debug.Assert(TransLeq(u, v) && TransLeq(v, w));
+
+            var gapL = v._t - u._t;
+            var gapR = w._t - v._t;
+
+            if (gapL + gapR > 0.0f)
+            {
+                if (gapL < gapR)
                 {
-                    // Concave 
-                    FillRightConcaveEdgeEvent(tcx, edge, node);
+                    return (v._s - u._s) + (u._s - w._s) * (gapL / (gapL + gapR));
                 }
                 else
                 {
-                    // Convex
-                    FillRightConvexEdgeEvent(tcx, edge, node);
-                    // Retry this one
-                    FillRightBelowEdgeEvent(tcx, edge, node);
+                    return (v._s - w._s) + (w._s - u._s) * (gapR / (gapL + gapR));
                 }
             }
+            /* vertical line */
+            return 0;
         }
 
-
-        private static void FillRightAboveEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            while (node.Next.Point.X < edge.P.X)
-            {
-                if (tcx.IsDebugEnabled) { tcx.DTDebugContext.ActiveNode = node; }
-                // Check if next node is below the edge
-                Orientation o1 = TriangulationUtil.Orient2d(edge.Q, node.Next.Point, edge.P);
-                if (o1 == Orientation.CCW)
-                {
-                    FillRightBelowEdgeEvent(tcx, edge, node);
-                }
-                else
-                {
-                    node = node.Next;
-                }
-            }
-        }
-
-        
-        private static void FillLeftConvexEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            // Next concave or convex?
-            if (TriangulationUtil.Orient2d(node.Prev.Point, node.Prev.Prev.Point, node.Prev.Prev.Prev.Point) == Orientation.CW)
-            {
-                // Concave
-                FillLeftConcaveEdgeEvent(tcx, edge, node.Prev);
-            }
-            else
-            {
-                // Convex
-                // Next above or below edge?
-                if (TriangulationUtil.Orient2d(edge.Q, node.Prev.Prev.Point, edge.P) == Orientation.CW)
-                {
-                    // Below
-                    FillLeftConvexEdgeEvent(tcx, edge, node.Prev);
-                }
-                else
-                {
-                    // Above
-                }
-            }
-        }
-
-        
-        private static void FillLeftConcaveEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            Fill(tcx, node.Prev);
-            if (node.Prev.Point != edge.P)
-            {
-                // Next above or below edge?
-                if (TriangulationUtil.Orient2d(edge.Q, node.Prev.Point, edge.P) == Orientation.CW)
-                {
-                    // Below
-                    if (TriangulationUtil.Orient2d(node.Point, node.Prev.Point, node.Prev.Prev.Point) == Orientation.CW)
-                    {
-                        // Next is concave
-                        FillLeftConcaveEdgeEvent(tcx, edge, node);
-                    }
-                    else
-                    {
-                        // Next is convex
-                    }
-                }
-            }
-        }
-
-        
-        private static void FillLeftBelowEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            if (tcx.IsDebugEnabled)
-                tcx.DTDebugContext.ActiveNode = node;
-
-            if (node.Point.X > edge.P.X)
-            {
-                if (TriangulationUtil.Orient2d(node.Point, node.Prev.Point, node.Prev.Prev.Point) == Orientation.CW)
-                {
-                    // Concave 
-                    FillLeftConcaveEdgeEvent(tcx, edge, node);
-                }
-                else
-                {
-                    // Convex
-                    FillLeftConvexEdgeEvent(tcx, edge, node);
-                    // Retry this one
-                    FillLeftBelowEdgeEvent(tcx, edge, node);
-                }
-
-            }
-        }
-
-        
-        private static void FillLeftAboveEdgeEvent(DTSweepContext tcx, DTSweepConstraint edge, AdvancingFrontNode node)
-        {
-            while (node.Prev.Point.X > edge.P.X)
-            {
-                if (tcx.IsDebugEnabled)
-                {
-                    tcx.DTDebugContext.ActiveNode = node;
-                }
-                // Check if next node is below the edge
-                Orientation o1 = TriangulationUtil.Orient2d(edge.Q, node.Prev.Point, edge.P);
-                if (o1 == Orientation.CW)
-                {
-                    FillLeftBelowEdgeEvent(tcx, edge, node);
-                }
-                else
-                {
-                    node = node.Prev;
-                }
-            }
-        }
-
-        
-        private static bool IsEdgeSideOfTriangle(DelaunayTriangle triangle, TriangulationPoint ep, TriangulationPoint eq)
-        {
-            int index = triangle.EdgeIndex(ep, eq);
-            if (index == -1)
-            {
-                return false;
-            }
-            triangle.MarkConstrainedEdge(index);
-            triangle = triangle.Neighbors[index];
-            if (triangle != null)
-            {
-                triangle.MarkConstrainedEdge(ep, eq);
-            }
-            return true;
-        }
-
-        
-        private static void EdgeEvent(DTSweepContext tcx, TriangulationPoint ep, TriangulationPoint eq, DelaunayTriangle triangle, TriangulationPoint point)
-        {
-            TriangulationPoint p1, p2;
-
-            if (tcx.IsDebugEnabled)
-            {
-                tcx.DTDebugContext.PrimaryTriangle = triangle;
-            }
-
-            if (IsEdgeSideOfTriangle(triangle, ep, eq))
-            {
-                return;
-            }
-
-            p1 = triangle.PointCCWFrom(point);
-            Orientation o1 = TriangulationUtil.Orient2d(eq, p1, ep);
-            if (o1 == Orientation.Collinear)
-            {
-                if (triangle.Contains(eq) && triangle.Contains(p1))
-                {
-                    triangle.MarkConstrainedEdge(eq, p1);
-                    // We are modifying the constraint maybe it would be better to
-                    // not change the given constraint and just keep a variable for the new constraint
-                    tcx.EdgeEvent.ConstrainedEdge.Q = p1;
-                    triangle = triangle.NeighborAcrossFrom(point);
-                    EdgeEvent(tcx, ep, p1, triangle, p1);
-                }
-                else
-                {
-                    throw new PointOnEdgeException("EdgeEvent - Point on constrained edge not supported yet", ep, eq, p1);
-                }
-                if (tcx.IsDebugEnabled)
-                {
-                    Console.WriteLine("EdgeEvent - Point on constrained edge");
-                }
-
-                return;
-            }
-
-            p2 = triangle.PointCWFrom(point);
-            Orientation o2 = TriangulationUtil.Orient2d(eq, p2, ep);
-            if (o2 == Orientation.Collinear)
-            {
-                if (triangle.Contains(eq) && triangle.Contains(p2))
-                {
-                    triangle.MarkConstrainedEdge(eq, p2);
-                    // We are modifying the constraint maybe it would be better to
-                    // not change the given constraint and just keep a variable for the new constraint
-                    tcx.EdgeEvent.ConstrainedEdge.Q = p2;
-                    triangle = triangle.NeighborAcrossFrom(point);
-                    EdgeEvent(tcx, ep, p2, triangle, p2);
-                }
-                else
-                {
-                    throw new PointOnEdgeException("EdgeEvent - Point on constrained edge not supported yet", ep, eq, p2);
-                }
-                if (tcx.IsDebugEnabled)
-                {
-                    Console.WriteLine("EdgeEvent - Point on constrained edge");
-                }
-
-                return;
-            }
-
-            if (o1 == o2)
-            {
-                // Need to decide if we are rotating CW or CCW to get to a triangle
-                // that will cross edge
-                if (o1 == Orientation.CW)
-                {
-                    triangle = triangle.NeighborCCWFrom(point);
-                }
-                else
-                {
-                    triangle = triangle.NeighborCWFrom(point);
-                }
-                EdgeEvent(tcx, ep, eq, triangle, point);
-            }
-            else
-            {
-                // This triangle crosses constraint so lets flippin start!
-                FlipEdgeEvent(tcx, ep, eq, triangle, point);
-            }
-        }
-
-
-        private static void FlipEdgeEvent(DTSweepContext tcx, TriangulationPoint ep, TriangulationPoint eq, DelaunayTriangle t, TriangulationPoint p)
-        {
-            DelaunayTriangle ot = t.NeighborAcrossFrom(p);
-            TriangulationPoint op = ot.OppositePoint(t, p);
-
-            if (ot == null)
-            {
-                // If we want to integrate the fillEdgeEvent do it here
-                // With current implementation we should never get here
-                throw new InvalidOperationException("[BUG:FIXME] FLIP failed due to missing triangle");
-            }
-
-            if (tcx.IsDebugEnabled)
-            {
-                tcx.DTDebugContext.PrimaryTriangle = t;
-                tcx.DTDebugContext.SecondaryTriangle = ot;
-            } // TODO: remove
-
-            bool inScanArea = TriangulationUtil.InScanArea(p, t.PointCCWFrom(p), t.PointCWFrom(p), op);
-            if (inScanArea)
-            {
-                // Lets rotate shared edge one vertex CW
-                RotateTrianglePair(t, p, ot, op);
-                tcx.MapTriangleToNodes(t);
-                tcx.MapTriangleToNodes(ot);
-
-                if (p == eq && op == ep)
-                {
-                    if (eq == tcx.EdgeEvent.ConstrainedEdge.Q && ep == tcx.EdgeEvent.ConstrainedEdge.P)
-                    {
-                        if (tcx.IsDebugEnabled)
-                        {
-                            Console.WriteLine("[FLIP] - constrained edge done"); // TODO: remove
-                        }
-                        t.MarkConstrainedEdge(ep, eq);
-                        ot.MarkConstrainedEdge(ep, eq);
-                        Legalize(tcx, t);
-                        Legalize(tcx, ot);
-                    }
-                    else
-                    {
-                        if (tcx.IsDebugEnabled)
-                        {
-                            Console.WriteLine("[FLIP] - subedge done"); // TODO: remove
-                        }
-                        // XXX: I think one of the triangles should be legalized here?
-                    }
-                }
-                else
-                {
-                    if (tcx.IsDebugEnabled)
-                    {
-                        Console.WriteLine("[FLIP] - flipping and continuing with triangle still crossing edge"); // TODO: remove
-                    }
-                    Orientation o = TriangulationUtil.Orient2d(eq, op, ep);
-                    t = NextFlipTriangle(tcx, o, t, ot, p, op);
-                    FlipEdgeEvent(tcx, ep, eq, t, p);
-                }
-            }
-            else
-            {
-                TriangulationPoint newP = null;
-                if (NextFlipPoint(ep, eq, ot, op, out newP))
-                {
-                    FlipScanEdgeEvent(tcx, ep, eq, t, ot, newP);
-                    EdgeEvent(tcx, ep, eq, t, p);
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// When we need to traverse from one triangle to the next we need 
-        /// the point in current triangle that is the opposite point to the next
-        /// triangle. 
-        /// </summary>
-        private static bool NextFlipPoint(TriangulationPoint ep, TriangulationPoint eq, DelaunayTriangle ot, TriangulationPoint op, out TriangulationPoint newP)
-        {
-            newP = null;
-            Orientation o2d = TriangulationUtil.Orient2d(eq, op, ep);
-            switch (o2d)
-            {
-                case Orientation.CW:
-                    newP = ot.PointCCWFrom(op);
-                    return true;
-                case Orientation.CCW:
-                    newP = ot.PointCWFrom(op);
-                    return true;
-                case Orientation.Collinear:
-                    // TODO: implement support for point on constraint edge
-                    //throw new PointOnEdgeException("Point on constrained edge not supported yet", eq, op, ep);
-                    return false;
-                default:
-                    throw new NotImplementedException("Orientation not handled");
-            }
-        }
-
-
-        /// <summary>
-        /// After a flip we have two triangles and know that only one will still be
-        /// intersecting the edge. So decide which to contiune with and legalize the other
-        /// </summary>
-        /// <param name="tcx"></param>
-        /// <param name="o">should be the result of an TriangulationUtil.orient2d( eq, op, ep )</param>
-        /// <param name="t">triangle 1</param>
-        /// <param name="ot">triangle 2</param>
-        /// <param name="p">a point shared by both triangles</param>
-        /// <param name="op">another point shared by both triangles</param>
-        /// <returns>returns the triangle still intersecting the edge</returns>
-        private static DelaunayTriangle NextFlipTriangle(DTSweepContext tcx, Orientation o, DelaunayTriangle t, DelaunayTriangle ot, TriangulationPoint p, TriangulationPoint op)
-        {
-            int edgeIndex;
-            if (o == Orientation.CCW)
-            {
-                // ot is not crossing edge after flip
-                edgeIndex = ot.EdgeIndex(p, op);
-                ot.EdgeIsDelaunay[edgeIndex] = true;
-                Legalize(tcx, ot);
-                ot.EdgeIsDelaunay.Clear();
-                return t;
-            }
-            // t is not crossing edge after flip
-            edgeIndex = t.EdgeIndex(p, op);
-            t.EdgeIsDelaunay[edgeIndex] = true;
-            Legalize(tcx, t);
-            t.EdgeIsDelaunay.Clear();
-            return ot;
-        }
-
-
-        /// <summary>
-        /// Scan part of the FlipScan algorithm<br>
-        /// When a triangle pair isn't flippable we will scan for the next 
-        /// point that is inside the flip triangle scan area. When found 
-        /// we generate a new flipEdgeEvent
-        /// </summary>
-        /// <param name="tcx"></param>
-        /// <param name="ep">last point on the edge we are traversing</param>
-        /// <param name="eq">first point on the edge we are traversing</param>
-        /// <param name="flipTriangle">the current triangle sharing the point eq with edge</param>
-        /// <param name="t"></param>
-        /// <param name="p"></param>
-        private static void FlipScanEdgeEvent(DTSweepContext tcx, TriangulationPoint ep, TriangulationPoint eq, DelaunayTriangle flipTriangle, DelaunayTriangle t, TriangulationPoint p)
-        {
-            DelaunayTriangle ot;
-            TriangulationPoint op, newP;
-            bool inScanArea;
-
-            ot = t.NeighborAcrossFrom(p);
-            op = ot.OppositePoint(t, p);
-
-            if (ot == null)
-            {
-                // If we want to integrate the fillEdgeEvent do it here
-                // With current implementation we should never get here
-                throw new Exception("[BUG:FIXME] FLIP failed due to missing triangle");
-            }
-
-            if (tcx.IsDebugEnabled)
-            {
-                Console.WriteLine("[FLIP:SCAN] - scan next point"); // TODO: remove
-                tcx.DTDebugContext.PrimaryTriangle = t;
-                tcx.DTDebugContext.SecondaryTriangle = ot;
-            }
-
-            inScanArea = TriangulationUtil.InScanArea(eq, flipTriangle.PointCCWFrom(eq), flipTriangle.PointCWFrom(eq), op);
-            if (inScanArea)
-            {
-                // flip with new edge op->eq
-                FlipEdgeEvent(tcx, eq, op, ot, op);
-                // TODO: Actually I just figured out that it should be possible to 
-                //       improve this by getting the next ot and op before the the above 
-                //       flip and continue the flipScanEdgeEvent here
-                // set new ot and op here and loop back to inScanArea test
-                // also need to set a new flipTriangle first
-                // Turns out at first glance that this is somewhat complicated
-                // so it will have to wait.
-            }
-            else
-            {
-                if (NextFlipPoint(ep, eq, ot, op, out newP))
-                {
-                    FlipScanEdgeEvent(tcx, ep, eq, flipTriangle, ot, newP);
-                }
-                //newP = NextFlipPoint(ep, eq, ot, op);
-            }
-        }
-
-
-        /// <summary>
-        /// Fills holes in the Advancing Front
-        /// </summary>
-        private static void FillAdvancingFront(DTSweepContext tcx, AdvancingFrontNode n)
-        {
-            AdvancingFrontNode node;
-            double angle;
-
-            // Fill right holes
-            node = n.Next;
-            while (node.HasNext)
-            {
-                angle = HoleAngle(node);
-                if (angle > PI_div2 || angle < -PI_div2)
-                {
-                    break;
-                }
-                Fill(tcx, node);
-                node = node.Next;
-            }
-
-            // Fill left holes
-            node = n.Prev;
-            while (node.HasPrev)
-            {
-                angle = HoleAngle(node);
-                if (angle > PI_div2 || angle < -PI_div2)
-                {
-                    break;
-                }
-                Fill(tcx, node);
-                node = node.Prev;
-            }
-
-            // Fill right basins
-            if (n.HasNext && n.Next.HasNext)
-            {
-                angle = BasinAngle(n);
-                if (angle < PI_3div4)
-                {
-                    FillBasin(tcx, n);
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// Fills a basin that has formed on the Advancing Front to the right
-        /// of given node.<br>
-        /// First we decide a left,bottom and right node that forms the 
-        /// boundaries of the basin. Then we do a reqursive fill.
-        /// </summary>
-        /// <param name="tcx"></param>
-        /// <param name="node">starting node, this or next node will be left node</param>
-        private static void FillBasin(DTSweepContext tcx, AdvancingFrontNode node)
-        {
-            if (TriangulationUtil.Orient2d(node.Point, node.Next.Point, node.Next.Next.Point) == Orientation.CCW)
-            {
-                // tcx.basin.leftNode = node.next.next;
-                tcx.Basin.leftNode = node;
-            }
-            else
-            {
-                tcx.Basin.leftNode = node.Next;
-            }
-
-            // Find the bottom and right node
-            tcx.Basin.bottomNode = tcx.Basin.leftNode;
-            while (tcx.Basin.bottomNode.HasNext && tcx.Basin.bottomNode.Point.Y >= tcx.Basin.bottomNode.Next.Point.Y)
-            {
-                tcx.Basin.bottomNode = tcx.Basin.bottomNode.Next;
-            }
-
-            if (tcx.Basin.bottomNode == tcx.Basin.leftNode)
-            {
-                return; // No valid basin
-            }
-
-            tcx.Basin.rightNode = tcx.Basin.bottomNode;
-            while (tcx.Basin.rightNode.HasNext && tcx.Basin.rightNode.Point.Y < tcx.Basin.rightNode.Next.Point.Y)
-            {
-                tcx.Basin.rightNode = tcx.Basin.rightNode.Next;
-            }
-
-            if (tcx.Basin.rightNode == tcx.Basin.bottomNode)
-            {
-                return; // No valid basins
-            }
-
-            tcx.Basin.width = tcx.Basin.rightNode.Point.X - tcx.Basin.leftNode.Point.X;
-            tcx.Basin.leftHighest = tcx.Basin.leftNode.Point.Y > tcx.Basin.rightNode.Point.Y;
-
-            FillBasinReq(tcx, tcx.Basin.bottomNode);
-        }
-
-
-        /// <summary>
-        /// Recursive algorithm to fill a Basin with triangles
-        /// </summary>
-        private static void FillBasinReq(DTSweepContext tcx, AdvancingFrontNode node)
-        {
-            if (IsShallow(tcx, node))
-            {
-                return; // if shallow stop filling
-            }
-
-            Fill(tcx, node);
-            if (node.Prev == tcx.Basin.leftNode && node.Next == tcx.Basin.rightNode)
-            {
-                return;
-            }
-            else if (node.Prev == tcx.Basin.leftNode)
-            {
-                Orientation o = TriangulationUtil.Orient2d(node.Point, node.Next.Point, node.Next.Next.Point);
-                if (o == Orientation.CW)
-                {
-                    return;
-                }
-                node = node.Next;
-            }
-            else if (node.Next == tcx.Basin.rightNode)
-            {
-                Orientation o = TriangulationUtil.Orient2d(node.Point, node.Prev.Point, node.Prev.Prev.Point);
-                if (o == Orientation.CCW)
-                {
-                    return;
-                }
-                node = node.Prev;
-            }
-            else
-            {
-                // Continue with the neighbor node with lowest Y value
-                if (node.Prev.Point.Y < node.Next.Point.Y)
-                {
-                    node = node.Prev;
-                }
-                else
-                {
-                    node = node.Next;
-                }
-            }
-            FillBasinReq(tcx, node);
-        }
-
-
-        private static bool IsShallow(DTSweepContext tcx, AdvancingFrontNode node)
-        {
-            double height;
-
-            if (tcx.Basin.leftHighest)
-            {
-                height = tcx.Basin.leftNode.Point.Y - node.Point.Y;
-            }
-            else
-            {
-                height = tcx.Basin.rightNode.Point.Y - node.Point.Y;
-            }
-            if (tcx.Basin.width > height)
-            {
-                return true;
-            }
-            return false;
-        }
-
-
-        /// <summary>
-        /// ???
-        /// </summary>
-        /// <param name="node">middle node</param>
-        /// <returns>the angle between 3 front nodes</returns>
-        private static double HoleAngle(AdvancingFrontNode node)
-        {
-            // XXX: do we really need a signed angle for holeAngle?
-            //      could possible save some cycles here
-            /* Complex plane
-             * ab = cosA +i*sinA
-             * ab = (ax + ay*i)(bx + by*i) = (ax*bx + ay*by) + i(ax*by-ay*bx)
-             * atan2(y,x) computes the principal value of the argument function
-             * applied to the complex number x+iy
-             * Where x = ax*bx + ay*by
-             *       y = ax*by - ay*bx
-             */
-            double px = node.Point.X;
-            double py = node.Point.Y;
-            double ax = node.Next.Point.X - px;
-            double ay = node.Next.Point.Y - py;
-            double bx = node.Prev.Point.X - px;
-            double by = node.Prev.Point.Y - py;
-            return Math.Atan2((ax * by) - (ay * bx), (ax * bx) + (ay * by));
-        }
-
-
-        /// <summary>
-        /// The basin angle is decided against the horizontal line [1,0]
-        /// </summary>
-        private static double BasinAngle(AdvancingFrontNode node)
-        {
-            double ax = node.Point.X - node.Next.Next.Point.X;
-            double ay = node.Point.Y - node.Next.Next.Point.Y;
-            return Math.Atan2(ay, ax);
-        }
-
-
-        /// <summary>
-        /// Adds a triangle to the advancing front to fill a hole.
-        /// </summary>
-        /// <param name="tcx"></param>
-        /// <param name="node">middle node, that is the bottom of the hole</param>
-        private static void Fill(DTSweepContext tcx, AdvancingFrontNode node)
-        {
-            DelaunayTriangle triangle = new DelaunayTriangle(node.Prev.Point, node.Point, node.Next.Point);
-            // TODO: should copy the cEdge value from neighbor triangles
-            //       for now cEdge values are copied during the legalize 
-            triangle.MarkNeighbor(node.Prev.Triangle);
-            triangle.MarkNeighbor(node.Triangle);
-            tcx.Triangles.Add(triangle);
-
-            // Update the advancing front
-            node.Prev.Next = node.Next;
-            node.Next.Prev = node.Prev;
-            tcx.RemoveNode(node);
-
-            // If it was legalized the triangle has already been mapped
-            if (!Legalize(tcx, triangle))
-            {
-                tcx.MapTriangleToNodes(triangle);
-            }
-        }
-
-
-        /// <summary>
-        /// Returns true if triangle was legalized
-        /// </summary>
-        private static bool Legalize(DTSweepContext tcx, DelaunayTriangle t)
-        {
-            // To legalize a triangle we start by finding if any of the three edges
-            // violate the Delaunay condition
-            for (int i = 0; i < 3; i++)
-            {
-                // TODO: fix so that cEdge is always valid when creating new triangles then we can check it here
-                //       instead of below with ot
-                if (t.EdgeIsDelaunay[i])
-                {
-                    continue;
-                }
-
-                DelaunayTriangle ot = t.Neighbors[i];
-                if (ot == null)
-                {
-                    continue;
-                }
-
-                TriangulationPoint p = t.Points[i];
-                TriangulationPoint op = ot.OppositePoint(t, p);
-                int oi = ot.IndexOf(op);
-                // If this is a Constrained Edge or a Delaunay Edge(only during recursive legalization)
-                // then we should not try to legalize
-                if (ot.EdgeIsConstrained[oi] || ot.EdgeIsDelaunay[oi])
-                {
-                    t.SetConstrainedEdgeAcross(p, ot.EdgeIsConstrained[oi]); // XXX: have no good way of setting this property when creating new triangles so lets set it here
-                    continue;
-                }
-
-                if (!TriangulationUtil.SmartIncircle(p, t.PointCCWFrom(p), t.PointCWFrom(p), op))
-                {
-                    continue;
-                }
-
-                // Lets mark this shared edge as Delaunay 
-                t.EdgeIsDelaunay[i] = true;
-                ot.EdgeIsDelaunay[oi] = true;
-
-                // Lets rotate shared edge one vertex CW to legalize it
-                RotateTrianglePair(t, p, ot, op);
-
-                // We now got one valid Delaunay Edge shared by two triangles
-                // This gives us 4 new edges to check for Delaunay
-
-                // Make sure that triangle to node mapping is done only one time for a specific triangle
-                if (!Legalize(tcx, t))
-                {
-                    tcx.MapTriangleToNodes(t);
-                }
-                if (!Legalize(tcx, ot))
-                {
-                    tcx.MapTriangleToNodes(ot);
-                }
-
-                // Reset the Delaunay edges, since they only are valid Delaunay edges
-                // until we add a new triangle or point.
-                // XXX: need to think about this. Can these edges be tried after we 
-                //      return to previous recursive level?
-                t.EdgeIsDelaunay[i] = false;
-                ot.EdgeIsDelaunay[oi] = false;
-
-                // If triangle have been legalized no need to check the other edges since
-                // the recursive legalization will handles those so we can end here.
-                return true;
-            }
-            return false;
-        }
-
-
-        /// <summary>
-        /// Rotates a triangle pair one vertex CW
-        ///       n2                    n2
-        ///  P +-----+             P +-----+
-        ///    | t  /|               |\  t |  
-        ///    |   / |               | \   |
-        ///  n1|  /  |n3           n1|  \  |n3
-        ///    | /   |    after CW   |   \ |
-        ///    |/ oT |               | oT \|
-        ///    +-----+ oP            +-----+
-        ///       n4                    n4
-        /// </summary>
-        private static void RotateTrianglePair(DelaunayTriangle t, TriangulationPoint p, DelaunayTriangle ot, TriangulationPoint op)
-        {
-            DelaunayTriangle n1, n2, n3, n4;
-            n1 = t.NeighborCCWFrom(p);
-            n2 = t.NeighborCWFrom(p);
-            n3 = ot.NeighborCCWFrom(op);
-            n4 = ot.NeighborCWFrom(op);
-
-            bool ce1, ce2, ce3, ce4;
-            ce1 = t.GetConstrainedEdgeCCW(p);
-            ce2 = t.GetConstrainedEdgeCW(p);
-            ce3 = ot.GetConstrainedEdgeCCW(op);
-            ce4 = ot.GetConstrainedEdgeCW(op);
-
-            bool de1, de2, de3, de4;
-            de1 = t.GetDelaunayEdgeCCW(p);
-            de2 = t.GetDelaunayEdgeCW(p);
-            de3 = ot.GetDelaunayEdgeCCW(op);
-            de4 = ot.GetDelaunayEdgeCW(op);
-
-            t.Legalize(p, op);
-            ot.Legalize(op, p);
-
-            // Remap dEdge
-            ot.SetDelaunayEdgeCCW(p, de1);
-            t.SetDelaunayEdgeCW(p, de2);
-            t.SetDelaunayEdgeCCW(op, de3);
-            ot.SetDelaunayEdgeCW(op, de4);
-
-            // Remap cEdge
-            ot.SetConstrainedEdgeCCW(p, ce1);
-            t.SetConstrainedEdgeCW(p, ce2);
-            t.SetConstrainedEdgeCCW(op, ce3);
-            ot.SetConstrainedEdgeCW(op, ce4);
-
-            // Remap neighbors
-            // XXX: might optimize the markNeighbor by keeping track of
-            //      what side should be assigned to what neighbor after the 
-            //      rotation. Now mark neighbor does lots of testing to find 
-            //      the right side.
-            t.Neighbors.Clear();
-            ot.Neighbors.Clear();
-            if (n1 != null)
-            {
-                ot.MarkNeighbor(n1);
-            }
-            if (n2 != null)
-            {
-                t.MarkNeighbor(n2);
-            }
-            if (n3 != null)
-            {
-                t.MarkNeighbor(n3);
-            }
-            if (n4 != null)
-            {
-                ot.MarkNeighbor(n4);
-            }
-            t.MarkNeighbor(ot);
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// DTSweepBasin.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    public class DTSweepBasin
-    {
-        public AdvancingFrontNode leftNode;
-        public AdvancingFrontNode bottomNode;
-        public AdvancingFrontNode rightNode;
-        public double width;
-        public bool leftHighest;
-    }
-}
-
-// ----------------------------------------------------------------------
-// DTSweepConstraint.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-//using System.Collections.Generic;
-// using System.Diagnostics;
-//using System.Linq;
-
-
-namespace Poly2Tri
-{
-    public class DTSweepConstraint : TriangulationConstraint
-    {
-        /// <summary>
-        /// Give two points in any order. Will always be ordered so
-        /// that q.y > p.y and q.x > p.x if same y value 
-        /// </summary>
-        public DTSweepConstraint(TriangulationPoint p1, TriangulationPoint p2)
-            : base(p1, p2)
-        {
-            Q.AddEdge(this);
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// DTSweepContext.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    /**
-     * 
-     * @author Thomas Åhlén, thahlen@gmail.com
-     *
-     */
-    public class DTSweepContext : TriangulationContext
-    {
-        // Inital triangle factor, seed triangle will extend 30% of 
-        // PointSet width to both left and right.
-        private readonly float ALPHA = 0.3f;
-
-        public AdvancingFront Front;
-        public TriangulationPoint Head { get; set; }
-        public TriangulationPoint Tail { get; set; }
-
-        public DTSweepBasin Basin = new DTSweepBasin();
-        public DTSweepEdgeEvent EdgeEvent = new DTSweepEdgeEvent();
-
-        private DTSweepPointComparator _comparator = new DTSweepPointComparator();
-
-        public override TriangulationAlgorithm Algorithm { get { return TriangulationAlgorithm.DTSweep; } }
-
-
-        public DTSweepContext()
-        {
-            Clear();
-        }
-
-
-        public override bool IsDebugEnabled
-        {
-            get
-            {
-                return base.IsDebugEnabled;
-            }
-            protected set
-            {
-                if (value && DebugContext == null)
-                {
-                    DebugContext = new DTSweepDebugContext(this);
-                }
-                base.IsDebugEnabled = value;
-            }
-        }
-
-
-        public void RemoveFromList(DelaunayTriangle triangle)
-        {
-            Triangles.Remove(triangle);
-            // TODO: remove all neighbor pointers to this triangle
-            //        for( int i=0; i<3; i++ )
-            //        {
-            //            if( triangle.neighbors[i] != null )
-            //            {
-            //                triangle.neighbors[i].clearNeighbor( triangle );
-            //            }
-            //        }
-            //        triangle.clearNeighbors();
-        }
-
-
-        public void MeshClean(DelaunayTriangle triangle)
-        {
-            MeshCleanReq(triangle);
-        }
-
-
-        private void MeshCleanReq(DelaunayTriangle triangle)
-        {
-            if (triangle != null && !triangle.IsInterior)
-            {
-                triangle.IsInterior = true;
-                Triangulatable.AddTriangle(triangle);
-
-                for (int i = 0; i < 3; i++)
-                {
-                    if (!triangle.EdgeIsConstrained[i])
-                    {
-                        MeshCleanReq(triangle.Neighbors[i]);
-                    }
-                }
-            }
-        }
-
-
-        public override void Clear()
-        {
-            base.Clear();
-            Triangles.Clear();
-        }
-
-
-        public void AddNode(AdvancingFrontNode node)
-        {
-            //        Console.WriteLine( "add:" + node.key + ":" + System.identityHashCode(node.key));
-            //        m_nodeTree.put( node.getKey(), node );
-            Front.AddNode(node);
-        }
-
-
-        public void RemoveNode(AdvancingFrontNode node)
-        {
-            //        Console.WriteLine( "remove:" + node.key + ":" + System.identityHashCode(node.key));
-            //        m_nodeTree.delete( node.getKey() );
-            Front.RemoveNode(node);
-        }
-
-
-        public AdvancingFrontNode LocateNode(TriangulationPoint point)
-        {
-            return Front.LocateNode(point);
-        }
-
-
-        public void CreateAdvancingFront()
-        {
-            AdvancingFrontNode head, tail, middle;
-            // Initial triangle
-            DelaunayTriangle iTriangle = new DelaunayTriangle(Points[0], Tail, Head);
-            Triangles.Add(iTriangle);
-
-            head = new AdvancingFrontNode(iTriangle.Points[1]);
-            head.Triangle = iTriangle;
-            middle = new AdvancingFrontNode(iTriangle.Points[0]);
-            middle.Triangle = iTriangle;
-            tail = new AdvancingFrontNode(iTriangle.Points[2]);
-
-            Front = new AdvancingFront(head, tail);
-            Front.AddNode(middle);
-
-            // TODO: I think it would be more intuitive if head is middles next and not previous
-            //       so swap head and tail
-            Front.Head.Next = middle;
-            middle.Next = Front.Tail;
-            middle.Prev = Front.Head;
-            Front.Tail.Prev = middle;
-        }
-
-
-        /// <summary>
-        /// Try to map a node to all sides of this triangle that don't have 
-        /// a neighbor.
-        /// </summary>
-        public void MapTriangleToNodes(DelaunayTriangle t)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                if (t.Neighbors[i] == null)
-                {
-                    AdvancingFrontNode n = Front.LocatePoint(t.PointCWFrom(t.Points[i]));
-                    if (n != null)
-                    {
-                        n.Triangle = t;
-                    }
-                }
-            }
-        }
-
-
-        public override void PrepareTriangulation(ITriangulatable t)
-        {
-            base.PrepareTriangulation(t);
-
-            double xmax, xmin;
-            double ymax, ymin;
-
-            xmax = xmin = Points[0].X;
-            ymax = ymin = Points[0].Y;
-
-            // Calculate bounds. Should be combined with the sorting
-            foreach (TriangulationPoint p in Points)
-            {
-                if (p.X > xmax)
-                {
-                    xmax = p.X;
-                }
-                if (p.X < xmin)
-                {
-                    xmin = p.X;
-                }
-                if (p.Y > ymax)
-                {
-                    ymax = p.Y;
-                }
-                if (p.Y < ymin)
-                {
-                    ymin = p.Y;
-                }
-            }
-
-            double deltaX = ALPHA * (xmax - xmin);
-            double deltaY = ALPHA * (ymax - ymin);
-            TriangulationPoint p1 = new TriangulationPoint(xmax + deltaX, ymin - deltaY);
-            TriangulationPoint p2 = new TriangulationPoint(xmin - deltaX, ymin - deltaY);
-
-            Head = p1;
-            Tail = p2;
-
-            //        long time = System.nanoTime();
-            // Sort the points along y-axis
-            Points.Sort(_comparator);
-            //        logger.info( "Triangulation setup [{}ms]", ( System.nanoTime() - time ) / 1e6 );
-        }
-
-
-        public void FinalizeTriangulation()
-        {
-            Triangulatable.AddTriangles(Triangles);
-            Triangles.Clear();
-        }
-
-
-        public override TriangulationConstraint NewConstraint(TriangulationPoint a, TriangulationPoint b)
-        {
-            return new DTSweepConstraint(a, b);
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// DTSweepDebugContext.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-namespace Poly2Tri
-{
-    public class DTSweepDebugContext : TriangulationDebugContext
-    {
-        /*
-         * Fields used for visual representation of current triangulation
-         */
-
-        public DelaunayTriangle PrimaryTriangle { get { return _primaryTriangle; } set { _primaryTriangle = value; _tcx.Update("set PrimaryTriangle"); } }
-        public DelaunayTriangle SecondaryTriangle { get { return _secondaryTriangle; } set { _secondaryTriangle = value; _tcx.Update("set SecondaryTriangle"); } }
-        public TriangulationPoint ActivePoint { get { return _activePoint; } set { _activePoint = value; _tcx.Update("set ActivePoint"); } }
-        public AdvancingFrontNode ActiveNode { get { return _activeNode; } set { _activeNode = value; _tcx.Update("set ActiveNode"); } }
-        public DTSweepConstraint ActiveConstraint { get { return _activeConstraint; } set { _activeConstraint = value; _tcx.Update("set ActiveConstraint"); } }
-
-        public DTSweepDebugContext(DTSweepContext tcx) : base(tcx) { }
-
-        public bool IsDebugContext { get { return true; } }
-
-        public override void Clear()
-        {
-            PrimaryTriangle = null;
-            SecondaryTriangle = null;
-            ActivePoint = null;
-            ActiveNode = null;
-            ActiveConstraint = null;
-        }
-
-        private DelaunayTriangle _primaryTriangle;
-        private DelaunayTriangle _secondaryTriangle;
-        private TriangulationPoint _activePoint;
-        private AdvancingFrontNode _activeNode;
-        private DTSweepConstraint _activeConstraint;
-    }
-}
-
-// ----------------------------------------------------------------------
-// DTSweepEdgeEvent.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/// Changes from the Java version
-///   Turned DTSweepEdgeEvent into a value type
-
-namespace Poly2Tri
-{
-    public class DTSweepEdgeEvent
-    {
-        public DTSweepConstraint ConstrainedEdge;
-        public bool Right;
-    }
-}
-
-// ----------------------------------------------------------------------
-// DTSweepPointComparator.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System.Collections.Generic;
-
-namespace Poly2Tri
-{
-    public class DTSweepPointComparator : IComparer<TriangulationPoint>
-    {
-        public int Compare(TriangulationPoint p1, TriangulationPoint p2)
-        {
-            if (p1.Y < p2.Y)
-            {
-                return -1;
-            }
-            else if (p1.Y > p2.Y)
-            {
-                return 1;
-            }
-            else
-            {
-                if (p1.X < p2.X)
-                {
-                    return -1;
-                }
-                else if (p1.X > p2.X)
-                {
-                    return 1;
-                }
-                else
-                {
-                    return 0;
-                }
-            }
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// PointOnEdgeException.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-
-namespace Poly2Tri
-{
-    public class PointOnEdgeException : NotImplementedException
-    {
-        public readonly TriangulationPoint A, B, C;
-
-        public PointOnEdgeException(string message, TriangulationPoint a, TriangulationPoint b, TriangulationPoint c)
-            : base(message)
-        {
-            A = a;
-            B = b;
-            C = c;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// Contour.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-
-    /// <summary>
-    /// This is basically a light-weight version of the Polygon class, but with limited functionality and
-    /// used for different purposes.   Nonetheless, for all intents and purposes, this should actually be
-    /// a polygon (though not a Polygon..)
-    /// </summary>
-    public class Contour : Point2DList, ITriangulatable, IEnumerable<TriangulationPoint>, IList<TriangulationPoint>
-    {
-        private List<Contour> mHoles = new List<Contour>();
-        private ITriangulatable mParent = null;
-        private string mName = "";
-
-        public new TriangulationPoint this[int index]
-        {
-            get { return mPoints[index] as TriangulationPoint; }
-            set { mPoints[index] = value; }
-        }
-        public string Name { get { return mName; } set { mName = value; } }
-
-
-        public IList<DelaunayTriangle> Triangles
-        {
-            get
-            {
-                throw new NotImplementedException("PolyHole.Triangles should never get called");
-            }
-            private set { }
-        }
-        public TriangulationMode TriangulationMode { get { return mParent.TriangulationMode; } }
-        public string FileName { get { return mParent.FileName; } set { } }
-        public bool DisplayFlipX { get { return mParent.DisplayFlipX; } set { } }
-        public bool DisplayFlipY { get { return mParent.DisplayFlipY; } set { } }
-        public float DisplayRotate { get { return mParent.DisplayRotate; } set { } }
-        public double Precision { get { return mParent.Precision; } set { } }
-        public double MinX { get { return mBoundingBox.MinX; } }
-        public double MaxX { get { return mBoundingBox.MaxX; } }
-        public double MinY { get { return mBoundingBox.MinY; } }
-        public double MaxY { get { return mBoundingBox.MaxY; } }
-        public Rect2D Bounds { get { return mBoundingBox; } }
-
-
-        public Contour(ITriangulatable parent)
-        {
-            mParent = parent;
-        }
-
-
-        public Contour(ITriangulatable parent, IList<TriangulationPoint> points, Point2DList.WindingOrderType windingOrder)
-        {
-            // Currently assumes that input is pre-checked for validity
-            mParent = parent;
-            AddRange(points, windingOrder);
-        }
-
-
-        public override string ToString()
-        {
-            return mName + " : " + base.ToString();
-        }
-
-
-        IEnumerator<TriangulationPoint> IEnumerable<TriangulationPoint>.GetEnumerator()
-        {
-            return new TriangulationPointEnumerator(mPoints);
-        }
-
-
-        public int IndexOf(TriangulationPoint p)
-        {
-            return mPoints.IndexOf(p);
-        }
-
-
-        public void Add(TriangulationPoint p)
-        {
-            Add(p, -1, true);
-        }
-
-
-        protected override void Add(Point2D p, int idx, bool bCalcWindingOrderAndEpsilon)
-        {
-            TriangulationPoint pt = null;
-            if (p is TriangulationPoint)
-            {
-                pt = p as TriangulationPoint;
-            }
-            else
-            {
-                pt = new TriangulationPoint(p.X, p.Y);
-            }
-            if (idx < 0)
-            {
-                mPoints.Add(pt);
-            }
-            else
-            {
-                mPoints.Insert(idx, pt);
-            }
-            mBoundingBox.AddPoint(pt);
-            if (bCalcWindingOrderAndEpsilon)
-            {
-                if (mWindingOrder == WindingOrderType.Unknown)
-                {
-                    mWindingOrder = CalculateWindingOrder();
-                }
-                mEpsilon = CalculateEpsilon();
-            }
-        }
-
-
-        public override void AddRange(IEnumerator<Point2D> iter, WindingOrderType windingOrder)
-        {
-            if (iter == null)
-            {
-                return;
-            }
-
-            if (mWindingOrder == WindingOrderType.Unknown && Count == 0)
-            {
-                mWindingOrder = windingOrder;
-            }
-            bool bReverseReadOrder = (WindingOrder != WindingOrderType.Unknown) && (windingOrder != WindingOrderType.Unknown) && (WindingOrder != windingOrder);
-            bool bAddedFirst = true;
-            int startCount = mPoints.Count;
-            iter.Reset();
-            while (iter.MoveNext())
-            {
-                TriangulationPoint pt = null;
-                if (iter.Current is TriangulationPoint)
-                {
-                    pt = iter.Current as TriangulationPoint;
-                }
-                else
-                {
-                    pt = new TriangulationPoint(iter.Current.X, iter.Current.Y);
-                }
-                if (!bAddedFirst)
-                {
-                    bAddedFirst = true;
-                    mPoints.Add(pt);
-                }
-                else if (bReverseReadOrder)
-                {
-                    mPoints.Insert(startCount, pt);
-                }
-                else
-                {
-                    mPoints.Add(pt);
-                }
-                mBoundingBox.AddPoint(iter.Current);
-            }
-            if (mWindingOrder == WindingOrderType.Unknown && windingOrder == WindingOrderType.Unknown)
-            {
-                mWindingOrder = CalculateWindingOrder();
-            }
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        public void AddRange(IList<TriangulationPoint> points, Point2DList.WindingOrderType windingOrder)
-        {
-            if (points == null || points.Count < 1)
-            {
-                return;
-            }
-
-            if (mWindingOrder == Point2DList.WindingOrderType.Unknown && Count == 0)
-            {
-                mWindingOrder = windingOrder;
-            }
-
-            int numPoints = points.Count;
-            bool bReverseReadOrder = (WindingOrder != WindingOrderType.Unknown) && (windingOrder != WindingOrderType.Unknown) && (WindingOrder != windingOrder);
-            for (int i = 0; i < numPoints; ++i)
-            {
-                int idx = i;
-                if (bReverseReadOrder)
-                {
-                    idx = points.Count - i - 1;
-                }
-                Add(points[idx], -1, false);
-            }
-            if (mWindingOrder == WindingOrderType.Unknown)
-            {
-                mWindingOrder = CalculateWindingOrder();
-            }
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        public void Insert(int idx, TriangulationPoint p)
-        {
-            Add(p, idx, true);
-        }
-
-
-        public bool Remove(TriangulationPoint p)
-        {
-            return Remove(p as Point2D);
-        }
-
-
-        public bool Contains(TriangulationPoint p)
-        {
-            return mPoints.Contains(p);
-        }
-
-
-        public void CopyTo(TriangulationPoint[] array, int arrayIndex)
-        {
-            int numElementsToCopy = Math.Min(Count, array.Length - arrayIndex);
-            for (int i = 0; i < numElementsToCopy; ++i)
-            {
-                array[arrayIndex + i] = mPoints[i] as TriangulationPoint;
-            }
-        }
-
-
-        protected void AddHole(Contour c)
-        {
-            // no checking is done here as we rely on InitializeHoles for that
-            c.mParent = this;
-            mHoles.Add(c);
-        }
-
-
-        /// <summary>
-        /// returns number of holes that are actually holes, including all children of children, etc.   Does NOT
-        /// include holes that are not actually holes.   For example, if the parent is not a hole and this contour has
-        /// a hole that contains a hole, then the number of holes returned would be 2 - one for the current hole (because
-        /// the parent is NOT a hole and thus this hole IS a hole), and 1 for the child of the child.
-        /// </summary>
-        /// <param name="parentIsHole"></param>
-        /// <returns></returns>
-        public int GetNumHoles(bool parentIsHole)
-        {
-            int numHoles = parentIsHole ? 0 : 1;
-            foreach (Contour c in mHoles)
-            {
-                numHoles += c.GetNumHoles(!parentIsHole);
-            }
-
-            return numHoles;
-        }
-
-
-        /// <summary>
-        /// returns the basic number of child holes of THIS contour, not including any children of children, etc nor
-        /// examining whether any children are actual holes.
-        /// </summary>
-        /// <returns></returns>
-        public int GetNumHoles()
-        {
-            return mHoles.Count;
-        }
-
-
-        public Contour GetHole(int idx)
-        {
-            if (idx < 0 || idx >= mHoles.Count)
-            {
-                return null;
-            }
-
-            return mHoles[idx];
-        }
-
-
-        public void GetActualHoles(bool parentIsHole, ref List<Contour> holes)
-        {
-            if (parentIsHole)
-            {
-                holes.Add(this);
-            }
-
-            foreach (Contour c in mHoles)
-            {
-                c.GetActualHoles(!parentIsHole, ref holes);
-            }
-        }
-
-
-        public List<Contour>.Enumerator GetHoleEnumerator()
-        {
-            return mHoles.GetEnumerator();
-        }
-
-
-        public void InitializeHoles(ConstrainedPointSet cps)
-        {
-            Contour.InitializeHoles(mHoles, this, cps);
-            foreach (Contour c in mHoles)
-            {
-                c.InitializeHoles(cps);
-            }
-        }
-
-
-        public static void InitializeHoles(List<Contour> holes, ITriangulatable parent, ConstrainedPointSet cps)
-        {
-            int numHoles = holes.Count;
-            int holeIdx = 0;
-
-            // pass 1 - remove duplicates
-            while (holeIdx < numHoles)
-            {
-                int hole2Idx = holeIdx + 1;
-                while (hole2Idx < numHoles)
-                {
-                    bool bSamePolygon = PolygonUtil.PolygonsAreSame2D(holes[holeIdx], holes[hole2Idx]);
-                    if (bSamePolygon)
-                    {
-                        // remove one of them
-                        holes.RemoveAt(hole2Idx);
-                        --numHoles;
-                    }
-                    else
-                    {
-                        ++hole2Idx;
-                    }
-                }
-                ++holeIdx;
-            }
-
-            // pass 2: Intersections and Containment
-            holeIdx = 0;
-            while (holeIdx < numHoles)
-            {
-                bool bIncrementHoleIdx = true;
-                int hole2Idx = holeIdx + 1;
-                while (hole2Idx < numHoles)
-                {
-                    if (PolygonUtil.PolygonContainsPolygon(holes[holeIdx], holes[holeIdx].Bounds, holes[hole2Idx], holes[hole2Idx].Bounds, false))
-                    {
-                        holes[holeIdx].AddHole(holes[hole2Idx]);
-                        holes.RemoveAt(hole2Idx);
-                        --numHoles;
-                    }
-                    else if (PolygonUtil.PolygonContainsPolygon(holes[hole2Idx], holes[hole2Idx].Bounds, holes[holeIdx], holes[holeIdx].Bounds, false))
-                    {
-                        holes[hole2Idx].AddHole(holes[holeIdx]);
-                        holes.RemoveAt(holeIdx);
-                        --numHoles;
-                        bIncrementHoleIdx = false;
-                        break;
-                    }
-                    else
-                    {
-                        bool bIntersect = PolygonUtil.PolygonsIntersect2D(holes[holeIdx], holes[holeIdx].Bounds, holes[hole2Idx], holes[hole2Idx].Bounds);
-                        if (bIntersect)
-                        {
-                            // this is actually an error condition
-                            // fix by merging hole1 and hole2 into hole1 (including the holes inside hole2!) and delete hole2
-                            // Then, because hole1 is now changed, restart it's check.
-                            PolygonOperationContext ctx = new PolygonOperationContext();
-                            if (!ctx.Init(PolygonUtil.PolyOperation.Union | PolygonUtil.PolyOperation.Intersect, holes[holeIdx], holes[hole2Idx]))
-                            {
-                                if (ctx.mError == PolygonUtil.PolyUnionError.Poly1InsidePoly2)
-                                {
-                                    holes[hole2Idx].AddHole(holes[holeIdx]);
-                                    holes.RemoveAt(holeIdx);
-                                    --numHoles;
-                                    bIncrementHoleIdx = false;
-                                    break;
-                                }
-                                else
-                                {
-                                    throw new Exception("PolygonOperationContext.Init had an error during initialization");
-                                }
-                            }
-                            PolygonUtil.PolyUnionError pue = PolygonUtil.PolygonOperation(ctx);
-                            if (pue == PolygonUtil.PolyUnionError.None)
-                            {
-                                Point2DList union = ctx.Union;
-                                Point2DList intersection = ctx.Intersect;
-
-                                // create a new contour for the union
-                                Contour c = new Contour(parent);
-                                c.AddRange(union);
-                                c.Name = "(" + holes[holeIdx].Name + " UNION " + holes[hole2Idx].Name + ")";
-                                c.WindingOrder = Point2DList.WindingOrderType.Default;
-
-                                // add children from both of the merged contours
-                                int numChildHoles = holes[holeIdx].GetNumHoles();
-                                for(int i = 0; i < numChildHoles; ++i)
-                                {
-                                    c.AddHole(holes[holeIdx].GetHole(i));
-                                }
-                                numChildHoles = holes[hole2Idx].GetNumHoles();
-                                for (int i = 0; i < numChildHoles; ++i)
-                                {
-                                    c.AddHole(holes[hole2Idx].GetHole(i));
-                                }
-
-                                // make sure we preserve the contours of the intersection
-                                Contour cInt = new Contour(c);
-                                cInt.AddRange(intersection);
-                                cInt.Name = "(" + holes[holeIdx].Name + " INTERSECT " + holes[hole2Idx].Name + ")";
-                                cInt.WindingOrder = Point2DList.WindingOrderType.Default;
-                                c.AddHole(cInt);
-
-                                // replace the current contour with the merged contour
-                                holes[holeIdx] = c;
-
-                                // toss the second contour
-                                holes.RemoveAt(hole2Idx);
-                                --numHoles;
-
-                                // current hole is "examined", so move to the next one
-                                hole2Idx = holeIdx + 1;
-                            }
-                            else
-                            {
-                                throw new Exception("PolygonOperation had an error!");
-                            }
-                        }
-                        else
-                        {
-                            ++hole2Idx;
-                        }
-                    }
-                }
-                if (bIncrementHoleIdx)
-                {
-                    ++holeIdx;
-                }
-            }
-
-            numHoles = holes.Count;
-            holeIdx = 0;
-            while (holeIdx < numHoles)
-            {
-                int numPoints = holes[holeIdx].Count;
-                for (int i = 0; i < numPoints; ++i)
-                {
-                    int j = holes[holeIdx].NextIndex(i);
-                    uint constraintCode = TriangulationConstraint.CalculateContraintCode(holes[holeIdx][i], holes[holeIdx][j]);
-                    TriangulationConstraint tc = null;
-                    if (!cps.TryGetConstraint(constraintCode, out tc))
-                    {
-                        tc = new TriangulationConstraint(holes[holeIdx][i], holes[holeIdx][j]);
-                        cps.AddConstraint(tc);
-                    }
-
-                    // replace the points in the holes with valid points
-                    if (holes[holeIdx][i].VertexCode == tc.P.VertexCode)
-                    {
-                        holes[holeIdx][i] = tc.P;
-                    }
-                    else if (holes[holeIdx][j].VertexCode == tc.P.VertexCode)
-                    {
-                        holes[holeIdx][j] = tc.P;
-                    }
-                    if (holes[holeIdx][i].VertexCode == tc.Q.VertexCode)
-                    {
-                        holes[holeIdx][i] = tc.Q;
-                    }
-                    else if (holes[holeIdx][j].VertexCode == tc.Q.VertexCode)
-                    {
-                        holes[holeIdx][j] = tc.Q;
-                    }
-                }
-                ++holeIdx;
-            }
-        }
-
-
-        public void Prepare(TriangulationContext tcx)
-        {
-            throw new NotImplementedException("PolyHole.Prepare should never get called");
-        }
-
-
-        public void AddTriangle(DelaunayTriangle t)
-        {
-            throw new NotImplementedException("PolyHole.AddTriangle should never get called");
-        }
-
-
-        public void AddTriangles(IEnumerable<DelaunayTriangle> list)
-        {
-            throw new NotImplementedException("PolyHole.AddTriangles should never get called");
-        }
-
-
-        public void ClearTriangles()
-        {
-            throw new NotImplementedException("PolyHole.ClearTriangles should never get called");
-        }
-
-
-        public Point2D FindPointInContour()
-        {
-            if (Count < 3)
-            {
-                return null;
-            }
-
-            // first try the simple approach:
-            Point2D p = GetCentroid();
-            if (IsPointInsideContour(p))
-            {
-                return p;
-            }
-
-            // brute force it...
-            Random random = new Random();
-            while (true)
-            {
-                p.X = (random.NextDouble() * (MaxX - MinX)) + MinX;
-                p.Y = (random.NextDouble() * (MaxY - MinY)) + MinY;
-                if (IsPointInsideContour(p))
-                {
-                    return p;
-                }
-            }
-        }
-
-
-        public bool IsPointInsideContour(Point2D p)
-        {
-            if (PolygonUtil.PointInPolygon2D(this, p))
-            {
-                foreach (Contour c in mHoles)
-                {
-                    if (c.IsPointInsideContour(p))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-
-            return false;
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// Polygon.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/// Changes from the Java version
-///   Polygon constructors sprused up, checks for 3+ polys
-///   Naming of everything
-///   getTriangulationMode() -> TriangulationMode { get; }
-///   Exceptions replaced
-/// Future possibilities
-///   We have a lot of Add/Clear methods -- we may prefer to just expose the container
-///   Some self-explanatory methods may deserve commenting anyways
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-
-
-namespace Poly2Tri
-{
-    public class Polygon : Point2DList, ITriangulatable, IEnumerable<TriangulationPoint>, IList<TriangulationPoint>
-    {
-        // ITriangulatable Implementation
-        protected Dictionary<uint, TriangulationPoint> mPointMap = new Dictionary<uint, TriangulationPoint>();
-        public IList<TriangulationPoint> Points { get { return this; } }
-        protected List<DelaunayTriangle> mTriangles;
-        public IList<DelaunayTriangle> Triangles { get { return mTriangles; } }
-        public TriangulationMode TriangulationMode { get { return TriangulationMode.Polygon; } }
-        public string FileName { get; set; }
-        public bool DisplayFlipX { get; set; }
-        public bool DisplayFlipY { get; set; }
-        public float DisplayRotate { get; set; }
-        private double mPrecision = TriangulationPoint.kVertexCodeDefaultPrecision;
-        public double Precision { get { return mPrecision; } set { mPrecision = value; } }
-        public double MinX { get { return mBoundingBox.MinX; } }
-        public double MaxX { get { return mBoundingBox.MaxX; } }
-        public double MinY { get { return mBoundingBox.MinY; } }
-        public double MaxY { get { return mBoundingBox.MaxY; } }
-        public Rect2D Bounds { get { return mBoundingBox; } }
-
-        // Point2DList overrides
-        public new TriangulationPoint this[int index]
-        {
-            get { return mPoints[index] as TriangulationPoint; }
-            set { mPoints[index] = value; }
-        }
-
-        // Polygon Implementation
-        protected List<Polygon> mHoles;
-        public IList<Polygon> Holes { get { return mHoles; } }
-        protected List<TriangulationPoint> mSteinerPoints;
-        protected PolygonPoint _last;
-
-
-
-        /// <summary>
-        /// Create a polygon from a list of at least 3 points with no duplicates.
-        /// </summary>
-        /// <param name="points">A list of unique points</param>
-        public Polygon(IList<PolygonPoint> points)
-        {
-            if (points.Count < 3)
-            {
-                throw new ArgumentException("List has fewer than 3 points", "points");
-            }
-
-            AddRange(points, WindingOrderType.Unknown);
-        }
-
-
-        /// <summary>
-        /// Create a polygon from a list of at least 3 points with no duplicates.
-        /// </summary>
-        /// <param name="points">A list of unique points.</param>
-        public Polygon(IEnumerable<PolygonPoint> points) 
-            : this((points as IList<PolygonPoint>) ?? points.ToArray()) 
-        {}
-
-
-        /// <summary>
-        /// Create a polygon from a list of at least 3 points with no duplicates.
-        /// </summary>
-        /// <param name="points">A list of unique points.</param>
-        public Polygon(params PolygonPoint[] points)
-            : this((IList<PolygonPoint>)points)
-        {}
-
-
-        IEnumerator<TriangulationPoint> IEnumerable<TriangulationPoint>.GetEnumerator()
-        {
-            return new TriangulationPointEnumerator(mPoints);
-        }
-
-
-        public int IndexOf(TriangulationPoint p)
-        {
-            return mPoints.IndexOf(p);
-        }
-
-
-        public override void Add(Point2D p)
-        {
-            Add(p, -1, true);
-        }
-
-
-        public void Add(TriangulationPoint p)
-        {
-            Add(p, -1, true);
-        }
-
-
-        public void Add(PolygonPoint p)
-        {
-            Add(p, -1, true);
-        }
-
-
-        protected override void Add(Point2D p, int idx, bool bCalcWindingOrderAndEpsilon)
-        {
-            TriangulationPoint pt = p as TriangulationPoint;
-            if (pt == null)
-            {
-                // we only store TriangulationPoints and PolygonPoints in this class
-                return;
-            }
-
-            // do not insert duplicate points
-            if (mPointMap.ContainsKey(pt.VertexCode))
-            {
-                return;
-            }
-            mPointMap.Add(pt.VertexCode, pt);
-
-            base.Add(p, idx, bCalcWindingOrderAndEpsilon);
-
-            PolygonPoint pp = p as PolygonPoint;
-            if (pp != null)
-            {
-                pp.Previous = _last;
-                if (_last != null)
-                {
-                    pp.Next = _last.Next;
-                    _last.Next = pp;
-                }
-                _last = pp;
-            }
-
-            return;
-        }
-
-
-        public void AddRange(IList<PolygonPoint> points, Point2DList.WindingOrderType windingOrder)
-        {
-            if (points == null || points.Count < 1)
-            {
-                return;
-            }
-
-            if (mWindingOrder == Point2DList.WindingOrderType.Unknown && Count == 0)
-            {
-                mWindingOrder = windingOrder;
-            }
-            int numPoints = points.Count;
-            bool bReverseReadOrder = (WindingOrder != WindingOrderType.Unknown) && (windingOrder != WindingOrderType.Unknown) && (WindingOrder != windingOrder);
-            for (int i = 0; i < numPoints; ++i)
-            {
-                int idx = i;
-                if (bReverseReadOrder)
-                {
-                    idx = points.Count - i - 1;
-                }
-                Add(points[idx], -1, false);
-            }
-            if (mWindingOrder == WindingOrderType.Unknown)
-            {
-                mWindingOrder = CalculateWindingOrder();
-            }
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        public void AddRange(IList<TriangulationPoint> points, Point2DList.WindingOrderType windingOrder)
-        {
-            if (points == null || points.Count < 1)
-            {
-                return;
-            }
-
-            if (mWindingOrder == Point2DList.WindingOrderType.Unknown && Count == 0)
-            {
-                mWindingOrder = windingOrder;
-            }
-
-            int numPoints = points.Count;
-            bool bReverseReadOrder = (WindingOrder != WindingOrderType.Unknown) && (windingOrder != WindingOrderType.Unknown) && (WindingOrder != windingOrder);
-            for (int i = 0; i < numPoints; ++i)
-            {
-                int idx = i;
-                if (bReverseReadOrder)
-                {
-                    idx = points.Count - i - 1;
-                }
-                Add(points[idx], -1, false);
-            }
-            if (mWindingOrder == WindingOrderType.Unknown)
-            {
-                mWindingOrder = CalculateWindingOrder();
-            }
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        public void Insert(int idx, TriangulationPoint p)
-        {
-            Add(p, idx, true);
-        }
-
-
-        public bool Remove(TriangulationPoint p)
-        {
-            return base.Remove(p);
-        }
-
-
-        /// <summary>
-        /// Removes a point from the polygon.  Note this can be a somewhat expensive operation
-        /// as it must recalculate the bounding area from scratch.
-        /// </summary>
-        /// <param name="p"></param>
-        public void RemovePoint(PolygonPoint p)
-        {
-            PolygonPoint next, prev;
-
-            next = p.Next;
-            prev = p.Previous;
-            prev.Next = next;
-            next.Previous = prev;
-            mPoints.Remove(p);
-
-            mBoundingBox.Clear();
-            foreach (PolygonPoint tmp in mPoints)
-            {
-                mBoundingBox.AddPoint(tmp);
-            }
-        }
-
-
-
-        public bool Contains(TriangulationPoint p)
-        {
-            return mPoints.Contains(p);
-        }
-
-
-        public void CopyTo(TriangulationPoint[] array, int arrayIndex)
-        {
-            int numElementsToCopy = Math.Min(Count, array.Length - arrayIndex);
-            for (int i = 0; i < numElementsToCopy; ++i)
-            {
-                array[arrayIndex + i] = mPoints[i] as TriangulationPoint;
-            }
-        }
-
-
-        public void AddSteinerPoint(TriangulationPoint point)
-        {
-            if (mSteinerPoints == null)
-            {
-                mSteinerPoints = new List<TriangulationPoint>();
-            }
-            mSteinerPoints.Add(point);
-        }
-
-
-        public void AddSteinerPoints(List<TriangulationPoint> points)
-        {
-            if (mSteinerPoints == null)
-            {
-                mSteinerPoints = new List<TriangulationPoint>();
-            }
-            mSteinerPoints.AddRange(points);
-        }
-
-
-        public void ClearSteinerPoints()
-        {
-            if (mSteinerPoints != null)
-            {
-                mSteinerPoints.Clear();
-            }
-        }
-
-
-        /// <summary>
-        /// Add a hole to the polygon.
-        /// </summary>
-        /// <param name="poly">A subtraction polygon fully contained inside this polygon.</param>
-        public void AddHole(Polygon poly)
-        {
-            if (mHoles == null)
-            {
-                mHoles = new List<Polygon>();
-            }
-            mHoles.Add(poly);
-            // XXX: tests could be made here to be sure it is fully inside
-            //        addSubtraction( poly.getPoints() );
-        }
-
-
-        public void AddTriangle(DelaunayTriangle t)
-        {
-            mTriangles.Add(t);
-        }
-
-
-        public void AddTriangles(IEnumerable<DelaunayTriangle> list)
-        {
-            mTriangles.AddRange(list);
-        }
-
-        
-        public void ClearTriangles()
-        {
-            if (mTriangles != null)
-            {
-                mTriangles.Clear();
-            }
-        }
-
-
-        public bool IsPointInside(TriangulationPoint p)
-        {
-            return PolygonUtil.PointInPolygon2D(this, p);
-        }
-
-
-        /// <summary>
-        /// Creates constraints and populates the context with points
-        /// </summary>
-        /// <param name="tcx">The context</param>
-        public void Prepare(TriangulationContext tcx)
-        {
-            if (mTriangles == null)
-            {
-                mTriangles = new List<DelaunayTriangle>(mPoints.Count);
-            }
-            else
-            {
-                mTriangles.Clear();
-            }
-
-            // Outer constraints
-            for (int i = 0; i < mPoints.Count - 1; i++)
-            {
-                //tcx.NewConstraint(mPoints[i], mPoints[i + 1]);
-                tcx.NewConstraint(this[i], this[i + 1]);
-            }
-            tcx.NewConstraint(this[0], this[Count - 1]);
-            tcx.Points.AddRange(this);
-
-            // Hole constraints
-            if (mHoles != null)
-            {
-                foreach (Polygon p in mHoles)
-                {
-                    for (int i = 0; i < p.mPoints.Count - 1; i++)
-                    {
-                        tcx.NewConstraint(p[i], p[i + 1]);
-                    }
-                    tcx.NewConstraint(p[0], p[p.Count - 1]);
-                    tcx.Points.AddRange(p);
-                }
-            }
-
-            if (mSteinerPoints != null)
-            {
-                tcx.Points.AddRange(mSteinerPoints);
-            }
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// PolygonPoint.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/// Changes from the Java version
-///   Replaced get/set Next/Previous with attributes
-/// Future possibilities
-///   Documentation!
-
-namespace Poly2Tri
-{
-    public class PolygonPoint : TriangulationPoint
-    {
-        public PolygonPoint(double x, double y) : base(x, y) { }
-
-        public PolygonPoint Next { get; set; }
-        public PolygonPoint Previous { get; set; }
-
-        public static Point2D ToBasePoint(PolygonPoint p)
-        {
-            return (Point2D)p;
-        }
-
-        public static TriangulationPoint ToTriangulationPoint(PolygonPoint p)
-        {
-            return (TriangulationPoint)p;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// PolygonSet.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/// Changes from the Java version
-///   Replaced getPolygons with attribute
-/// Future possibilities
-///   Replace Add(Polygon) with exposed container?
-///   Replace entire class with HashSet<Polygon> ?
-
-// using System.Collections.Generic;
-
-namespace Poly2Tri
-{
-    public class PolygonSet
-    {
-        protected List<Polygon> _polygons = new List<Polygon>();
-
-        public PolygonSet() { }
-
-        public PolygonSet(Polygon poly)
-        {
-            _polygons.Add(poly);
-        }
-
-        public void Add(Polygon p)
-        {
-            _polygons.Add(p);
-        }
-
-        public IEnumerable<Polygon> Polygons { get { return _polygons; } }
-    }
-}
-
-// ----------------------------------------------------------------------
-// PolygonUtil.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-
-/*
- * The Following notice applies to the Method SplitComplexPolygon and the 
- * class SplitComplexPolygonNode.   Both are altered only enough to convert to C#
- * and take advantage of some of C#'s language features.   Any errors
- * are thus mine from the conversion and not Eric's.
- * 
- * Copyright (c) 2007 Eric Jordan
- * 
- * This software is provided 'as-is', without any express or implied
- * warranty.  In no event will the authors be held liable for any damages
- * arising from the use of this software.
- * Permission is granted to anyone to use this software for any purpose,
- * including commercial applications, and to alter it and redistribute it
- * freely, subject to the following restrictions:
- * 1. The origin of this software must not be misrepresented; you must not
- *    claim that you wrote the original software. If you use this software
- *    in a product, an acknowledgment in the product documentation would be
- *    appreciated but is not required.
- * 2. Altered source versions must be plainly marked as such, and must not be
- *    misrepresented as being the original software.
- * 3. This notice may not be removed or altered from any source distribution.
- * */
-
-
-/*
- * Portions of the following code (notably: the methods PolygonUnion, 
- * PolygonSubtract, PolygonIntersect, PolygonOperationContext.Init,
- * PolygonOperationContext.VerticesIntersect,
- * PolygonOperationContext.PointInPolygonAngle, and
- * PolygonOperationContext.VectorAngle are from the Farseer Physics Engine 3.0
- * and are covered under the Microsoft Permissive License V1.1
- * (http://farseerphysics.codeplex.com/license)
- * 
- * Microsoft Permissive License (Ms-PL)
- * 
- * This license governs use of the accompanying software. If you use the 
- * software, you accept this license. If you do not accept the license, do not
- * use the software.
- * 
- * 1. Definitions
- * 
- * The terms "reproduce," "reproduction," "derivative works," and
- * "distribution" have the same meaning here as under U.S. copyright law.
- * 
- * A "contribution" is the original software, or any additions or changes to
- * the software.
- * 
- * A "contributor" is any person that distributes its contribution under this 
- * license.
- *
- * "Licensed patents" are a contributor's patent claims that read directly on
- * its contribution.
- * 
- * 2. Grant of Rights
- * 
- * (A) Copyright Grant- Subject to the terms of this license, including the
- * license conditions and limitations in section 3, each contributor grants
- * you a non-exclusive, worldwide, royalty-free copyright license to reproduce
- * its contribution, prepare derivative works of its contribution, and
- * distribute its contribution or any derivative works that you create.
- * 
- * (B) Patent Grant- Subject to the terms of this license, including the
- * license conditions and limitations in section 3, each contributor grants
- * you a non-exclusive, worldwide, royalty-free license under its licensed
- * patents to make, have made, use, sell, offer for sale, import, and/or
- * otherwise dispose of its contribution in the software or derivative works
- * of the contribution in the software.
- * 
- * 3. Conditions and Limitations
- * 
- * (A) No Trademark License- This license does not grant you rights to use
- * any contributors' name, logo, or trademarks.
- * 
- * (B) If you bring a patent claim against any contributor over patents that
- * you claim are infringed by the software, your patent license from such
- * contributor to the software ends automatically.
- * 
- * (C) If you distribute any portion of the software, you must retain all
- * copyright, patent, trademark, and attribution notices that are present
- * in the software.
- * 
- * (D) If you distribute any portion of the software in source code form, you
- * may do so only under this license by including a complete copy of this
- * license with your distribution. If you distribute any portion of the
- * software in compiled or object code form, you may only do so under a
- * license that complies with this license.
- * 
- * (E) The software is licensed "as-is." You bear the risk of using it. The
- * contributors give no express warranties, guarantees or conditions. You may
- * have additional consumer rights under your local laws which this license
- * cannot change. To the extent permitted under your local laws, the
- * contributors exclude the implied warranties of merchantability, fitness for
- * a particular purpose and non-infringement. 
- */
-
-// using System;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-    public class PolygonUtil
-    {
-        public enum PolyUnionError
-        {
-            None,
-            NoIntersections,
-            Poly1InsidePoly2,
-            InfiniteLoop
-        }
-
-        [Flags]
-        public enum PolyOperation : uint
-        {
-            None = 0,
-            Union = 1 << 0,
-            Intersect = 1 << 1,
-            Subtract = 1 << 2,
-        }
-
-
-        public static Point2DList.WindingOrderType CalculateWindingOrder(IList<Point2D> l)
-        {
-            double area = 0.0;
-            for (int i = 0; i < l.Count; i++)
-            {
-                int j = (i + 1) % l.Count;
-                area += l[i].X * l[j].Y;
-                area -= l[i].Y * l[j].X;
-            }
-            area /= 2.0f;
-
-            // the sign of the 'area' of the polygon is all we are interested in.
-            if (area < 0.0)
-            {
-                return Point2DList.WindingOrderType.CW;
-            }
-            else if (area > 0.0)
-            {
-                return Point2DList.WindingOrderType.CCW;
-            }
-
-            // error condition - not even verts to calculate, non-simple poly, etc.
-            return Point2DList.WindingOrderType.Unknown;
-        }
-
-
-        /// <summary>
-        /// Check if the polys are similar to within a tolerance (Doesn't include reflections,
-        /// but allows for the points to be numbered differently, but not reversed).
-        /// </summary>
-        /// <param name="poly1"></param>
-        /// <param name="poly2"></param>
-        /// <returns></returns>
-        public static bool PolygonsAreSame2D(IList<Point2D> poly1, IList<Point2D> poly2)
-        {
-            int numVerts1 = poly1.Count;
-            int numVerts2 = poly2.Count;
-
-            if (numVerts1 != numVerts2)
-            {
-                return false;
-            }
-            const double kEpsilon = 0.01;
-            const double kEpsilonSq = kEpsilon * kEpsilon;
-
-            // Bounds the same to within tolerance, are there polys the same?
-            Point2D vdelta = new Point2D(0.0, 0.0);
-            for (int k = 0; k < numVerts2; ++k)
-            {
-                // Look for a match in verts2 to the first vertex in verts1
-                vdelta.Set(poly1[0]);
-                vdelta.Subtract(poly2[k]);
-
-                if (vdelta.MagnitudeSquared() < kEpsilonSq)
-                {
-                    // Found match to the first point, now check the other points continuing round
-                    // if the points don't match in the first direction we check, then it's possible
-                    // that the polygons have a different winding order, so we check going round 
-                    // the opposite way as well
-                    int matchedVertIndex = k;
-                    bool bReverseSearch = false;
-                    while (true)
-                    {
-                        bool bMatchFound = true;
-                        for (int i = 1; i < numVerts1; ++i)
-                        {
-                            if (!bReverseSearch)
-                            {
-                                ++k;
-                            }
-                            else
-                            {
-                                --k;
-                                if (k < 0)
-                                {
-                                    k = numVerts2 - 1;
-                                }
-                            }
-
-                            vdelta.Set(poly1[i]);
-                            vdelta.Subtract(poly2[k % numVerts2]);
-                            if (vdelta.MagnitudeSquared() >= kEpsilonSq)
-                            {
-                                if (bReverseSearch)
-                                {
-                                    // didn't find a match going in either direction, so the polygons are not the same
-                                    return false;
-                                }
-                                else
-                                {
-                                    // mismatch in the first direction checked, so check the other direction.
-                                    k = matchedVertIndex;
-                                    bReverseSearch = true;
-                                    bMatchFound = false;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (bMatchFound)
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
-        }
-
-
-        public static bool PointInPolygon2D(IList<Point2D> polygon, Point2D p)
-        {
-            if (polygon == null || polygon.Count < 3)
-            {
-                return false;
-            }
-
-            int numVerts = polygon.Count;
-            Point2D p0 = polygon[numVerts - 1];
-            bool bYFlag0 = (p0.Y >= p.Y) ? true : false;
-            Point2D p1 = null;
-
-            bool bInside = false;
-            for (int j = 0; j < numVerts; ++j)
-            {
-                p1 = polygon[j];
-                bool bYFlag1 = (p1.Y >= p.Y) ? true : false;
-                if (bYFlag0 != bYFlag1)
-                {
-                    if (((p1.Y - p.Y) * (p0.X - p1.X) >= (p1.X - p.X) * (p0.Y - p1.Y)) == bYFlag1)
-                    {
-                        bInside = !bInside;
-                    }
-                }
-
-                // Move to the next pair of vertices, retaining info as possible.
-                bYFlag0 = bYFlag1;
-                p0 = p1;
-            }
-
-            return bInside;
-        }
-
-
-        // Given two polygons and their bounding rects, returns true if the two polygons intersect.
-        // This test will NOT determine if one of the two polygons is contained within the other or if the 
-        // two polygons are similar - it will return false in all those cases.  The only case it will return
-        // true for is if the two polygons actually intersect.
-        public static bool PolygonsIntersect2D( IList<Point2D> poly1, Rect2D boundRect1,
-                                                IList<Point2D> poly2, Rect2D boundRect2)
-        {
-            // do some quick tests first before doing any real work
-            if (poly1 == null || poly1.Count < 3 || boundRect1 == null || poly2 == null || poly2.Count < 3 || boundRect2 == null)
-            {
-                return false;
-            }
-
-            if (!boundRect1.Intersects(boundRect2))
-            {
-                return false;
-            }
-
-            // We first check whether any edge of one poly intersects any edge of the other poly. If they do,
-            // then the two polys intersect.
-
-            // Make the epsilon a function of the size of the polys. We could take the heights of the rects 
-            // also into consideration here if needed; but, that should not usually be necessary.
-            double epsilon = Math.Max(Math.Min(boundRect1.Width, boundRect2.Width) * 0.001f, MathUtil.EPSILON);
-
-            int numVerts1 = poly1.Count;
-            int numVerts2 = poly2.Count;
-            for (int i = 0; i < numVerts1; ++i)
-            {
-                int lineEndVert1 = i + 1;
-                if (lineEndVert1 == numVerts1)
-                {
-                    lineEndVert1 = 0;
-                }
-                for (int j = 0; j < numVerts2; ++j)
-                {
-                    int lineEndVert2 = j + 1;
-                    if (lineEndVert2 == numVerts2)
-                    {
-                        lineEndVert2 = 0;
-                    }
-                    Point2D tmp = null;
-                    if (TriangulationUtil.LinesIntersect2D(poly1[i], poly1[lineEndVert1], poly2[j], poly2[lineEndVert2], ref tmp, epsilon))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-
-        public bool PolygonContainsPolygon(IList<Point2D> poly1, Rect2D boundRect1,
-                                            IList<Point2D> poly2, Rect2D boundRect2)
-        {
-            return PolygonContainsPolygon(poly1, boundRect1, poly2, boundRect2, true);
-        }
-
-
-        /// <summary>
-        /// Checks to see if poly1 contains poly2.  return true if so, false otherwise.
-        ///
-        /// If the polygons intersect, then poly1 cannot contain poly2 (or vice-versa for that matter)
-        /// Since the poly intersection test can be somewhat expensive, we'll only run it if the user
-        /// requests it.   If runIntersectionTest is false, then it is assumed that the user has already
-        /// verified that the polygons do not intersect.  If the polygons DO intersect and runIntersectionTest
-        /// is false, then the return value is meaningless.  Caveat emptor.
-        /// 
-        /// As an added bonus, just to cause more user-carnage, if runIntersectionTest is false, then the 
-        /// boundRects are not used and can safely be passed in as nulls.   However, if runIntersectionTest
-        /// is true and you pass nulls for boundRect1 or boundRect2, you will cause a program crash.
-        /// 
-        /// Finally, the polygon points are assumed to be passed in Clockwise winding order.   It is possible
-        /// that CounterClockwise ordering would work, but I have not verified the behavior in that case. 
-        /// 
-        /// </summary>
-        /// <param name="poly1">points of polygon1</param>
-        /// <param name="boundRect1">bounding rect of polygon1.  Only used if runIntersectionTest is true</param>
-        /// <param name="poly2">points of polygon2</param>
-        /// <param name="boundRect2">bounding rect of polygon2.  Only used if runIntersectionTest is true</param>
-        /// <param name="runIntersectionTest">see summary above</param>
-        /// <returns>true if poly1 fully contains poly2</returns>
-        public static bool PolygonContainsPolygon(IList<Point2D> poly1, Rect2D boundRect1,
-                                                    IList<Point2D> poly2, Rect2D boundRect2,
-                                                    bool runIntersectionTest)
-        {
-            // quick early-out tests
-            if (poly1 == null || poly1.Count < 3 || poly2 == null || poly2.Count < 3)
-            {
-                return false;
-            }
-
-            if (runIntersectionTest)
-            {
-                // make sure the polygons are not actually the same...
-                if (poly1.Count == poly2.Count)
-                {
-                    // Check if the polys are similar to within a tolerance (Doesn't include reflections,
-                    // but allows for the points to be numbered differently)
-                    if (PolygonUtil.PolygonsAreSame2D(poly1, poly2))
-                    {
-                        return false;
-                    }
-                }
-
-                bool bIntersect = PolygonUtil.PolygonsIntersect2D(poly1, boundRect1, poly2, boundRect2);
-                if (bIntersect)
-                {
-                    return false;
-                }
-            }
-
-            // Since we (now) know that the polygons don't intersect and they are not the same, we can just do a
-            // single check to see if ANY point in poly2 is inside poly1.  If so, then all points of poly2
-            // are inside poly1.  If not, then ALL points of poly2 are outside poly1.
-            if (PolygonUtil.PointInPolygon2D(poly1, poly2[0]))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-
-
-        ////////////////////////////////////////////////////////////////////////////////
-        // ClipPolygonToEdge2D
-        //
-        // This function clips a polygon against an edge. The portion of the polygon
-        // which is to the left of the edge (while going from edgeBegin to edgeEnd) 
-        // is returned in "outPoly". Note that the clipped polygon may have more vertices
-        // than the input polygon. Make sure that outPolyArraySize is sufficiently large. 
-        // Otherwise, you may get incorrect results and may be an assert (hopefully, no crash).
-        // Pass in the actual size of the array in "outPolyArraySize".
-        //
-        // Read Sutherland-Hidgman algorithm description in Foley & van Dam book for 
-        // details about this.
-        //
-        ///////////////////////////////////////////////////////////////////////////
-        public static void ClipPolygonToEdge2D( Point2D edgeBegin,
-                                                Point2D edgeEnd,
-                                                IList<Point2D> poly,
-                                                out List<Point2D> outPoly)
-        {
-            outPoly = null;
-            if (edgeBegin == null ||
-                edgeEnd == null ||
-                poly == null ||
-                poly.Count < 3)
-            {
-                return;
-            }
-
-            outPoly = new List<Point2D>();
-            int lastVertex = poly.Count - 1;
-            Point2D edgeRayVector = new Point2D(edgeEnd.X - edgeBegin.X, edgeEnd.Y - edgeBegin.Y);
-            // Note: >= 0 as opposed to <= 0 is intentional. We are 
-            // dealing with x and z here. And in our case, z axis goes
-            // downward while the x axis goes rightward.
-            //bool bLastVertexIsToRight = TriangulationUtil.PointRelativeToLine2D(poly[lastVertex], edgeBegin, edgeEnd) >= 0;
-            bool bLastVertexIsToRight = TriangulationUtil.Orient2d(edgeBegin, edgeEnd, poly[lastVertex]) == Orientation.CW ? true : false;
-            Point2D tempRay = new Point2D(0.0, 0.0);
-
-            for (int curVertex = 0; curVertex < poly.Count; curVertex++)
-            {
-                //bool bCurVertexIsToRight = TriangulationUtil.PointRelativeToLine2D(poly[curVertex], edgeBegin, edgeEnd) >= 0;
-                bool bCurVertexIsToRight = TriangulationUtil.Orient2d(edgeBegin, edgeEnd, poly[curVertex]) == Orientation.CW ? true : false;
-                if (bCurVertexIsToRight)
-                {
-                    if (bLastVertexIsToRight)
-                    {
-                        outPoly.Add(poly[curVertex]);
-                    }
-                    else
-                    {
-                        tempRay.Set(poly[curVertex].X - poly[lastVertex].X, poly[curVertex].Y - poly[lastVertex].Y);
-                        Point2D ptIntersection = new Point2D(0.0, 0.0);
-                        bool bIntersect = TriangulationUtil.RaysIntersect2D(poly[lastVertex], tempRay, edgeBegin, edgeRayVector, ref ptIntersection);
-                        if (bIntersect)
-                        {
-                            outPoly.Add(ptIntersection);
-                            outPoly.Add(poly[curVertex]);
-                        }
-                    }
-                }
-                else if (bLastVertexIsToRight)
-                {
-                    tempRay.Set(poly[curVertex].X - poly[lastVertex].X, poly[curVertex].Y - poly[lastVertex].Y);
-                    Point2D ptIntersection = new Point2D(0.0, 0.0);
-                    bool bIntersect = TriangulationUtil.RaysIntersect2D(poly[lastVertex], tempRay, edgeBegin, edgeRayVector, ref ptIntersection);
-                    if (bIntersect)
-                    {
-                        outPoly.Add(ptIntersection);
-                    }
-                }
-
-                lastVertex = curVertex;
-                bLastVertexIsToRight = bCurVertexIsToRight;
-            }
-        }
-
-
-        public static void ClipPolygonToPolygon(IList<Point2D> poly, IList<Point2D> clipPoly, out List<Point2D> outPoly)
-        {
-            outPoly = null;
-            if (poly == null || poly.Count < 3 || clipPoly == null || clipPoly.Count < 3)
-            {
-                return;
-            }
-
-            outPoly = new List<Point2D>(poly);
-            int numClipVertices = clipPoly.Count;
-            int lastVertex = numClipVertices - 1;
-
-            // The algorithm keeps clipping the polygon against each edge of "clipPoly".
-            for (int curVertex = 0; curVertex < numClipVertices; curVertex++)
-            {
-                List<Point2D> clippedPoly = null;
-                Point2D edgeBegin = clipPoly[lastVertex];
-                Point2D edgeEnd = clipPoly[curVertex];
-                PolygonUtil.ClipPolygonToEdge2D(edgeBegin, edgeEnd, outPoly, out clippedPoly);
-                outPoly.Clear();
-                outPoly.AddRange(clippedPoly);
-
-                lastVertex = curVertex;
-            }
-        }
-
-
-        /// Merges two polygons, given that they intersect.
-        /// </summary>
-        /// <param name="polygon1">The first polygon.</param>
-        /// <param name="polygon2">The second polygon.</param>
-        /// <param name="union">The union of the two polygons</param>
-        /// <returns>The error returned from union</returns>
-        public static PolygonUtil.PolyUnionError PolygonUnion(Point2DList polygon1, Point2DList polygon2, out Point2DList union)
-        {
-            PolygonOperationContext ctx = new PolygonOperationContext();
-            ctx.Init(PolygonUtil.PolyOperation.Union, polygon1, polygon2);
-            PolygonUnionInternal(ctx);
-            union = ctx.Union;
-            return ctx.mError;
-        }
-
-
-        protected static void PolygonUnionInternal(PolygonOperationContext ctx)
-        {
-            Point2DList union = ctx.Union;
-            if (ctx.mStartingIndex == -1)
-            {
-                switch (ctx.mError)
-                {
-                    case PolygonUtil.PolyUnionError.NoIntersections:
-                    case PolygonUtil.PolyUnionError.InfiniteLoop:
-                        return;
-                    case PolygonUtil.PolyUnionError.Poly1InsidePoly2:
-                        union.AddRange(ctx.mOriginalPolygon2);
-                        return;
-                }
-            }
-
-            Point2DList currentPoly = ctx.mPoly1;
-            Point2DList otherPoly = ctx.mPoly2;
-            List<int> currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-
-            // Store the starting vertex so we can refer to it later.
-            Point2D startingVertex = ctx.mPoly1[ctx.mStartingIndex];
-            int currentIndex = ctx.mStartingIndex;
-            int firstPoly2Index = -1;
-            union.Clear();
-
-            do
-            {
-                // Add the current vertex to the final union
-                union.Add(currentPoly[currentIndex]);
-
-                foreach (EdgeIntersectInfo intersect in ctx.mIntersections)
-                {
-                    // If the current point is an intersection point
-                    if (currentPoly[currentIndex].Equals(intersect.IntersectionPoint, currentPoly.Epsilon))
-                    {
-                        // Make sure we want to swap polygons here.
-                        int otherIndex = otherPoly.IndexOf(intersect.IntersectionPoint);
-
-                        // If the next vertex, if we do swap, is not inside the current polygon,
-                        // then its safe to swap, otherwise, just carry on with the current poly.
-                        int comparePointIndex = otherPoly.NextIndex(otherIndex);
-                        Point2D comparePoint = otherPoly[comparePointIndex];
-                        bool bPointInPolygonAngle = false;
-                        if (currentPolyVectorAngles[comparePointIndex] == -1)
-                        {
-                            bPointInPolygonAngle = ctx.PointInPolygonAngle(comparePoint, currentPoly);
-                            currentPolyVectorAngles[comparePointIndex] = bPointInPolygonAngle ? 1 : 0;
-                        }
-                        else
-                        {
-                            bPointInPolygonAngle = (currentPolyVectorAngles[comparePointIndex] == 1) ? true : false;
-                        }
-
-                        if (!bPointInPolygonAngle)
-                        {
-                            // switch polygons
-                            if (currentPoly == ctx.mPoly1)
-                            {
-                                currentPoly = ctx.mPoly2;
-                                currentPolyVectorAngles = ctx.mPoly2VectorAngles;
-                                otherPoly = ctx.mPoly1;
-                                if (firstPoly2Index < 0)
-                                {
-                                    firstPoly2Index = otherIndex;
-                                }
-                            }
-                            else
-                            {
-                                currentPoly = ctx.mPoly1;
-                                currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-                                otherPoly = ctx.mPoly2;
-                            }
-
-                            // set currentIndex
-                            currentIndex = otherIndex;
-
-                            // Stop checking intersections for this point.
-                            break;
-                        }
-                    }
-                }
-
-                // Move to next index
-                currentIndex = currentPoly.NextIndex(currentIndex);
-
-                if (currentPoly == ctx.mPoly1)
-                {
-                    if (currentIndex == 0)
-                    {
-                        break;
-                    }
-                }
-                else
-                {
-                    if (firstPoly2Index >= 0 && currentIndex == firstPoly2Index)
-                    {
-                        break;
-                    }
-                }
-            } while ((currentPoly[currentIndex] != startingVertex) && (union.Count <= (ctx.mPoly1.Count + ctx.mPoly2.Count)));
-
-            // If the number of vertices in the union is more than the combined vertices
-            // of the input polygons, then something is wrong and the algorithm will
-            // loop forever. Luckily, we check for that.
-            if (union.Count > (ctx.mPoly1.Count + ctx.mPoly2.Count))
-            {
-                ctx.mError = PolygonUtil.PolyUnionError.InfiniteLoop;
-            }
-
-            return;
-        }
-
-
-        /// <summary>
-        /// Finds the intersection between two polygons.
-        /// </summary>
-        /// <param name="polygon1">The first polygon.</param>
-        /// <param name="polygon2">The second polygon.</param>
-        /// <param name="intersectOut">The intersection of the two polygons</param>
-        /// <returns>error code</returns>
-        public static PolygonUtil.PolyUnionError PolygonIntersect(Point2DList polygon1, Point2DList polygon2, out Point2DList intersectOut)
-        {
-            PolygonOperationContext ctx = new PolygonOperationContext();
-            ctx.Init(PolygonUtil.PolyOperation.Intersect, polygon1, polygon2);
-            PolygonIntersectInternal(ctx);
-            intersectOut = ctx.Intersect;
-            return ctx.mError;
-        }
-
-
-        protected static void PolygonIntersectInternal(PolygonOperationContext ctx)
-        {
-            Point2DList intersectOut = ctx.Intersect;
-            if (ctx.mStartingIndex == -1)
-            {
-                switch (ctx.mError)
-                {
-                    case PolygonUtil.PolyUnionError.NoIntersections:
-                    case PolygonUtil.PolyUnionError.InfiniteLoop:
-                        return;
-                    case PolygonUtil.PolyUnionError.Poly1InsidePoly2:
-                        intersectOut.AddRange(ctx.mOriginalPolygon2);
-                        return;
-                }
-            }
-
-            Point2DList currentPoly = ctx.mPoly1;
-            Point2DList otherPoly = ctx.mPoly2;
-            List<int> currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-
-            // Store the starting vertex so we can refer to it later.            
-            int currentIndex = ctx.mPoly1.IndexOf(ctx.mIntersections[0].IntersectionPoint);
-            Point2D startingVertex = ctx.mPoly1[currentIndex];
-            int firstPoly1Index = currentIndex;
-            int firstPoly2Index = -1;
-            intersectOut.Clear();
-
-            do
-            {
-                // Add the current vertex to the final intersection
-                if (intersectOut.Contains(currentPoly[currentIndex]))
-                {
-                    // This can happen when the two polygons only share a single edge, and neither is inside the other
-                    break;
-                }
-                intersectOut.Add(currentPoly[currentIndex]);
-
-                foreach (EdgeIntersectInfo intersect in ctx.mIntersections)
-                {
-                    // If the current point is an intersection point
-                    if (currentPoly[currentIndex].Equals(intersect.IntersectionPoint, currentPoly.Epsilon))
-                    {
-                        // Make sure we want to swap polygons here.
-                        int otherIndex = otherPoly.IndexOf(intersect.IntersectionPoint);
-
-                        // If the next vertex, if we do swap, is inside the current polygon,
-                        // then its safe to swap, otherwise, just carry on with the current poly.
-                        int comparePointIndex = otherPoly.NextIndex(otherIndex);
-                        Point2D comparePoint = otherPoly[comparePointIndex];
-                        bool bPointInPolygonAngle = false;
-                        if (currentPolyVectorAngles[comparePointIndex] == -1)
-                        {
-                            bPointInPolygonAngle = ctx.PointInPolygonAngle(comparePoint, currentPoly);
-                            currentPolyVectorAngles[comparePointIndex] = bPointInPolygonAngle ? 1 : 0;
-                        }
-                        else
-                        {
-                            bPointInPolygonAngle = (currentPolyVectorAngles[comparePointIndex] == 1) ? true : false;
-                        }
-
-                        if (bPointInPolygonAngle)
-                        {
-                            // switch polygons
-                            if (currentPoly == ctx.mPoly1)
-                            {
-                                currentPoly = ctx.mPoly2;
-                                currentPolyVectorAngles = ctx.mPoly2VectorAngles;
-                                otherPoly = ctx.mPoly1;
-                                if (firstPoly2Index < 0)
-                                {
-                                    firstPoly2Index = otherIndex;
-                                }
-                            }
-                            else
-                            {
-                                currentPoly = ctx.mPoly1;
-                                currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-                                otherPoly = ctx.mPoly2;
-                            }
-
-                            // set currentIndex
-                            currentIndex = otherIndex;
-
-                            // Stop checking intersections for this point.
-                            break;
-                        }
-                    }
-                }
-
-                // Move to next index
-                currentIndex = currentPoly.NextIndex(currentIndex);
-
-                if (currentPoly == ctx.mPoly1)
-                {
-                    if (currentIndex == firstPoly1Index)
-                    {
-                        break;
-                    }
-                }
-                else
-                {
-                    if (firstPoly2Index >= 0 && currentIndex == firstPoly2Index)
-                    {
-                        break;
-                    }
-                }
-            } while ((currentPoly[currentIndex] != startingVertex) && (intersectOut.Count <= (ctx.mPoly1.Count + ctx.mPoly2.Count)));
-
-            // If the number of vertices in the union is more than the combined vertices
-            // of the input polygons, then something is wrong and the algorithm will
-            // loop forever. Luckily, we check for that.
-            if (intersectOut.Count > (ctx.mPoly1.Count + ctx.mPoly2.Count))
-            {
-                ctx.mError = PolygonUtil.PolyUnionError.InfiniteLoop;
-            }
-
-            return;
-        }
-
-
-        /// <summary>
-        /// Subtracts one polygon from another.
-        /// </summary>
-        /// <param name="polygon1">The base polygon.</param>
-        /// <param name="polygon2">The polygon to subtract from the base.</param>
-        /// <param name="subtract">The result of the polygon subtraction</param>
-        /// <returns>error code</returns>
-        public static PolygonUtil.PolyUnionError PolygonSubtract(Point2DList polygon1, Point2DList polygon2, out Point2DList subtract)
-        {
-            PolygonOperationContext ctx = new PolygonOperationContext();
-            ctx.Init(PolygonUtil.PolyOperation.Subtract, polygon1, polygon2);
-            PolygonSubtractInternal(ctx);
-            subtract = ctx.Subtract;
-            return ctx.mError;
-        }
-
-
-        public static void PolygonSubtractInternal(PolygonOperationContext ctx)
-        {
-            Point2DList subtract = ctx.Subtract;
-            if (ctx.mStartingIndex == -1)
-            {
-                switch (ctx.mError)
-                {
-                    case PolygonUtil.PolyUnionError.NoIntersections:
-                    case PolygonUtil.PolyUnionError.InfiniteLoop:
-                    case PolygonUtil.PolyUnionError.Poly1InsidePoly2:
-                        return;
-                }
-            }
-
-            Point2DList currentPoly = ctx.mPoly1;
-            Point2DList otherPoly = ctx.mPoly2;
-            List<int> currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-
-            // Store the starting vertex so we can refer to it later.
-            Point2D startingVertex = ctx.mPoly1[ctx.mStartingIndex];
-            int currentIndex = ctx.mStartingIndex;
-            subtract.Clear();
-
-            // Trace direction
-            bool forward = true;
-
-            do
-            {
-                // Add the current vertex to the final union
-                subtract.Add(currentPoly[currentIndex]);
-
-                foreach (EdgeIntersectInfo intersect in ctx.mIntersections)
-                {
-                    // If the current point is an intersection point
-                    if (currentPoly[currentIndex].Equals(intersect.IntersectionPoint, currentPoly.Epsilon))
-                    {
-                        // Make sure we want to swap polygons here.
-                        int otherIndex = otherPoly.IndexOf(intersect.IntersectionPoint);
-
-                        //Point2D otherVertex;
-                        if (forward)
-                        {
-                            // If the next vertex, if we do swap, is inside the current polygon,
-                            // then its safe to swap, otherwise, just carry on with the current poly.
-                            int compareIndex = otherPoly.PreviousIndex(otherIndex);
-                            Point2D compareVertex = otherPoly[compareIndex];
-                            bool bPointInPolygonAngle = false;
-                            if (currentPolyVectorAngles[compareIndex] == -1)
-                            {
-                                bPointInPolygonAngle = ctx.PointInPolygonAngle(compareVertex, currentPoly);
-                                currentPolyVectorAngles[compareIndex] = bPointInPolygonAngle ? 1 : 0;
-                            }
-                            else
-                            {
-                                bPointInPolygonAngle = (currentPolyVectorAngles[compareIndex] == 1) ? true : false;
-                            }
-
-                            if (bPointInPolygonAngle)
-                            {
-                                // switch polygons
-                                if (currentPoly == ctx.mPoly1)
-                                {
-                                    currentPoly = ctx.mPoly2;
-                                    currentPolyVectorAngles = ctx.mPoly2VectorAngles;
-                                    otherPoly = ctx.mPoly1;
-                                }
-                                else
-                                {
-                                    currentPoly = ctx.mPoly1;
-                                    currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-                                    otherPoly = ctx.mPoly2;
-                                }
-
-                                // set currentIndex
-                                currentIndex = otherIndex;
-
-                                // Reverse direction
-                                forward = !forward;
-
-                                // Stop checking ctx.mIntersections for this point.
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            // If the next vertex, if we do swap, is outside the current polygon,
-                            // then its safe to swap, otherwise, just carry on with the current poly.
-                            int compareIndex = otherPoly.NextIndex(otherIndex);
-                            Point2D compareVertex = otherPoly[compareIndex];
-                            bool bPointInPolygonAngle = false;
-                            if (currentPolyVectorAngles[compareIndex] == -1)
-                            {
-                                bPointInPolygonAngle = ctx.PointInPolygonAngle(compareVertex, currentPoly);
-                                currentPolyVectorAngles[compareIndex] = bPointInPolygonAngle ? 1 : 0;
-                            }
-                            else
-                            {
-                                bPointInPolygonAngle = (currentPolyVectorAngles[compareIndex] == 1) ? true : false;
-                            }
-
-                            if (!bPointInPolygonAngle)
-                            {
-                                // switch polygons
-                                if (currentPoly == ctx.mPoly1)
-                                {
-                                    currentPoly = ctx.mPoly2;
-                                    currentPolyVectorAngles = ctx.mPoly2VectorAngles;
-                                    otherPoly = ctx.mPoly1;
-                                }
-                                else
-                                {
-                                    currentPoly = ctx.mPoly1;
-                                    currentPolyVectorAngles = ctx.mPoly1VectorAngles;
-                                    otherPoly = ctx.mPoly2;
-                                }
-
-                                // set currentIndex
-                                currentIndex = otherIndex;
-
-                                // Reverse direction
-                                forward = !forward;
-
-                                // Stop checking intersections for this point.
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (forward)
-                {
-                    // Move to next index
-                    currentIndex = currentPoly.NextIndex(currentIndex);
-                }
-                else
-                {
-                    currentIndex = currentPoly.PreviousIndex(currentIndex);
-                }
-            } while ((currentPoly[currentIndex] != startingVertex) && (subtract.Count <= (ctx.mPoly1.Count + ctx.mPoly2.Count)));
-
-
-            // If the number of vertices in the union is more than the combined vertices
-            // of the input polygons, then something is wrong and the algorithm will
-            // loop forever. Luckily, we check for that.
-            if (subtract.Count > (ctx.mPoly1.Count + ctx.mPoly2.Count))
-            {
-                ctx.mError = PolygonUtil.PolyUnionError.InfiniteLoop;
-            }
-
-            return;
-        }
-
-
-        /// <summary>
-        /// Performs one or more polygon operations on the 2 provided polygons
-        /// </summary>
-        /// <param name="polygon1">The first polygon.</param>
-        /// <param name="polygon2">The second polygon</param>
-        /// <param name="subtract">The result of the polygon subtraction</param>
-        /// <returns>error code</returns>
-        public static PolygonUtil.PolyUnionError PolygonOperation(PolygonUtil.PolyOperation operations, Point2DList polygon1, Point2DList polygon2, out Dictionary<uint, Point2DList> results)
-        {
-            PolygonOperationContext ctx = new PolygonOperationContext();
-            ctx.Init(operations, polygon1, polygon2);
-            results = ctx.mOutput;
-            return PolygonUtil.PolygonOperation(ctx);
-        }
-
-
-        public static PolygonUtil.PolyUnionError PolygonOperation(PolygonOperationContext ctx)
-        {
-            if ((ctx.mOperations & PolygonUtil.PolyOperation.Union) == PolygonUtil.PolyOperation.Union)
-            {
-                PolygonUtil.PolygonUnionInternal(ctx);
-            }
-            if ((ctx.mOperations & PolygonUtil.PolyOperation.Intersect) == PolygonUtil.PolyOperation.Intersect)
-            {
-                PolygonUtil.PolygonIntersectInternal(ctx);
-            }
-            if ((ctx.mOperations & PolygonUtil.PolyOperation.Subtract) == PolygonUtil.PolyOperation.Subtract)
-            {
-                PolygonUtil.PolygonSubtractInternal(ctx);
-            }
-
-            return ctx.mError;
-        }
-
-
-        /// <summary>
-        /// Trace the edge of a non-simple polygon and return a simple polygon.
-        /// 
-        ///Method:
-        ///Start at vertex with minimum y (pick maximum x one if there are two).  
-        ///We aim our "lastDir" vector at (1.0, 0)
-        ///We look at the two rays going off from our start vertex, and follow whichever
-        ///has the smallest angle (in -Pi . Pi) wrt lastDir ("rightest" turn)
-        ///
-        ///Loop until we hit starting vertex:
-        ///
-        ///We add our current vertex to the list.
-        ///We check the seg from current vertex to next vertex for intersections
-        ///  - if no intersections, follow to next vertex and continue
-        ///  - if intersections, pick one with minimum distance
-        ///    - if more than one, pick one with "rightest" next point (two possibilities for each)
-        ///    
-        /// </summary>
-        /// <param name="verts"></param>
-        /// <returns></returns>
-        public static List<Point2DList> SplitComplexPolygon(Point2DList verts, double epsilon)
-        {
-            int numVerts = verts.Count;
-            int nNodes = 0;
-            List<SplitComplexPolygonNode> nodes = new List<SplitComplexPolygonNode>();
-
-            //Add base nodes (raw outline)
-            for (int i = 0; i < verts.Count; ++i)
-            {
-                SplitComplexPolygonNode newNode = new SplitComplexPolygonNode(new Point2D(verts[i].X, verts[i].Y));
-                nodes.Add(newNode);
-            }
-            for (int i = 0; i < verts.Count; ++i)
-            {
-                int iplus = (i == numVerts - 1) ? 0 : i + 1;
-                int iminus = (i == 0) ? numVerts - 1 : i - 1;
-                nodes[i].AddConnection(nodes[iplus]);
-                nodes[i].AddConnection(nodes[iminus]);
-            }
-            nNodes = nodes.Count;
-
-            //Process intersection nodes - horribly inefficient
-            bool dirty = true;
-            int counter = 0;
-            while (dirty)
-            {
-                dirty = false;
-                for (int i = 0; !dirty && i < nNodes; ++i)
-                {
-                    for (int j = 0; !dirty && j < nodes[i].NumConnected; ++j)
-                    {
-                        for (int k = 0; !dirty && k < nNodes; ++k)
-                        {
-                            if (k == i || nodes[k] == nodes[i][j])
-                            {
-                                continue;
-                            }
-                            for (int l = 0; !dirty && l < nodes[k].NumConnected; ++l)
-                            {
-                                if (nodes[k][l] == nodes[i][j] || nodes[k][l] == nodes[i])
-                                {
-                                    continue;
-                                }
-                                //Check intersection
-                                Point2D intersectPt = new Point2D();
-                                //if (counter > 100) printf("checking intersection: %d, %d, %d, %d\n",i,j,k,l);
-                                bool crosses = TriangulationUtil.LinesIntersect2D(  nodes[i].Position,
-                                                                                    nodes[i][j].Position,
-                                                                                    nodes[k].Position,
-                                                                                    nodes[k][l].Position,
-                                                                                    true, true, true,
-                                                                                    ref intersectPt,
-                                                                                    epsilon);
-                                if (crosses)
-                                {
-                                    /*if (counter > 100) {
-                                        printf("Found crossing at %f, %f\n",intersectPt.x, intersectPt.y);
-                                        printf("Locations: %f,%f - %f,%f | %f,%f - %f,%f\n",
-                                                        nodes[i].position.x, nodes[i].position.y,
-                                                        nodes[i].connected[j].position.x, nodes[i].connected[j].position.y,
-                                                        nodes[k].position.x,nodes[k].position.y,
-                                                        nodes[k].connected[l].position.x,nodes[k].connected[l].position.y);
-                                        printf("Memory addresses: %d, %d, %d, %d\n",(int)&nodes[i],(int)nodes[i].connected[j],(int)&nodes[k],(int)nodes[k].connected[l]);
-                                    }*/
-                                    dirty = true;
-                                    //Destroy and re-hook connections at crossing point
-                                    SplitComplexPolygonNode intersectionNode = new SplitComplexPolygonNode(intersectPt);
-                                    int idx = nodes.IndexOf(intersectionNode);
-                                    if (idx >= 0 && idx < nodes.Count)
-                                    {
-                                        intersectionNode = nodes[idx];
-                                    }
-                                    else
-                                    {
-                                        nodes.Add(intersectionNode);
-                                        nNodes = nodes.Count;
-                                    }
-
-                                    SplitComplexPolygonNode nodei = nodes[i];
-                                    SplitComplexPolygonNode connij = nodes[i][j];
-                                    SplitComplexPolygonNode nodek = nodes[k];
-                                    SplitComplexPolygonNode connkl = nodes[k][l];
-                                    connij.RemoveConnection(nodei);
-                                    nodei.RemoveConnection(connij);
-                                    connkl.RemoveConnection(nodek);
-                                    nodek.RemoveConnection(connkl);
-                                    if (!intersectionNode.Position.Equals(nodei.Position, epsilon))
-                                    {
-                                        intersectionNode.AddConnection(nodei);
-                                        nodei.AddConnection(intersectionNode);
-                                    }
-                                    if (!intersectionNode.Position.Equals(nodek.Position, epsilon))
-                                    {
-                                        intersectionNode.AddConnection(nodek);
-                                        nodek.AddConnection(intersectionNode);
-                                    }
-                                    if (!intersectionNode.Position.Equals(connij.Position, epsilon))
-                                    {
-                                        intersectionNode.AddConnection(connij);
-                                        connij.AddConnection(intersectionNode);
-                                    }
-                                    if (!intersectionNode.Position.Equals(connkl.Position, epsilon))
-                                    {
-                                        intersectionNode.AddConnection(connkl);
-                                        connkl.AddConnection(intersectionNode);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                ++counter;
-                //if (counter > 100) printf("Counter: %d\n",counter);
-            }
-
-            //    /*
-            //    // Debugging: check for connection consistency
-            //    for (int i=0; i<nNodes; ++i) {
-            //        int nConn = nodes[i].nConnected;
-            //        for (int j=0; j<nConn; ++j) {
-            //            if (nodes[i].connected[j].nConnected == 0) Assert(false);
-            //            SplitComplexPolygonNode* connect = nodes[i].connected[j];
-            //            bool found = false;
-            //            for (int k=0; k<connect.nConnected; ++k) {
-            //                if (connect.connected[k] == &nodes[i]) found = true;
-            //            }
-            //            Assert(found);
-            //        }
-            //    }*/
-
-            //Collapse duplicate points
-            bool foundDupe = true;
-            int nActive = nNodes;
-            double epsilonSquared = epsilon * epsilon;
-            while (foundDupe)
-            {
-                foundDupe = false;
-                for (int i = 0; i < nNodes; ++i)
-                {
-                    if (nodes[i].NumConnected == 0)
-                    {
-                        continue;
-                    }
-                    for (int j = i + 1; j < nNodes; ++j)
-                    {
-                        if (nodes[j].NumConnected == 0)
-                        {
-                            continue;
-                        }
-                        Point2D diff = nodes[i].Position - nodes[j].Position;
-                        if (diff.MagnitudeSquared() <= epsilonSquared)
-                        {
-                            if (nActive <= 3)
-                            {
-                                throw new Exception("Eliminated so many duplicate points that resulting polygon has < 3 vertices!");
-                            }
-
-                            //printf("Found dupe, %d left\n",nActive);
-                            --nActive;
-                            foundDupe = true;
-                            SplitComplexPolygonNode inode = nodes[i];
-                            SplitComplexPolygonNode jnode = nodes[j];
-                            //Move all of j's connections to i, and remove j
-                            int njConn = jnode.NumConnected;
-                            for (int k = 0; k < njConn; ++k)
-                            {
-                                SplitComplexPolygonNode knode = jnode[k];
-                                //Debug.Assert(knode != jnode);
-                                if (knode != inode)
-                                {
-                                    inode.AddConnection(knode);
-                                    knode.AddConnection(inode);
-                                }
-                                knode.RemoveConnection(jnode);
-                                //printf("knode %d on node %d now has %d connections\n",k,j,knode.nConnected);
-                                //printf("Found duplicate point.\n");
-                            }
-                            jnode.ClearConnections();   // to help with garbage collection
-                            nodes.RemoveAt(j);
-                            --nNodes;
-                        }
-                    }
-                }
-            }
-
-            //    /*
-            //    // Debugging: check for connection consistency
-            //    for (int i=0; i<nNodes; ++i) {
-            //        int nConn = nodes[i].nConnected;
-            //        printf("Node %d has %d connections\n",i,nConn);
-            //        for (int j=0; j<nConn; ++j) {
-            //            if (nodes[i].connected[j].nConnected == 0) {
-            //                printf("Problem with node %d connection at address %d\n",i,(int)(nodes[i].connected[j]));
-            //                Assert(false);
-            //            }
-            //            SplitComplexPolygonNode* connect = nodes[i].connected[j];
-            //            bool found = false;
-            //            for (int k=0; k<connect.nConnected; ++k) {
-            //                if (connect.connected[k] == &nodes[i]) found = true;
-            //            }
-            //            if (!found) printf("Connection %d (of %d) on node %d (of %d) did not have reciprocal connection.\n",j,nConn,i,nNodes);
-            //            Assert(found);
-            //        }
-            //    }//*/
-
-            //Now walk the edge of the list
-
-            //Find node with minimum y value (max x if equal)
-            double minY = double.MaxValue;
-            double maxX = -double.MaxValue;
-            int minYIndex = -1;
-            for (int i = 0; i < nNodes; ++i)
-            {
-                if (nodes[i].Position.Y < minY && nodes[i].NumConnected > 1)
-                {
-                    minY = nodes[i].Position.Y;
-                    minYIndex = i;
-                    maxX = nodes[i].Position.X;
-                }
-                else if (nodes[i].Position.Y == minY && nodes[i].Position.X > maxX && nodes[i].NumConnected > 1)
-                {
-                    minYIndex = i;
-                    maxX = nodes[i].Position.X;
-                }
-            }
-
-            Point2D origDir = new Point2D(1.0f, 0.0f);
-            List<Point2D> resultVecs = new List<Point2D>();
-            SplitComplexPolygonNode currentNode = nodes[minYIndex];
-            SplitComplexPolygonNode startNode = currentNode;
-            //Debug.Assert(currentNode.nConnected > 0);
-            SplitComplexPolygonNode nextNode = currentNode.GetRightestConnection(origDir);
-            if (nextNode == null)
-            {
-                // Borked, clean up our mess and return
-                return PolygonUtil.SplitComplexPolygonCleanup(verts);
-            }
-
-            resultVecs.Add(startNode.Position);
-            while (nextNode != startNode)
-            {
-                if (resultVecs.Count > (4 * nNodes))
-                {
-                    //printf("%d, %d, %d\n",(int)startNode,(int)currentNode,(int)nextNode);
-                    //printf("%f, %f . %f, %f\n",currentNode.position.x,currentNode.position.y, nextNode.position.x, nextNode.position.y);
-                    //verts.printFormatted();
-                    //printf("Dumping connection graph: \n");
-                    //for (int i=0; i<nNodes; ++i)
-                    //{
-                    //    printf("nodex[%d] = %f; nodey[%d] = %f;\n",i,nodes[i].position.x,i,nodes[i].position.y);
-                    //    printf("//connected to\n");
-                    //    for (int j=0; j<nodes[i].nConnected; ++j)
-                    //    {
-                    //        printf("connx[%d][%d] = %f; conny[%d][%d] = %f;\n",i,j,nodes[i].connected[j].position.x, i,j,nodes[i].connected[j].position.y);
-                    //    }
-                    //}
-                    //printf("Dumping results thus far: \n");
-                    //for (int i=0; i<nResultVecs; ++i)
-                    //{
-                    //    printf("x[%d]=map(%f,-3,3,0,width); y[%d] = map(%f,-3,3,height,0);\n",i,resultVecs[i].x,i,resultVecs[i].y);
-                    //}
-                    //Debug.Assert(false);
-                    //nodes should never be visited four times apiece (proof?), so we've probably hit a loop...crap
-                    throw new Exception("nodes should never be visited four times apiece (proof?), so we've probably hit a loop...crap");
-                }
-                resultVecs.Add(nextNode.Position);
-                SplitComplexPolygonNode oldNode = currentNode;
-                currentNode = nextNode;
-                //printf("Old node connections = %d; address %d\n",oldNode.nConnected, (int)oldNode);
-                //printf("Current node connections = %d; address %d\n",currentNode.nConnected, (int)currentNode);
-                nextNode = currentNode.GetRightestConnection(oldNode);
-                if (nextNode == null)
-                {
-                    return PolygonUtil.SplitComplexPolygonCleanup(resultVecs);
-                }
-                // There was a problem, so jump out of the loop and use whatever garbage we've generated so far
-                //printf("nextNode address: %d\n",(int)nextNode);
-            }
-
-            if (resultVecs.Count < 1)
-            {
-                // Borked, clean up our mess and return
-                return PolygonUtil.SplitComplexPolygonCleanup(verts);
-            }
-            else
-            {
-                return PolygonUtil.SplitComplexPolygonCleanup(resultVecs);
-            }
-        }
-
-
-        private static List<Point2DList> SplitComplexPolygonCleanup(IList<Point2D> orig)
-        {
-            List<Point2DList> l = new List<Point2DList>();
-            Point2DList origP2DL = new Point2DList(orig);
-            l.Add(origP2DL);
-            int listIdx = 0;
-            int numLists = l.Count;
-            while (listIdx < numLists)
-            {
-                int numPoints = l[listIdx].Count;
-                for (int i = 0; i < numPoints; ++i)
-                {
-                    for (int j = i + 1; j < numPoints; ++j)
-                    {
-                        if (l[listIdx][i].Equals(l[listIdx][j], origP2DL.Epsilon))
-                        {
-                            // found a self-intersection loop - split it off into it's own list
-                            int numToRemove = j - i;
-                            Point2DList newList = new Point2DList();
-                            for (int k = i + 1; k <= j; ++k)
-                            {
-                                newList.Add(l[listIdx][k]);
-                            }
-                            l[listIdx].RemoveRange(i + 1, numToRemove);
-                            l.Add(newList);
-                            ++numLists;
-                            numPoints -= numToRemove;
-                            j = i + 1;
-                        }
-                    }
-                }
-                l[listIdx].Simplify();
-                ++listIdx;
-            }
-
-            return l;
-        }
-    
-	}
-
-
-    public class EdgeIntersectInfo
-    {
-        public EdgeIntersectInfo(Edge edgeOne, Edge edgeTwo, Point2D intersectionPoint)
-        {
-            EdgeOne = edgeOne;
-            EdgeTwo = edgeTwo;
-            IntersectionPoint = intersectionPoint;
-        }
-
-        public Edge EdgeOne { get; private set; }
-        public Edge EdgeTwo { get; private set; }
-        public Point2D IntersectionPoint { get; private set; }
-    }
-
-
-    public class SplitComplexPolygonNode
-    {
-        /*
-         * Given sines and cosines, tells if A's angle is less than B's on -Pi, Pi
-         * (in other words, is A "righter" than B)
-         */
-        private List<SplitComplexPolygonNode> mConnected = new List<SplitComplexPolygonNode>();
-        private Point2D mPosition = null;
-
-        public int NumConnected { get { return mConnected.Count; } }
-        public Point2D Position { get { return mPosition; } set { mPosition = value; } }
-        public SplitComplexPolygonNode this[int index]
-        {
-            get { return mConnected[index]; }
-        }
-
-
-        public SplitComplexPolygonNode()
-        {
-        }
-
-        public SplitComplexPolygonNode(Point2D pos)
-        {
-            mPosition = pos;
-        }
-
-
-        public override bool Equals(Object obj)
-        {
-            SplitComplexPolygonNode pn = obj as SplitComplexPolygonNode;
-            if (pn == null)
-            {
-                return base.Equals(obj);
-            }
-
-            return Equals(pn);
-        }
-
-
-        public bool Equals(SplitComplexPolygonNode pn)
-        {
-            if ((Object)pn == null)
-            {
-                return false;
-            }
-            if (mPosition == null || pn.Position == null)
-            {
-                return false;
-            }
-
-            return mPosition.Equals(pn.Position);
-        }
-
-
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
-
-        public static bool operator ==(SplitComplexPolygonNode lhs, SplitComplexPolygonNode rhs) { if ((object)lhs != null) { return lhs.Equals(rhs); } if ((Object)rhs == null) { return true; } else { return false; } }
-        public static bool operator !=(SplitComplexPolygonNode lhs, SplitComplexPolygonNode rhs) { if ((object)lhs != null) { return !lhs.Equals(rhs); } if ((Object)rhs == null) { return false; } else { return true; } }
-
-        public override string ToString()
-        {
-            StringBuilder sb = new StringBuilder(256);
-            sb.Append(mPosition.ToString());
-            sb.Append(" -> ");
-            for (int i = 0; i < NumConnected; ++i)
-            {
-                if (i != 0)
-                {
-                    sb.Append(", ");
-                }
-                sb.Append(mConnected[i].Position.ToString());
-            }
-
-            return sb.ToString();
-        }
-
-
-        private bool IsRighter(double sinA, double cosA, double sinB, double cosB)
-        {
-            if (sinA < 0)
-            {
-                if (sinB > 0 || cosA <= cosB)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                if (sinB < 0 || cosA <= cosB)
-                {
-                    return false;
-                }
-                else
-                {
-                    return true;
-                }
-            }
-        }
-
-        //Fix for obnoxious behavior for the % operator for negative numbers...
-        private int remainder(int x, int modulus)
-        {
-            int rem = x % modulus;
-            while (rem < 0)
-            {
-                rem += modulus;
-            }
-            return rem;
-        }
-
-        public void AddConnection(SplitComplexPolygonNode toMe)
-        {
-            // Ignore duplicate additions
-            if (!mConnected.Contains(toMe) && toMe != this)
-            {
-                mConnected.Add(toMe);
-            }
-        }
-
-        public void RemoveConnection(SplitComplexPolygonNode fromMe)
-        {
-            mConnected.Remove(fromMe);
-        }
-
-        private void RemoveConnectionByIndex(int index)
-        {
-            if (index < 0 || index >= mConnected.Count)
-            {
-                return;
-            }
-            mConnected.RemoveAt(index);
-        }
-
-        public void ClearConnections()
-        {
-            mConnected.Clear();
-        }
-
-        private bool IsConnectedTo(SplitComplexPolygonNode me)
-        {
-            return mConnected.Contains(me);
-        }
-
-        public SplitComplexPolygonNode GetRightestConnection(SplitComplexPolygonNode incoming)
-        {
-            if (NumConnected == 0)
-            {
-                throw new Exception("the connection graph is inconsistent");
-            }
-            if (NumConnected == 1)
-            {
-                //b2Assert(false);
-                // Because of the possibility of collapsing nearby points,
-                // we may end up with "spider legs" dangling off of a region.
-                // The correct behavior here is to turn around.
-                return incoming;
-            }
-            Point2D inDir = mPosition - incoming.mPosition;
-
-            double inLength = inDir.Magnitude();
-            inDir.Normalize();
-
-            if (inLength <= MathUtil.EPSILON)
-            {
-                throw new Exception("Length too small");
-            }
-
-            SplitComplexPolygonNode result = null;
-            for (int i = 0; i < NumConnected; ++i)
-            {
-                if (mConnected[i] == incoming)
-                {
-                    continue;
-                }
-                Point2D testDir = mConnected[i].mPosition - mPosition;
-                double testLengthSqr = testDir.MagnitudeSquared();
-                testDir.Normalize();
-                /*
-                if (testLengthSqr < COLLAPSE_DIST_SQR) {
-                    printf("Problem with connection %d\n",i);
-                    printf("This node has %d connections\n",nConnected);
-                    printf("That one has %d\n",connected[i].nConnected);
-                    if (this == connected[i]) printf("This points at itself.\n");
-                }*/
-                if (testLengthSqr <= (MathUtil.EPSILON * MathUtil.EPSILON))
-                {
-                    throw new Exception("Length too small");
-                }
-
-                double myCos = Point2D.Dot(inDir, testDir);
-                double mySin = Point2D.Cross(inDir, testDir);
-                if (result != null)
-                {
-                    Point2D resultDir = result.mPosition - mPosition;
-                    resultDir.Normalize();
-                    double resCos = Point2D.Dot(inDir, resultDir);
-                    double resSin = Point2D.Cross(inDir, resultDir);
-                    if (IsRighter(mySin, myCos, resSin, resCos))
-                    {
-                        result = mConnected[i];
-                    }
-                }
-                else
-                {
-                    result = mConnected[i];
-                }
-            }
-
-            //if (B2_POLYGON_REPORT_ERRORS && result != null)
-            //{
-            //    printf("nConnected = %d\n", nConnected);
-            //    for (int i = 0; i < nConnected; ++i)
-            //    {
-            //        printf("connected[%d] @ %d\n", i, (int)connected[i]);
-            //    }
-            //}
-            //Debug.Assert(result != null);
-
-            return result;
-        }
-
-        public SplitComplexPolygonNode GetRightestConnection(Point2D incomingDir)
-        {
-            Point2D diff = mPosition - incomingDir;
-            SplitComplexPolygonNode temp = new SplitComplexPolygonNode(diff);
-            SplitComplexPolygonNode res = GetRightestConnection(temp);
-            //Debug.Assert(res != null);
-            return res;
-        }
-    }
-
-
-    public class PolygonOperationContext
-    {
-        public PolygonUtil.PolyOperation mOperations;
-        public Point2DList mOriginalPolygon1;
-        public Point2DList mOriginalPolygon2;
-        public Point2DList mPoly1;
-        public Point2DList mPoly2;
-        public List<EdgeIntersectInfo> mIntersections;
-        public int mStartingIndex;
-        public PolygonUtil.PolyUnionError mError;
-        public List<int> mPoly1VectorAngles;
-        public List<int> mPoly2VectorAngles;
-        public Dictionary<uint, Point2DList> mOutput = new Dictionary<uint, Point2DList>();
-
-        public Point2DList Union
-        {
-            get
-            {
-                Point2DList l = null;
-                if (!mOutput.TryGetValue((uint)PolygonUtil.PolyOperation.Union, out l))
-                {
-                    l = new Point2DList();
-                    mOutput.Add((uint)PolygonUtil.PolyOperation.Union, l);
-                }
-
-                return l;
-            }
-        }
-        public Point2DList Intersect
-        {
-            get
-            {
-                Point2DList l = null;
-                if (!mOutput.TryGetValue((uint)PolygonUtil.PolyOperation.Intersect, out l))
-                {
-                    l = new Point2DList();
-                    mOutput.Add((uint)PolygonUtil.PolyOperation.Intersect, l);
-                }
-
-                return l;
-            }
-        }
-        public Point2DList Subtract
-        {
-            get
-            {
-                Point2DList l = null;
-                if (!mOutput.TryGetValue((uint)PolygonUtil.PolyOperation.Subtract, out l))
-                {
-                    l = new Point2DList();
-                    mOutput.Add((uint)PolygonUtil.PolyOperation.Subtract, l);
-                }
-
-                return l;
-            }
-        }
-
-        public PolygonOperationContext() { }
-
-
-        public void Clear()
-        {
-            mOperations = PolygonUtil.PolyOperation.None;
-            mOriginalPolygon1 = null;
-            mOriginalPolygon2 = null;
-            mPoly1 = null;
-            mPoly2 = null;
-            mIntersections = null;
-            mStartingIndex = -1;
-            mError = PolygonUtil.PolyUnionError.None;
-            mPoly1VectorAngles = null;
-            mPoly2VectorAngles = null;
-            mOutput = new Dictionary<uint, Point2DList>();
-        }
-
-
-        public bool Init(PolygonUtil.PolyOperation operations, Point2DList polygon1, Point2DList polygon2)
-        {
-            Clear();
-
-            mOperations = operations;
-            mOriginalPolygon1 = polygon1;
-            mOriginalPolygon2 = polygon2;
-
-            // Make a copy of the polygons so that we dont modify the originals, and
-            // force vertices to integer (pixel) values.
-            mPoly1 = new Point2DList(polygon1);
-            mPoly1.WindingOrder = Point2DList.WindingOrderType.Default;
-            mPoly2 = new Point2DList(polygon2);
-            mPoly2.WindingOrder = Point2DList.WindingOrderType.Default;
-
-            // Find intersection points
-            if (!VerticesIntersect(mPoly1, mPoly2, out mIntersections))
-            {
-                // No intersections found - polygons do not overlap.
-                mError = PolygonUtil.PolyUnionError.NoIntersections;
-                return false;
-            }
-
-            // make sure edges that intersect more than once are updated to have correct start points
-            int numIntersections = mIntersections.Count;
-            for (int i = 0; i < numIntersections; ++i)
-            {
-                for (int j = i + 1; j < numIntersections; ++j)
-                {
-                    if (mIntersections[i].EdgeOne.EdgeStart.Equals(mIntersections[j].EdgeOne.EdgeStart) &&
-                        mIntersections[i].EdgeOne.EdgeEnd.Equals(mIntersections[j].EdgeOne.EdgeEnd))
-                    {
-                        mIntersections[j].EdgeOne.EdgeStart = mIntersections[i].IntersectionPoint;
-                    }
-                    if (mIntersections[i].EdgeTwo.EdgeStart.Equals(mIntersections[j].EdgeTwo.EdgeStart) &&
-                        mIntersections[i].EdgeTwo.EdgeEnd.Equals(mIntersections[j].EdgeTwo.EdgeEnd))
-                    {
-                        mIntersections[j].EdgeTwo.EdgeStart = mIntersections[i].IntersectionPoint;
-                    }
-                }
-            }
-
-            // Add intersection points to original polygons, ignoring existing points.
-            foreach (EdgeIntersectInfo intersect in mIntersections)
-            {
-                if (!mPoly1.Contains(intersect.IntersectionPoint))
-                {
-                    mPoly1.Insert(mPoly1.IndexOf(intersect.EdgeOne.EdgeStart) + 1, intersect.IntersectionPoint);
-                }
-
-                if (!mPoly2.Contains(intersect.IntersectionPoint))
-                {
-                    mPoly2.Insert(mPoly2.IndexOf(intersect.EdgeTwo.EdgeStart) + 1, intersect.IntersectionPoint);
-                }
-            }
-
-            mPoly1VectorAngles = new List<int>();
-            for (int i = 0; i < mPoly2.Count; ++i)
-            {
-                mPoly1VectorAngles.Add(-1);
-            }
-            mPoly2VectorAngles = new List<int>();
-            for (int i = 0; i < mPoly1.Count; ++i)
-            {
-                mPoly2VectorAngles.Add(-1);
-            }
-
-            // Find starting point on the edge of polygon1 that is outside of
-            // the intersected area to begin polygon trace.
-            int currentIndex = 0;
-            do
-            {
-                bool bPointInPolygonAngle = PointInPolygonAngle(mPoly1[currentIndex], mPoly2);
-                mPoly2VectorAngles[currentIndex] = bPointInPolygonAngle ? 1 : 0;
-                if (bPointInPolygonAngle)
-                {
-                    mStartingIndex = currentIndex;
-                    break;
-                }
-                currentIndex = mPoly1.NextIndex(currentIndex);
-            } while (currentIndex != 0);
-
-            // If we don't find a point on polygon1 thats outside of the
-            // intersect area, the polygon1 must be inside of polygon2,
-            // in which case, polygon2 IS the union of the two.
-            if (mStartingIndex == -1)
-            {
-                mError = PolygonUtil.PolyUnionError.Poly1InsidePoly2;
-                return false;
-            }
-
-            return true;
-        }
-
-
-        /// <summary>
-        /// Check and return polygon intersections
-        /// </summary>
-        /// <param name="polygon1"></param>
-        /// <param name="polygon2"></param>
-        /// <param name="intersections"></param>
-        /// <returns></returns>
-        private bool VerticesIntersect(Point2DList polygon1, Point2DList polygon2, out List<EdgeIntersectInfo> intersections)
-        {
-            intersections = new List<EdgeIntersectInfo>();
-            double epsilon = Math.Min(polygon1.Epsilon, polygon2.Epsilon);
-
-            // Iterate through polygon1's edges
-            for (int i = 0; i < polygon1.Count; i++)
-            {
-                // Get edge vertices
-                Point2D p1 = polygon1[i];
-                Point2D p2 = polygon1[polygon1.NextIndex(i)];
-
-                // Get intersections between this edge and polygon2
-                for (int j = 0; j < polygon2.Count; j++)
-                {
-                    Point2D point = new Point2D();
-
-                    Point2D p3 = polygon2[j];
-                    Point2D p4 = polygon2[polygon2.NextIndex(j)];
-
-                    // Check if the edges intersect
-                    if (TriangulationUtil.LinesIntersect2D(p1, p2, p3, p4, ref point, epsilon))
-                    {
-                        // Rounding is not needed since we compare using an epsilon.
-                        //// Here, we round the returned intersection point to its nearest whole number.
-                        //// This prevents floating point anomolies where 99.9999-> is returned instead of 100.
-                        //point = new Point2D((float)Math.Round(point.X, 0), (float)Math.Round(point.Y, 0));
-                        // Record the intersection
-                        intersections.Add(new EdgeIntersectInfo(new Edge(p1, p2), new Edge(p3, p4), point));
-                    }
-                }
-            }
-
-            // true if any intersections were found.
-            return (intersections.Count > 0);
-        }
-
-
-        /// <summary>
-        /// * ref: http://ozviz.wasp.uwa.edu.au/~pbourke/geometry/insidepoly/  - Solution 2 
-        /// * Compute the sum of the angles made between the test point and each pair of points making up the polygon. 
-        /// * If this sum is 2pi then the point is an interior point, if 0 then the point is an exterior point. 
-        /// </summary>
-        public bool PointInPolygonAngle(Point2D point, Point2DList polygon)
-        {
-            double angle = 0;
-
-            // Iterate through polygon's edges
-            for (int i = 0; i < polygon.Count; i++)
-            {
-                // Get points
-                Point2D p1 = polygon[i] - point;
-                Point2D p2 = polygon[polygon.NextIndex(i)] - point;
-
-                angle += VectorAngle(p1, p2);
-            }
-
-            if (Math.Abs(angle) < Math.PI)
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-
-        /// <summary>
-        /// Return the angle between two vectors on a plane
-        /// The angle is from vector 1 to vector 2, positive anticlockwise
-        /// The result is between -pi -> pi
-        /// </summary>
-        public double VectorAngle(Point2D p1, Point2D p2)
-        {
-            double theta1 = Math.Atan2(p1.Y, p1.X);
-            double theta2 = Math.Atan2(p2.Y, p2.X);
-            double dtheta = theta2 - theta1;
-            while (dtheta > Math.PI)
-            {
-                dtheta -= (2.0 * Math.PI);
-            }
-            while (dtheta < -Math.PI)
-            {
-                dtheta += (2.0 * Math.PI);
-            }
-
-            return (dtheta);
-        }
-
-    }
-
-}
-
-// ----------------------------------------------------------------------
-// ConstrainedPointSet.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-    /*
-     * Extends the PointSet by adding some Constraints on how it will be triangulated<br>
-     * A constraint defines an edge between two points in the set, these edges can not
-     * be crossed. They will be enforced triangle edges after a triangulation.
-     * <p>
-     * 
-     * 
-     * @author Thomas Åhlén, thahlen@gmail.com
-     * @author Lee Wilson, lwilson@ea.com
-     */
-    public class ConstrainedPointSet : PointSet
-    {
-        protected Dictionary<uint, TriangulationConstraint> mConstraintMap = new Dictionary<uint, TriangulationConstraint>();
-        protected List<Contour> mHoles = new List<Contour>();
-
-        public override TriangulationMode TriangulationMode { get { return TriangulationMode.Constrained; } }
-
-
-        public ConstrainedPointSet(List<TriangulationPoint> bounds)
-            : base(bounds)
-        {
-            AddBoundaryConstraints();
-        }
-
-        public ConstrainedPointSet(List<TriangulationPoint> bounds, List<TriangulationConstraint> constraints)
-            : base(bounds)
-        {
-            AddBoundaryConstraints();
-            AddConstraints(constraints);
-        }
-
-        public ConstrainedPointSet(List<TriangulationPoint> bounds, int[] indices)
-            : base(bounds)
-        {
-            AddBoundaryConstraints();
-            List<TriangulationConstraint> l = new List<TriangulationConstraint>();
-            for (int i = 0; i < indices.Length; i += 2)
-            {
-                TriangulationConstraint tc = new TriangulationConstraint(bounds[i], bounds[i + 1]);
-                l.Add(tc);
-            }
-            AddConstraints(l);
-        }
-
-
-        protected void AddBoundaryConstraints()
-        {
-            TriangulationPoint ptLL = null;
-            TriangulationPoint ptLR = null;
-            TriangulationPoint ptUR = null;
-            TriangulationPoint ptUL = null;
-            if (!TryGetPoint(MinX, MinY, out ptLL))
-            {
-                ptLL = new TriangulationPoint(MinX, MinY);
-                Add(ptLL);
-            }
-            if (!TryGetPoint(MaxX, MinY, out ptLR))
-            {
-                ptLR = new TriangulationPoint(MaxX, MinY);
-                Add(ptLR);
-            }
-            if (!TryGetPoint(MaxX, MaxY, out ptUR))
-            {
-                ptUR = new TriangulationPoint(MaxX, MaxY);
-                Add(ptUR);
-            }
-            if (!TryGetPoint(MinX, MaxY, out ptUL))
-            {
-                ptUL = new TriangulationPoint(MinX, MaxY);
-                Add(ptUL);
-            }
-            TriangulationConstraint tcLLtoLR = new TriangulationConstraint(ptLL, ptLR);
-            AddConstraint(tcLLtoLR);
-            TriangulationConstraint tcLRtoUR = new TriangulationConstraint(ptLR, ptUR);
-            AddConstraint(tcLRtoUR);
-            TriangulationConstraint tcURtoUL = new TriangulationConstraint(ptUR, ptUL);
-            AddConstraint(tcURtoUL);
-            TriangulationConstraint tcULtoLL = new TriangulationConstraint(ptUL, ptLL);
-            AddConstraint(tcULtoLL);
-        }
-
-
-        public override void Add(Point2D p)
-        {
-            Add(p as TriangulationPoint, -1, true);
-        }
-
-
-        public override void Add(TriangulationPoint p)
-        {
-            Add(p, -1, true);
-        }
-
-
-        public override bool AddRange(List<TriangulationPoint> points)
-        {
-            bool bOK = true;
-            foreach (TriangulationPoint p in points)
-            {
-                bOK = Add(p, -1, true) && bOK;
-            }
-
-            return bOK;
-        }
-
-
-        // Assumes that points being passed in the list are connected and form a polygon.
-        // Note that some error checking is done for robustness, but for the most part,
-        // we have to rely on the user to feed us "correct" data
-        public bool AddHole(List<TriangulationPoint> points, string name)
-        {
-            if (points == null)
-            {
-                return false;
-            }
-
-            //// split our self-intersection sections into their own lists
-            List<Contour> pts = new List<Contour>();
-            int listIdx = 0;
-            {
-                Contour c = new Contour(this, points, WindingOrderType.Unknown);
-                pts.Add(c);
-
-                // only constrain the points if we actually HAVE a bounding rect
-                if (mPoints.Count > 1)
-                {
-                    // constrain the points to bounding rect
-                    int numPoints = pts[listIdx].Count;
-                    for (int i = 0; i < numPoints; ++i)
-                    {
-                        ConstrainPointToBounds(pts[listIdx][i]);
-                    }
-                }
-            }
-
-            while (listIdx < pts.Count)
-            {
-                // simple sanity checking - remove duplicate coincident points before
-                // we check the polygon: fast, simple algorithm that eliminate lots of problems
-                // that only more expensive checks will find
-                pts[listIdx].RemoveDuplicateNeighborPoints();
-                pts[listIdx].WindingOrder = Point2DList.WindingOrderType.Default;
-
-                bool bListOK = true;
-                Point2DList.PolygonError err = pts[listIdx].CheckPolygon();
-                while (bListOK && err != PolygonError.None)
-                {
-                    if ((err & PolygonError.NotEnoughVertices) == PolygonError.NotEnoughVertices)
-                    {
-                        bListOK = false;
-                        continue;
-                    }
-                    if ((err & PolygonError.NotSimple) == PolygonError.NotSimple)
-                    {
-                        // split the polygons, remove the current list and add the resulting list to the end
-                        //List<Point2DList> l = TriangulationUtil.SplitSelfIntersectingPolygon(pts[listIdx], pts[listIdx].Epsilon);
-                        List<Point2DList> l = PolygonUtil.SplitComplexPolygon(pts[listIdx], pts[listIdx].Epsilon);
-                        pts.RemoveAt(listIdx);
-                        foreach (Point2DList newList in l)
-                        {
-                            Contour c = new Contour(this);
-                            c.AddRange(newList);
-                            pts.Add(c);
-                        }
-                        err = pts[listIdx].CheckPolygon();
-                        continue;
-                    }
-                    if ((err & PolygonError.Degenerate) == PolygonError.Degenerate)
-                    {
-                        pts[listIdx].Simplify(this.Epsilon);
-                        err = pts[listIdx].CheckPolygon();
-                        continue;
-                        //err &= ~(PolygonError.Degenerate);
-                        //if (pts[listIdx].Count < 3)
-                        //{
-                        //    err |= PolygonError.NotEnoughVertices;
-                        //    bListOK = false;
-                        //    continue;
-                        //}
-                    }
-                    if ((err & PolygonError.AreaTooSmall) == PolygonError.AreaTooSmall ||
-                        (err & PolygonError.SidesTooCloseToParallel) == PolygonError.SidesTooCloseToParallel ||
-                        (err & PolygonError.TooThin) == PolygonError.TooThin ||
-                        (err & PolygonError.Unknown) == PolygonError.Unknown)
-                    {
-                        bListOK = false;
-                        continue;
-                    }
-                    // non-convex polygons are ok
-                    //if ((err & PolygonError.NotConvex) == PolygonError.NotConvex)
-                    //{
-                    //}
-                }
-                if (!bListOK && pts[listIdx].Count != 2)
-                {
-                    pts.RemoveAt(listIdx);
-                }
-                else
-                {
-                    ++listIdx;
-                }
-            }
-
-            bool bOK = true;
-            listIdx = 0;
-            while (listIdx < pts.Count)
-            {
-                int numPoints = pts[listIdx].Count;
-                if (numPoints < 2)
-                {
-                    // should not be possible by this point...
-                    ++listIdx;
-                    bOK = false;
-                    continue;
-                }
-                else if (numPoints == 2)
-                {
-                    uint constraintCode = TriangulationConstraint.CalculateContraintCode(pts[listIdx][0], pts[listIdx][1]);
-                    TriangulationConstraint tc = null;
-                    if (!mConstraintMap.TryGetValue(constraintCode, out tc))
-                    {
-                        tc = new TriangulationConstraint(pts[listIdx][0], pts[listIdx][1]);
-                        AddConstraint(tc);
-                    }
-                }
-                else
-                {
-                    Contour ph = new Contour(this, pts[listIdx], Point2DList.WindingOrderType.Unknown);
-                    ph.WindingOrder = Point2DList.WindingOrderType.Default;
-                    ph.Name = name + ":" + listIdx.ToString();
-                    mHoles.Add(ph);
-                }
-                ++listIdx;
-            }
-
-            return bOK;
-        }
-
-
-        // this method adds constraints singly and does not assume that they form a contour
-        // If you are trying to add a "series" or edges (or "contour"), use AddHole instead.
-        public bool AddConstraints(List<TriangulationConstraint> constraints)
-        {
-            if (constraints == null || constraints.Count < 1)
-            {
-                return false;
-            }
-
-            bool bOK = true;
-            foreach (TriangulationConstraint tc in constraints)
-            {
-                if (ConstrainPointToBounds(tc.P) || ConstrainPointToBounds(tc.Q))
-                {
-                    tc.CalculateContraintCode();
-                }
-
-                TriangulationConstraint tcTmp = null;
-                if (!mConstraintMap.TryGetValue(tc.ConstraintCode, out tcTmp))
-                {
-                    tcTmp = tc;
-                    bOK = AddConstraint(tcTmp) && bOK;
-                }
-            }
-
-            return bOK;
-        }
-
-
-        public bool AddConstraint(TriangulationConstraint tc)
-        {
-            if (tc == null || tc.P == null || tc.Q == null)
-            {
-                return false;
-            }
-
-            // If we already have this constraint, then there's nothing to do.  Since we already have
-            // a valid constraint in the map with the same ConstraintCode, then we're guaranteed that
-            // the points are also valid (and have the same coordinates as the ones being passed in with
-            // this constrain).  Return true to indicate that we successfully "added" the constraint
-            if (mConstraintMap.ContainsKey(tc.ConstraintCode))
-            {
-                return true;
-            }
-
-            // Make sure the constraint is not using points that are duplicates of ones already stored
-            // If it is, replace the Constraint Points with the points already stored.
-            TriangulationPoint p;
-            if (TryGetPoint(tc.P.X, tc.P.Y, out p))
-            {
-                tc.P = p;
-            }
-            else
-            {
-                Add(tc.P);
-            }
-
-            if (TryGetPoint(tc.Q.X, tc.Q.Y, out p))
-            {
-                tc.Q = p;
-            }
-            else
-            {
-                Add(tc.Q);
-            }
-
-            mConstraintMap.Add(tc.ConstraintCode, tc);
-
-            return true;
-        }
-
-
-        public bool TryGetConstraint(uint constraintCode, out TriangulationConstraint tc)
-        {
-            return mConstraintMap.TryGetValue(constraintCode, out tc);
-        }
-
-
-        public int GetNumConstraints()
-        {
-            return mConstraintMap.Count;
-        }
-
-
-        public Dictionary<uint, TriangulationConstraint>.Enumerator GetConstraintEnumerator()
-        {
-            return mConstraintMap.GetEnumerator();
-        }
-
-
-        public int GetNumHoles()
-        {
-            int numHoles = 0;
-            foreach (Contour c in mHoles)
-            {
-                numHoles += c.GetNumHoles(false);
-            }
-
-            return numHoles;
-        }
-
-
-        public Contour GetHole(int idx)
-        {
-            if (idx < 0 || idx >= mHoles.Count)
-            {
-                return null;
-            }
-
-            return mHoles[idx];
-        }
-
-
-        public int GetActualHoles(out List<Contour> holes)
-        {
-            holes = new List<Contour>();
-            foreach (Contour c in mHoles)
-            {
-                c.GetActualHoles(false, ref holes);
-            }
-
-            return holes.Count;
-        }
-
-
-        protected void InitializeHoles()
-        {
-            Contour.InitializeHoles(mHoles, this, this);
-            foreach (Contour c in mHoles)
-            {
-                c.InitializeHoles(this);
-            }
-        }
-
-
-        public override bool Initialize()
-        {
-            InitializeHoles();
-            return base.Initialize();
-        }
-
-
-        public override void Prepare(TriangulationContext tcx)
-        {
-            if (!Initialize())
-            {
-                return;
-            }
-
-            base.Prepare(tcx);
-
-            Dictionary<uint, TriangulationConstraint>.Enumerator it = mConstraintMap.GetEnumerator();
-            while (it.MoveNext())
-            {
-                TriangulationConstraint tc = it.Current.Value;
-                tcx.NewConstraint(tc.P, tc.Q);
-            }
-        }
-
-
-        public override void AddTriangle(DelaunayTriangle t)
-        {
-            Triangles.Add(t);
-        }
-
-    }
-}
-
-// ----------------------------------------------------------------------
-// PointSet.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-    public class PointSet : Point2DList, ITriangulatable, IEnumerable<TriangulationPoint>, IList<TriangulationPoint>
-    {
-        protected Dictionary<uint, TriangulationPoint> mPointMap = new Dictionary<uint, TriangulationPoint>();
-        public IList<TriangulationPoint> Points { get { return this; } private set { } }
-        public IList<DelaunayTriangle> Triangles { get; private set; }
-
-        public string FileName { get; set; }
-        public bool DisplayFlipX { get; set; }
-        public bool DisplayFlipY { get; set; }
-        public float DisplayRotate { get; set; }
-
-        protected double mPrecision = TriangulationPoint.kVertexCodeDefaultPrecision;
-        public double Precision { get { return mPrecision; } set { mPrecision = value; } }
-
-        public double MinX { get { return mBoundingBox.MinX; } }
-        public double MaxX { get { return mBoundingBox.MaxX; } }
-        public double MinY { get { return mBoundingBox.MinY; } }
-        public double MaxY { get { return mBoundingBox.MaxY; } }
-        public Rect2D Bounds { get { return mBoundingBox; } }
-
-        public virtual TriangulationMode TriangulationMode { get { return TriangulationMode.Unconstrained; } }
-
-        public new TriangulationPoint this[int index]
-        {
-            get { return mPoints[index] as TriangulationPoint; }
-            set { mPoints[index] = value; }
-        }
-
-
-        public PointSet(List<TriangulationPoint> bounds)
-        {
-            //Points = new List<TriangulationPoint>();
-            foreach (TriangulationPoint p in bounds)
-            {
-                Add(p, -1, false);
-
-                // Only the initial points are counted toward min/max x/y as they 
-                // are considered to be the boundaries of the point-set
-                mBoundingBox.AddPoint(p);
-            }
-            mEpsilon = CalculateEpsilon();
-            mWindingOrder = WindingOrderType.Unknown;   // not valid for a point-set
-        }
-
-
-        IEnumerator<TriangulationPoint> IEnumerable<TriangulationPoint>.GetEnumerator()
-        {
-            return new TriangulationPointEnumerator(mPoints);
-        }
-
-
-        public int IndexOf(TriangulationPoint p)
-        {
-            return mPoints.IndexOf(p);
-        }
-
-
-        public override void Add(Point2D p)
-        {
-            Add(p as TriangulationPoint, -1, false);
-        }
-
-        public virtual void Add(TriangulationPoint p)
-        {
-            Add(p, -1, false);
-        }
-
-
-        protected override void Add(Point2D p, int idx, bool constrainToBounds)
-        {
-            Add(p as TriangulationPoint, idx, constrainToBounds);
-        }
-
-
-        protected bool Add(TriangulationPoint p, int idx, bool constrainToBounds)
-        {
-            if (p == null)
-            {
-                return false;
-            }
-
-            if (constrainToBounds)
-            {
-                ConstrainPointToBounds(p);
-            }
-
-            // if we already have an instance of the point, then don't bother inserting it again as duplicate points
-            // will actually cause some real problems later on.   Still return true though to indicate that the point
-            // is successfully "added"
-            if (mPointMap.ContainsKey(p.VertexCode))
-            {
-                return true;
-            }
-            mPointMap.Add(p.VertexCode, p);
-
-            if (idx < 0)
-            {
-                mPoints.Add(p);
-            }
-            else
-            {
-                mPoints.Insert(idx, p);
-            }
-
-            return true;
-        }
-
-
-        public override void AddRange(IEnumerator<Point2D> iter, WindingOrderType windingOrder)
-        {
-            if (iter == null)
-            {
-                return;
-            }
-
-            iter.Reset();
-            while (iter.MoveNext())
-            {
-                Add(iter.Current);
-            }
-        }
-
-        
-        public virtual bool AddRange(List<TriangulationPoint> points)
-        {
-            bool bOK = true;
-            foreach (TriangulationPoint p in points)
-            {
-                bOK = Add(p, -1, false) && bOK;
-            }
-
-            return bOK;
-        }
-
-
-        public bool TryGetPoint(double x, double y, out TriangulationPoint p)
-        {
-            uint vc = TriangulationPoint.CreateVertexCode(x, y, Precision);
-            if (mPointMap.TryGetValue(vc, out p))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-
-        //public override void Insert(int idx, Point2D item)
-        //{
-        //    Add(item, idx, true);
-        //}
-
-
-        public void Insert(int idx, TriangulationPoint item)
-        {
-            mPoints.Insert(idx, item);
-        }
-
-
-        public override bool Remove(Point2D p)
-        {
-            return mPoints.Remove(p);
-        }
-
-
-        public bool Remove(TriangulationPoint p)
-        {
-            return mPoints.Remove(p);
-        }
-
-
-        public override void RemoveAt(int idx)
-        {
-            if (idx < 0 || idx >= Count)
-            {
-                return;
-            }
-            mPoints.RemoveAt(idx);
-        }
-
-
-        public bool Contains(TriangulationPoint p)
-        {
-            return mPoints.Contains(p);
-        }
-
-
-        public void CopyTo(TriangulationPoint[] array, int arrayIndex)
-        {
-            int numElementsToCopy = Math.Min(Count, array.Length - arrayIndex);
-            for (int i = 0; i < numElementsToCopy; ++i)
-            {
-                array[arrayIndex + i] = mPoints[i] as TriangulationPoint;
-            }
-        }
-
-
-        // returns true if the point is changed, false if the point is unchanged
-        protected bool ConstrainPointToBounds(Point2D p)
-        {
-            double oldX = p.X;
-            double oldY = p.Y;
-            p.X = Math.Max(MinX, p.X);
-            p.X = Math.Min(MaxX, p.X);
-            p.Y = Math.Max(MinY, p.Y);
-            p.Y = Math.Min(MaxY, p.Y);
-
-            return (p.X != oldX) || (p.Y != oldY);
-        }
-
-
-        protected bool ConstrainPointToBounds(TriangulationPoint p)
-        {
-            double oldX = p.X;
-            double oldY = p.Y;
-            p.X = Math.Max(MinX, p.X);
-            p.X = Math.Min(MaxX, p.X);
-            p.Y = Math.Max(MinY, p.Y);
-            p.Y = Math.Min(MaxY, p.Y);
-
-            return (p.X != oldX) || (p.Y != oldY);
-        }
-
-        
-        public virtual void AddTriangle(DelaunayTriangle t)
-        {
-            Triangles.Add(t);
-        }
-
-
-        public void AddTriangles(IEnumerable<DelaunayTriangle> list)
-        {
-            foreach (var tri in list)
-            {
-                AddTriangle(tri);
-            }
-        }
-
-
-        public void ClearTriangles()
-        {
-            Triangles.Clear();
-        }
-
-
-        public virtual bool Initialize()
-        {
-            return true;
-        }
-
-
-        public virtual void Prepare(TriangulationContext tcx)
-        {
-            if (Triangles == null)
-            {
-                Triangles = new List<DelaunayTriangle>(Points.Count);
-            }
-            else
-            {
-                Triangles.Clear();
-            }
-            tcx.Points.AddRange(Points);
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// PointGenerator.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections.Generic;
-
-namespace Poly2Tri
-{
-    public class PointGenerator
-    {
-        static readonly Random RNG = new Random();
-
-
-        public static List<TriangulationPoint> UniformDistribution(int n, double scale)
-        {
-            List<TriangulationPoint> points = new List<TriangulationPoint>();
-            for (int i = 0; i < n; i++)
-            {
-                points.Add(new TriangulationPoint(scale * (0.5 - RNG.NextDouble()), scale * (0.5 - RNG.NextDouble())));
-            }
-
-            return points;
-        }
-
-
-        public static List<TriangulationPoint> UniformGrid(int n, double scale)
-        {
-            double x = 0;
-            double size = scale / n;
-            double halfScale = 0.5 * scale;
-
-            List<TriangulationPoint> points = new List<TriangulationPoint>();
-            for (int i = 0; i < n + 1; i++)
-            {
-                x = halfScale - i * size;
-                for (int j = 0; j < n + 1; j++)
-                {
-                    points.Add(new TriangulationPoint(x, halfScale - j * size));
-                }
-            }
-
-            return points;
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// PolygonGenerator.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-
-namespace Poly2Tri
-{
-    public class PolygonGenerator
-    {
-        static readonly Random RNG = new Random();
-
-        private static double PI_2 = 2.0 * Math.PI;
-
-        public static Polygon RandomCircleSweep(double scale, int vertexCount)
-        {
-            PolygonPoint point;
-            PolygonPoint[] points;
-            double radius = scale / 4;
-
-            points = new PolygonPoint[vertexCount];
-            for (int i = 0; i < vertexCount; i++)
-            {
-                do
-                {
-                    if (i % 250 == 0)
-                    {
-                        radius += scale / 2 * (0.5 - RNG.NextDouble());
-                    }
-                    else if (i % 50 == 0)
-                    {
-                        radius += scale / 5 * (0.5 - RNG.NextDouble());
-                    }
-                    else
-                    {
-                        radius += 25 * scale / vertexCount * (0.5 - RNG.NextDouble());
-                    }
-                    radius = radius > scale / 2 ? scale / 2 : radius;
-                    radius = radius < scale / 10 ? scale / 10 : radius;
-                } while (radius < scale / 10 || radius > scale / 2);
-                point = new PolygonPoint(radius * Math.Cos((PI_2 * i) / vertexCount), radius * Math.Sin((PI_2 * i) / vertexCount));
-                points[i] = point;
-            }
-            return new Polygon(points);
-        }
-
-        public static Polygon RandomCircleSweep2(double scale, int vertexCount)
-        {
-            PolygonPoint point;
-            PolygonPoint[] points;
-            double radius = scale / 4;
-
-            points = new PolygonPoint[vertexCount];
-            for (int i = 0; i < vertexCount; i++)
-            {
-                do
-                {
-                    radius += scale / 5 * (0.5 - RNG.NextDouble());
-                    radius = radius > scale / 2 ? scale / 2 : radius;
-                    radius = radius < scale / 10 ? scale / 10 : radius;
-                } while (radius < scale / 10 || radius > scale / 2);
-                point = new PolygonPoint(radius * Math.Cos((PI_2 * i) / vertexCount), radius * Math.Sin((PI_2 * i) / vertexCount));
-                points[i] = point;
-            }
-            return new Polygon(points);
-        }
-    }
-}
-
-// ----------------------------------------------------------------------
-// TriangulationUtil.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-    /**
-     * @author Thomas Åhlén, thahlen@gmail.com
-     */
-    public class TriangulationUtil
-    {
-        /// <summary>
-        ///   Requirements:
-        /// 1. a,b and c form a triangle.
-        /// 2. a and d is know to be on opposite side of bc
-        /// <code>
-        ///                a
-        ///                +
-        ///               / \
-        ///              /   \
-        ///            b/     \c
-        ///            +-------+ 
-        ///           /    B    \  
-        ///          /           \ 
-        /// </code>
-        ///    Facts:
-        ///  d has to be in area B to have a chance to be inside the circle formed by a,b and c
-        ///  d is outside B if orient2d(a,b,d) or orient2d(c,a,d) is CW
-        ///  This preknowledge gives us a way to optimize the incircle test
-        /// </summary>
-        /// <param name="pa">triangle point, opposite d</param>
-        /// <param name="pb">triangle point</param>
-        /// <param name="pc">triangle point</param>
-        /// <param name="pd">point opposite a</param>
-        /// <returns>true if d is inside circle, false if on circle edge</returns>
-        public static bool SmartIncircle(Point2D pa, Point2D pb, Point2D pc, Point2D pd)
-        {
-            double pdx = pd.X;
-            double pdy = pd.Y;
-            double adx = pa.X - pdx;
-            double ady = pa.Y - pdy;
-            double bdx = pb.X - pdx;
-            double bdy = pb.Y - pdy;
-
-            double adxbdy = adx * bdy;
-            double bdxady = bdx * ady;
-            double oabd = adxbdy - bdxady;
-            //        oabd = orient2d(pa,pb,pd);
-            if (oabd <= 0)
-            {
-                return false;
-            }
-
-            double cdx = pc.X - pdx;
-            double cdy = pc.Y - pdy;
-
-            double cdxady = cdx * ady;
-            double adxcdy = adx * cdy;
-            double ocad = cdxady - adxcdy;
-            //      ocad = orient2d(pc,pa,pd);
-            if (ocad <= 0)
-            {
-                return false;
-            }
-
-            double bdxcdy = bdx * cdy;
-            double cdxbdy = cdx * bdy;
-
-            double alift = adx * adx + ady * ady;
-            double blift = bdx * bdx + bdy * bdy;
-            double clift = cdx * cdx + cdy * cdy;
-
-            double det = alift * (bdxcdy - cdxbdy) + blift * ocad + clift * oabd;
-
-            return det > 0;
-        }
-
-
-        public static bool InScanArea(Point2D pa, Point2D pb, Point2D pc, Point2D pd)
-        {
-            double pdx = pd.X;
-            double pdy = pd.Y;
-            double adx = pa.X - pdx;
-            double ady = pa.Y - pdy;
-            double bdx = pb.X - pdx;
-            double bdy = pb.Y - pdy;
-
-            double adxbdy = adx * bdy;
-            double bdxady = bdx * ady;
-            double oabd = adxbdy - bdxady;
-            //        oabd = orient2d(pa,pb,pd);
-            if (oabd <= 0)
-            {
-                return false;
-            }
-
-            double cdx = pc.X - pdx;
-            double cdy = pc.Y - pdy;
-
-            double cdxady = cdx * ady;
-            double adxcdy = adx * cdy;
-            double ocad = cdxady - adxcdy;
-            //      ocad = orient2d(pc,pa,pd);
-            if (ocad <= 0)
-            {
-                return false;
-            }
-            return true;
-        }
-
-
-        /// Forumla to calculate signed area
-        /// Positive if CCW
-        /// Negative if CW
-        /// 0 if collinear
-        /// A[P1,P2,P3]  =  (x1*y2 - y1*x2) + (x2*y3 - y2*x3) + (x3*y1 - y3*x1)
-        ///              =  (x1-x3)*(y2-y3) - (y1-y3)*(x2-x3)
-        public static Orientation Orient2d(Point2D pa, Point2D pb, Point2D pc)
-        {
-            double detleft = (pa.X - pc.X) * (pb.Y - pc.Y);
-            double detright = (pa.Y - pc.Y) * (pb.X - pc.X);
-            double val = detleft - detright;
-            if (val > -MathUtil.EPSILON && val < MathUtil.EPSILON)
-            {
-                return Orientation.Collinear;
-            }
-            else if (val > 0)
-            {
-                return Orientation.CCW;
-            }
-            return Orientation.CW;
-        }
-
-
-        ///////////////////////////////////////////////////////////////////////////////
-        // PointRelativeToLine2D
-        //
-        // Returns -1 if point is on left of line, 0 if point is on line, and 1 if 
-        // the point is to the right of the line. This assumes a coordinate system
-        // whereby the y axis goes upward when the x axis goes rightward. This is how
-        // 3D systems (both right and left-handed) and PostScript works, but is not 
-        // how the Win32 GUI works. If you are using a 'y goes downward' coordinate 
-        // system, simply negate the return value from this function.
-        //
-        // Given a point (a,b) and a line from (x1,y1) to (x2,y2), we calculate the 
-        // following equation:
-        //    (y2-y1)*(a-x1)-(x2-x1)*(b-y1)                        (left)
-        // If the result is > 0, the point is on             1 --------------> 2
-        // the right, else left.                                   (right)
-        //
-        // For example, with a point at (1,1) and a 
-        // line going from (0,0) to (2,0), we get:
-        //    (0-0)*(1-0)-(2-0)*(1-0)
-        // which equals:
-        //    -2
-        // Which indicates the point is (correctly)
-        // on the left of the directed line.
-        //
-        // This function has been checked to a good degree.
-        // 
-        /////////////////////////////////////////////////////////////////////////////
-        //public static double PointRelativeToLine2D(Point2D ptPoint, Point2D ptLineBegin, Point2D ptLineEnd)
-        //{
-        //    return (ptLineEnd.Y - ptLineBegin.Y) * (ptPoint.X - ptLineBegin.X) - (ptLineEnd.X - ptLineBegin.X) * (ptPoint.Y - ptLineBegin.Y);
-        //}
-
-
-        ///////////////////////////////////////////////////////////////////////////
-        // PointInBoundingBox - checks if a point is completely inside an 
-        // axis-aligned bounding box defined by xmin, xmax, ymin, and ymax.
-        // Note that the point must be fully inside for this method to return
-        // true - it cannot lie on the border of the bounding box.
-        ///////////////////////////////////////////////////////////////////////////
-        public static bool PointInBoundingBox(double xmin, double xmax, double ymin, double ymax, Point2D p)
-        {
-            return (p.X > xmin && p.X < xmax && p.Y > ymin && p.Y < ymax);
-        }
-
-
-        public static bool PointOnLineSegment2D(Point2D lineStart, Point2D lineEnd, Point2D p, double epsilon)
-        {
-            return TriangulationUtil.PointOnLineSegment2D(lineStart.X, lineStart.Y, lineEnd.X, lineEnd.Y, p.X, p.Y, epsilon);
-        }
-
-
-        public static bool PointOnLineSegment2D(double x1, double y1, double x2, double y2, double x, double y, double epsilon)
-        {
-            // First checking if (x, z) is in the range of the line segment's end points.
-            if (MathUtil.IsValueBetween(x, x1, x2, epsilon) && MathUtil.IsValueBetween(y, y1, y2, epsilon))
-            {
-                if (MathUtil.AreValuesEqual(x2 - x1, 0.0f, epsilon))
-                {
-                    // Vertical line.
-                    return true;
-                }
-
-                double slope = (y2 - y1) / (x2 - x1);
-                double yIntercept = -(slope * x1) + y1;
-
-                // Checking if (x, y) is on the line passing through the end points.
-                double t = y - ((slope * x) + yIntercept);
-
-                return MathUtil.AreValuesEqual(t, 0.0f, epsilon);
-            }
-
-            return false;
-        }
-
-        
-        public static bool RectsIntersect(Rect2D r1, Rect2D r2)
-        {
-            return  (r1.Right > r2.Left) &&
-                    (r1.Left < r2.Right) &&
-                    (r1.Bottom > r2.Top) &&
-                    (r1.Top < r2.Bottom);
-        }
-
-
-        /// <summary>
-        /// This method detects if two line segments (or lines) intersect,
-        /// and, if so, the point of intersection. Use the <paramref name="firstIsSegment"/> and
-        /// <paramref name="secondIsSegment"/> parameters to set whether the intersection point
-        /// must be on the first and second line segments. Setting these
-        /// both to true means you are doing a line-segment to line-segment
-        /// intersection. Setting one of them to true means you are doing a
-        /// line to line-segment intersection test, and so on.
-        /// Note: If two line segments are coincident, then 
-        /// no intersection is detected (there are actually
-        /// infinite intersection points).
-        /// </summary>
-        /// <param name="ptStart0">The first point of the first line segment.</param>
-        /// <param name="ptEnd0">The second point of the first line segment.</param>
-        /// <param name="ptStart1">The first point of the second line segment.</param>
-        /// <param name="ptEnd1">The second point of the second line segment.</param>
-        /// <param name="firstIsSegment">Set this to true to require that the 
-        /// intersection point be on the first line segment.</param>
-        /// <param name="secondIsSegment">Set this to true to require that the
-        /// intersection point be on the second line segment.</param>
-        /// <param name="coincidentEndPointCollisions">Set this to true to enable collisions if the line segments share
-        /// an endpoint</param>
-        /// <param name="pIntersectionPt">This is set to the intersection
-        /// point if an intersection is detected.</param>
-        /// <returns>True if an intersection is detected, false otherwise.</returns>
-        public static bool LinesIntersect2D(    Point2D ptStart0, Point2D ptEnd0,
-                                                Point2D ptStart1, Point2D ptEnd1,
-                                                bool firstIsSegment, bool secondIsSegment, bool coincidentEndPointCollisions,
-                                                ref Point2D pIntersectionPt,
-                                                double epsilon)
-        {
-            double d = (ptEnd0.X - ptStart0.X) * (ptStart1.Y - ptEnd1.Y) - (ptStart1.X - ptEnd1.X) * (ptEnd0.Y - ptStart0.Y);
-            if (Math.Abs(d) < epsilon)
-            {
-                //The lines are parallel.
-                return false;
-            }
-
-            double d0 = (ptStart1.X - ptStart0.X) * (ptStart1.Y - ptEnd1.Y) - (ptStart1.X - ptEnd1.X) * (ptStart1.Y - ptStart0.Y);
-            double d1 = (ptEnd0.X - ptStart0.X) * (ptStart1.Y - ptStart0.Y) - (ptStart1.X - ptStart0.X) * (ptEnd0.Y - ptStart0.Y);
-            double kOneOverD = 1 / d;
-            double t0 = d0 * kOneOverD;
-            double t1 = d1 * kOneOverD;
-
-            if ((!firstIsSegment  || ((t0 >= 0.0) && (t0 <= 1.0))) &&
-                (!secondIsSegment || ((t1 >= 0.0) && (t1 <= 1.0))) &&
-                (coincidentEndPointCollisions || (!MathUtil.AreValuesEqual(0.0, t0, epsilon) && !MathUtil.AreValuesEqual(0.0, t1, epsilon))))
-            {
-                if (pIntersectionPt != null)
-                {
-                    pIntersectionPt.X = ptStart0.X + t0 * (ptEnd0.X - ptStart0.X);
-                    pIntersectionPt.Y = ptStart0.Y + t0 * (ptEnd0.Y - ptStart0.Y);
-                }
-
-                return true;
-            }
-
-            return false;
-        }
-
-
-        public static bool LinesIntersect2D(    Point2D ptStart0, Point2D ptEnd0,
-                                                Point2D ptStart1, Point2D ptEnd1,
-                                                ref Point2D pIntersectionPt,
-                                                double epsilon)
-        {
-            return TriangulationUtil.LinesIntersect2D(ptStart0, ptEnd0, ptStart1, ptEnd1, true, true, false, ref pIntersectionPt, epsilon);
-        }
-
-        
-        ///////////////////////////////////////////////////////////////////////////
-        // RaysIntersect2D
-        //
-        // Given two lines defined by (sorry about the lame notation):
-        //    x0 = x00 + vector_x0*s;
-        //    y0 = y00 + vector_y0*s;
-        //
-        //    x1 = x10 + vector_x1*t;
-        //    y1 = y10 + vector_y1*t;
-        //
-        // This function determines the intersection between them, if there is any.
-        //
-        // This function assumes the lines to have no endpoints and will intersect
-        // them anywhere in 2D space.
-        //
-        // This algorithm taken from "Realtime-Rendering" section 10.12.
-        // 
-        // This function has been checked to a good degree.
-        // 
-        ///////////////////////////////////////////////////////////////////////////
-        public static double LI2DDotProduct(Point2D v0, Point2D v1)
-        {
-            return ((v0.X * v1.X) + (v0.Y * v1.Y));
-        }
-
-
-        public static bool RaysIntersect2D( Point2D ptRayOrigin0, Point2D ptRayVector0,
-                                            Point2D ptRayOrigin1, Point2D ptRayVector1,
-                                            ref Point2D ptIntersection)
-        {
-            double kEpsilon = 0.01;
-
-            if (ptIntersection != null)
-            {
-                //If the user wants an actual intersection result...
-
-                //This is a vector from pLineOrigin0 to ptLineOrigin1.
-                Point2D ptTemp1 = new Point2D(ptRayOrigin1.X - ptRayOrigin0.X, ptRayOrigin1.Y - ptRayOrigin0.Y);
-
-                //This is a vector perpendicular to ptVector1.
-                Point2D ptTemp2 = new Point2D(-ptRayVector1.Y, ptRayVector1.X);
-
-                double fDot1 = TriangulationUtil.LI2DDotProduct(ptRayVector0, ptTemp2);
-
-                if (Math.Abs(fDot1) < kEpsilon)
-                {
-                    return false; //The lines are essentially parallel.
-                }
-
-                double fDot2 = TriangulationUtil.LI2DDotProduct(ptTemp1, ptTemp2);
-                double s = fDot2 / fDot1;
-                ptIntersection.X = ptRayOrigin0.X + ptRayVector0.X * s;
-                ptIntersection.Y = ptRayOrigin0.Y + ptRayVector0.Y * s;
-                return true;
-            }
-
-            //Else the user just wants to know if there is an intersection...
-            //In this case we need only compare the slopes of the lines.
-            double delta = ptRayVector1.X - ptRayVector0.X;
-            if (Math.Abs(delta) > kEpsilon)
-            {
-                delta = ptRayVector1.Y - ptRayVector0.Y;
-                if (Math.Abs(delta) > kEpsilon)
-                {
-                    return true; //The lines are not parallel.
-                }
-            }
-
-            return false;
-        }
-
-    }
-
-
-}
-
-// ----------------------------------------------------------------------
-// FixedArray3.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections;
-// using System.Collections.Generic;
-
-namespace Poly2Tri
-{
-    public struct FixedArray3<T> : IEnumerable<T> where T : class
-    {
-        public T _0, _1, _2;
-        public T this[int index]
-        {
-            get
-            {
-                switch (index)
-                {
-                    case 0:
-                        return _0;
-                    case 1:
-                        return _1;
-                    case 2:
-                        return _2;
-                    default:
-                        throw new IndexOutOfRangeException();
-                }
-            }
-            set
-            {
-                switch (index)
-                {
-                    case 0:
-                        _0 = value;
-                        break;
-                    case 1:
-                        _1 = value;
-                        break;
-                    case 2:
-                        _2 = value;
-                        break;
-                    default:
-                        throw new IndexOutOfRangeException();
-                }
-            }
-        }
-
-
-        public bool Contains(T value)
-        {
-            for (int i = 0; i < 3; ++i)
-            {
-                if (this[i] != null && this[i].Equals(value))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-
-        public int IndexOf(T value)
-        {
-            for (int i = 0; i < 3; ++i)
-            {
-                if (this[i] != null && this[i].Equals(value))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        
-        public void Clear()
-        {
-            _0 = _1 = _2 = null;
-        }
-
-        
-        public void Clear(T value)
-        {
-            for (int i = 0; i < 3; ++i)
-            {
-                if (this[i] != null && this[i].Equals(value))
-                {
-                    this[i] = null;
-                }
-            }
-        }
-
-
-        private IEnumerable<T> Enumerate()
-        {
-            for (int i = 0; i < 3; ++i)
-            {
-                yield return this[i];
-            }
-        }
-
-        
-        public IEnumerator<T> GetEnumerator() { return Enumerate().GetEnumerator(); }
-
-        
-        IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
-    }
-}
-
-// ----------------------------------------------------------------------
-// FixedBitArray3.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// using System;
-// using System.Collections;
-// using System.Collections.Generic;
-
-namespace Poly2Tri
-{
-    public struct FixedBitArray3 : IEnumerable<bool>
-    {
-        public bool _0, _1, _2;
-        public bool this[int index]
+        public static Real TransSign(MeshUtils.Vertex u, MeshUtils.Vertex v, MeshUtils.Vertex w)
         {
-            get
-            {
-                switch (index)
-                {
-                    case 0:
-                        return _0;
-                    case 1:
-                        return _1;
-                    case 2:
-                        return _2;
-                    default:
-                        throw new IndexOutOfRangeException();
-                }
-            }
-            set
-            {
-                switch (index)
-                {
-                    case 0:
-                        _0 = value;
-                        break;
-                    case 1:
-                        _1 = value;
-                        break;
-                    case 2:
-                        _2 = value;
-                        break;
-                    default:
-                        throw new IndexOutOfRangeException();
-                }
-            }
-        }
+            Debug.Assert(TransLeq(u, v) && TransLeq(v, w));
 
-
-        public bool Contains(bool value)
-        {
-            for (int i = 0; i < 3; ++i)
-            {
-                if (this[i] == value)
-                {
-                    return true;
-                }
-            }
+            var gapL = v._t - u._t;
+            var gapR = w._t - v._t;
 
-            return false;
-        }
-        
-        
-        public int IndexOf(bool value)
-        {
-            for (int i = 0; i < 3; ++i)
+            if (gapL + gapR > 0.0f)
             {
-                if (this[i] == value)
-                {
-                    return i;
-                }
+                return (v._s - w._s) * gapL + (v._s - u._s) * gapR;
             }
-
-            return -1;
-        }
-
-        
-        public void Clear()
-        {
-            _0 = _1 = _2 = false;
+            /* vertical line */
+            return 0;
         }
 
-        
-        public void Clear(bool value)
+        public static bool EdgeGoesLeft(MeshUtils.Edge e)
         {
-            for (int i = 0; i < 3; ++i)
-            {
-                if (this[i] == value)
-                {
-                    this[i] = false;
-                }
-            }
+            return VertLeq(e._Dst, e._Org);
         }
-
 
-        private IEnumerable<bool> Enumerate()
+        public static bool EdgeGoesRight(MeshUtils.Edge e)
         {
-            for (int i = 0; i < 3; ++i)
-            {
-                yield return this[i];
-            }
+            return VertLeq(e._Org, e._Dst);
         }
 
-        
-        public IEnumerator<bool> GetEnumerator() { return Enumerate().GetEnumerator(); }
-
-        
-        IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
-    }
-}
-
-// ----------------------------------------------------------------------
-// MathUtil.cs
-
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Text;
-
-namespace Poly2Tri
-{
-    public class MathUtil
-    {
-        public static double EPSILON = 1e-12;
-
-
-        public static bool AreValuesEqual(double val1, double val2)
+        public static Real VertL1dist(MeshUtils.Vertex u, MeshUtils.Vertex v)
         {
-            return AreValuesEqual(val1, val2, EPSILON);
+            return Math.Abs(u._s - v._s) + Math.Abs(u._t - v._t);
         }
 
-
-        public static bool AreValuesEqual(double val1, double val2, double tolerance)
+        public static void AddWinding(MeshUtils.Edge eDst, MeshUtils.Edge eSrc)
         {
-            if (val1 >= (val2 - tolerance) && val1 <= (val2 + tolerance))
-            {
-                return true;
-            }
-
-            return false;
+            eDst._winding += eSrc._winding;
+            eDst._Sym._winding += eSrc._Sym._winding;
         }
 
-
-        public static bool IsValueBetween(double val, double min, double max, double tolerance)
+        public static Real Interpolate(Real a, Real x, Real b, Real y)
         {
-            if (min > max)
-            {
-                double tmp = min;
-                min = max;
-                max = tmp;
-            }
-            if ((val + tolerance) >= min && (val - tolerance) <= max)
+            if (a < 0.0f)
             {
-                return true;
+                a = 0.0f;
             }
-
-            return false;
-        }
-
-
-        public static double RoundWithPrecision(double f, double precision)
-        {
-            if (precision < 0.0)
+            if (b < 0.0f)
             {
-                return f;
+                b = 0.0f;
             }
-
-            double mul = Math.Pow(10.0, precision);
-            double fTemp = Math.Floor(f * mul) / mul;
-
-            return fTemp;
+            return ((a <= b) ? ((b == 0.0f) ? ((x+y) / 2.0f)
+                    : (x + (y-x) * (a/(a+b))))
+                    : (y + (x-y) * (b/(a+b))));
         }
-
-
-        public static double Clamp(double a, double low, double high)
-        {
-            return Math.Max(low, Math.Min(a, high));
-        }
-
 
-        public static void Swap<T>(ref T a, ref T b)
+        static void Swap(ref MeshUtils.Vertex a, ref MeshUtils.Vertex b)
         {
-            T tmp = a;
+            var tmp = a;
             a = b;
             b = tmp;
         }
 
-
-        public static uint Jenkins32Hash(byte[] data, uint nInitialValue)
+        /// <summary>
+        /// Given edges (o1,d1) and (o2,d2), compute their point of intersection.
+        /// The computed point is guaranteed to lie in the intersection of the
+        /// bounding rectangles defined by each edge.
+        /// </summary>
+        public static void EdgeIntersect(MeshUtils.Vertex o1, MeshUtils.Vertex d1, MeshUtils.Vertex o2, MeshUtils.Vertex d2, MeshUtils.Vertex v)
         {
-            foreach (byte b in data)
+            // This is certainly not the most efficient way to find the intersection
+            // of two line segments, but it is very numerically stable.
+            // 
+            // Strategy: find the two middle vertices in the VertLeq ordering,
+            // and interpolate the intersection s-value from these.  Then repeat
+            // using the TransLeq ordering to find the intersection t-value.
+
+            if (!VertLeq(o1, d1)) { Swap(ref o1, ref d1); }
+            if (!VertLeq(o2, d2)) { Swap(ref o2, ref d2); }
+            if (!VertLeq(o1, o2)) { Swap(ref o1, ref o2); Swap(ref d1, ref d2); }
+
+            if (!VertLeq(o2, d1))
             {
-                nInitialValue += (uint)b;
-                nInitialValue += (nInitialValue << 10);
-                nInitialValue += (nInitialValue >> 6);
+                // Technically, no intersection -- do our best
+                v._s = (o2._s + d1._s) / 2.0f;
+            }
+            else if (VertLeq(d1, d2))
+            {
+                // Interpolate between o2 and d1
+                var z1 = EdgeEval(o1, o2, d1);
+                var z2 = EdgeEval(o2, d1, d2);
+                if (z1 + z2 < 0.0f)
+                {
+                    z1 = -z1;
+                    z2 = -z2;
+                }
+                v._s = Interpolate(z1, o2._s, z2, d1._s);
+            }
+            else
+            {
+                // Interpolate between o2 and d2
+                var z1 = EdgeSign(o1, o2, d1);
+                var z2 = -EdgeSign(o1, d2, d1);
+                if (z1 + z2 < 0.0f)
+                {
+                    z1 = -z1;
+                    z2 = -z2;
+                }
+                v._s = Interpolate(z1, o2._s, z2, d2._s);
             }
 
-            nInitialValue += (nInitialValue << 3);
-            nInitialValue ^= (nInitialValue >> 11);
-            nInitialValue += (nInitialValue << 15);
+            // Now repeat the process for t
 
-            return nInitialValue;
+            if (!TransLeq(o1, d1)) { Swap(ref o1, ref d1); }
+            if (!TransLeq(o2, d2)) { Swap(ref o2, ref d2); }
+            if (!TransLeq(o1, o2)) { Swap(ref o1, ref o2); Swap(ref d1, ref d2); }
+
+            if (!TransLeq(o2, d1))
+            {
+                // Technically, no intersection -- do our best
+                v._t = (o2._t + d1._t) / 2.0f;
+            }
+            else if (TransLeq(d1, d2))
+            {
+                // Interpolate between o2 and d1
+                var z1 = TransEval(o1, o2, d1);
+                var z2 = TransEval(o2, d1, d2);
+                if (z1 + z2 < 0.0f)
+                {
+                    z1 = -z1;
+                    z2 = -z2;
+                }
+                v._t = Interpolate(z1, o2._t, z2, d1._t);
+            }
+            else
+            {
+                // Interpolate between o2 and d2
+                var z1 = TransSign(o1, o2, d1);
+                var z2 = -TransSign(o1, d2, d1);
+                if (z1 + z2 < 0.0f)
+                {
+                    z1 = -z1;
+                    z2 = -z2;
+                }
+                v._t = Interpolate(z1, o2._t, z2, d2._t);
+            }
         }
     }
 }
 
 // ----------------------------------------------------------------------
-// Point2D.cs
+// Mesh.cs
 
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
 
 // using System;
-// using System.Collections;
-// using System.Collections.Generic;
+// using System.Diagnostics;
 
-
-namespace Poly2Tri
+#if DOUBLE
+namespace LibTessDotNet.Double
+#else
+namespace LibTessDotNet
+#endif
 {
-    public class Point2D : IComparable<Point2D>
+    internal class Mesh : MeshUtils.Pooled<Mesh>
     {
-        protected double mX = 0.0;
-        public virtual double X { get { return mX; } set { mX = value; } }
-        protected double mY = 0.0;
-        public virtual double Y { get { return mY; } set { mY = value; } }
+        internal MeshUtils.Vertex _vHead;
+        internal MeshUtils.Face _fHead;
+        internal MeshUtils.Edge _eHead, _eHeadSym;
 
-        public float Xf { get { return (float)X; } }
-        public float Yf { get { return (float)Y; } }
-
-
-        public Point2D()
+        public Mesh()
         {
-            mX = 0.0;
-            mY = 0.0;
+            var v = _vHead = MeshUtils.Vertex.Create();
+            var f = _fHead = MeshUtils.Face.Create();
+
+            var pair = MeshUtils.EdgePair.Create();
+            var e = _eHead = pair._e;
+            var eSym = _eHeadSym = pair._eSym;
+
+            v._next = v._prev = v;
+            v._anEdge = null;
+
+            f._next = f._prev = f;
+            f._anEdge = null;
+            f._trail = null;
+            f._marked = false;
+            f._inside = false;
+
+            e._next = e;
+            e._Sym = eSym;
+            e._Onext = null;
+            e._Lnext = null;
+            e._Org = null;
+            e._Lface = null;
+            e._winding = 0;
+            e._activeRegion = null;
+
+            eSym._next = eSym;
+            eSym._Sym = e;
+            eSym._Onext = null;
+            eSym._Lnext = null;
+            eSym._Org = null;
+            eSym._Lface = null;
+            eSym._winding = 0;
+            eSym._activeRegion = null;
         }
 
-
-        public Point2D(double x, double y)
+        public override void Reset()
         {
-            mX = x;
-            mY = y;
+            _vHead = null;
+            _fHead = null;
+            _eHead = _eHeadSym = null;
         }
 
-
-        public Point2D(Point2D p)
+        public override void OnFree()
         {
-            mX = p.X;
-            mY = p.Y;
-        }
-
-
-        public override string ToString()
-        {
-            return "[" + X.ToString() + "," + Y.ToString() + "]";
-        }
-
-
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
-
-
-        public override bool Equals(Object obj)
-        {
-            Point2D p = obj as Point2D;
-            if (p != null)
+            for (MeshUtils.Face f = _fHead._next, fNext = _fHead; f != _fHead; f = fNext)
             {
-                return Equals(p);
+                fNext = f._next;
+                f.Free();
+            }
+            for (MeshUtils.Vertex v = _vHead._next, vNext = _vHead; v != _vHead; v = vNext)
+            {
+                vNext = v._next;
+                v.Free();
+            }
+            for (MeshUtils.Edge e = _eHead._next, eNext = _eHead; e != _eHead; e = eNext)
+            {
+                eNext = e._next;
+                e.Free();
+            }
+        }
+
+        /// <summary>
+        /// Creates one edge, two vertices and a loop (face).
+        /// The loop consists of the two new half-edges.
+        /// </summary>
+        public MeshUtils.Edge MakeEdge()
+        {
+            var e = MeshUtils.MakeEdge(_eHead);
+
+            MeshUtils.MakeVertex(e, _vHead);
+            MeshUtils.MakeVertex(e._Sym, _vHead);
+            MeshUtils.MakeFace(e, _fHead);
+
+            return e;
+        }
+
+        /// <summary>
+        /// Splice is the basic operation for changing the
+        /// mesh connectivity and topology.  It changes the mesh so that
+        ///     eOrg->Onext = OLD( eDst->Onext )
+        ///     eDst->Onext = OLD( eOrg->Onext )
+        /// where OLD(...) means the value before the meshSplice operation.
+        /// 
+        /// This can have two effects on the vertex structure:
+        ///  - if eOrg->Org != eDst->Org, the two vertices are merged together
+        ///  - if eOrg->Org == eDst->Org, the origin is split into two vertices
+        /// In both cases, eDst->Org is changed and eOrg->Org is untouched.
+        /// 
+        /// Similarly (and independently) for the face structure,
+        ///  - if eOrg->Lface == eDst->Lface, one loop is split into two
+        ///  - if eOrg->Lface != eDst->Lface, two distinct loops are joined into one
+        /// In both cases, eDst->Lface is changed and eOrg->Lface is unaffected.
+        /// 
+        /// Some special cases:
+        /// If eDst == eOrg, the operation has no effect.
+        /// If eDst == eOrg->Lnext, the new face will have a single edge.
+        /// If eDst == eOrg->Lprev, the old face will have a single edge.
+        /// If eDst == eOrg->Onext, the new vertex will have a single edge.
+        /// If eDst == eOrg->Oprev, the old vertex will have a single edge.
+        /// </summary>
+        public void Splice(MeshUtils.Edge eOrg, MeshUtils.Edge eDst)
+        {
+            if (eOrg == eDst)
+            {
+                return;
             }
 
-            return base.Equals(obj);
-        }
-
-
-        public bool Equals(Point2D p)
-        {
-            return Equals(p, 0.0);
-        }
-
-
-        public bool Equals(Point2D p, double epsilon)
-        {
-            if ((object)p == null || !MathUtil.AreValuesEqual(X, p.X, epsilon) || !MathUtil.AreValuesEqual(Y, p.Y, epsilon))
+            bool joiningVertices = false;
+            if (eDst._Org != eOrg._Org)
             {
-                return false;
+                // We are merging two disjoint vertices -- destroy eDst->Org
+                joiningVertices = true;
+                MeshUtils.KillVertex(eDst._Org, eOrg._Org);
+            }
+            bool joiningLoops = false;
+            if (eDst._Lface != eOrg._Lface)
+            {
+                // We are connecting two disjoint loops -- destroy eDst->Lface
+                joiningLoops = true;
+                MeshUtils.KillFace(eDst._Lface, eOrg._Lface);
             }
 
-            return true;
+            // Change the edge structure
+            MeshUtils.Splice(eDst, eOrg);
+
+            if (!joiningVertices)
+            {
+                // We split one vertex into two -- the new vertex is eDst->Org.
+                // Make sure the old vertex points to a valid half-edge.
+                MeshUtils.MakeVertex(eDst, eOrg._Org);
+                eOrg._Org._anEdge = eOrg;
+            }
+            if (!joiningLoops)
+            {
+                // We split one loop into two -- the new loop is eDst->Lface.
+                // Make sure the old face points to a valid half-edge.
+                MeshUtils.MakeFace(eDst, eOrg._Lface);
+                eOrg._Lface._anEdge = eOrg;
+            }
         }
 
-
-        public int CompareTo(Point2D other)
+        /// <summary>
+        /// Removes the edge eDel. There are several cases:
+        /// if (eDel->Lface != eDel->Rface), we join two loops into one; the loop
+        /// eDel->Lface is deleted. Otherwise, we are splitting one loop into two;
+        /// the newly created loop will contain eDel->Dst. If the deletion of eDel
+        /// would create isolated vertices, those are deleted as well.
+        /// </summary>
+        public void Delete(MeshUtils.Edge eDel)
         {
-            if (Y < other.Y)
+            var eDelSym = eDel._Sym;
+
+            // First step: disconnect the origin vertex eDel->Org.  We make all
+            // changes to get a consistent mesh in this "intermediate" state.
+
+            bool joiningLoops = false;
+            if (eDel._Lface != eDel._Rface)
             {
-                return -1;
+                // We are joining two loops into one -- remove the left face
+                joiningLoops = true;
+                MeshUtils.KillFace(eDel._Lface, eDel._Rface);
             }
-            else if (Y > other.Y)
+
+            if (eDel._Onext == eDel)
             {
-                return 1;
+                MeshUtils.KillVertex(eDel._Org, null);
             }
             else
             {
-                if (X < other.X)
+                // Make sure that eDel->Org and eDel->Rface point to valid half-edges
+                eDel._Rface._anEdge = eDel._Oprev;
+                eDel._Org._anEdge = eDel._Onext;
+
+                MeshUtils.Splice(eDel, eDel._Oprev);
+
+                if (!joiningLoops)
                 {
-                    return -1;
-                }
-                else if (X > other.X)
-                {
-                    return 1;
+                    // We are splitting one loop into two -- create a new loop for eDel.
+                    MeshUtils.MakeFace(eDel, eDel._Lface);
                 }
             }
 
-            return 0;
+            // Claim: the mesh is now in a consistent state, except that eDel->Org
+            // may have been deleted.  Now we disconnect eDel->Dst.
+
+            if (eDelSym._Onext == eDelSym)
+            {
+                MeshUtils.KillVertex(eDelSym._Org, null);
+                MeshUtils.KillFace(eDelSym._Lface, null);
+            }
+            else
+            {
+                // Make sure that eDel->Dst and eDel->Lface point to valid half-edges
+                eDel._Lface._anEdge = eDelSym._Oprev;
+                eDelSym._Org._anEdge = eDelSym._Onext;
+                MeshUtils.Splice(eDelSym, eDelSym._Oprev);
+            }
+
+            // Any isolated vertices or faces have already been freed.
+            MeshUtils.KillEdge(eDel);
         }
 
-
-        public virtual void Set(double x, double y) { X = x; Y = y; }
-        public virtual void Set(Point2D p) { X = p.X; Y = p.Y; }
-
-        public void Add(Point2D p) { X += p.X; Y += p.Y; }
-        public void Add(double scalar) { X += scalar; Y += scalar; }
-        public void Subtract(Point2D p) { X -= p.X; Y -= p.Y; }
-        public void Subtract(double scalar) { X -= scalar; Y -= scalar; }
-        public void Multiply(Point2D p) { X *= p.X; Y *= p.Y; }
-        public void Multiply(double scalar) { X *= scalar; Y *= scalar; }
-        public void Divide(Point2D p) { X /= p.X; Y /= p.Y; }
-        public void Divide(double scalar) { X /= scalar; Y /= scalar; }
-        public void Negate() { X = -X; Y = -Y; }
-        public double Magnitude() { return Math.Sqrt((X * X) + (Y * Y)); }
-        public double MagnitudeSquared() { return (X * X) + (Y * Y); }
-        public double MagnitudeReciprocal() { return 1.0 / Magnitude(); }
-        public void Normalize() { Multiply(MagnitudeReciprocal()); }
-        public double Dot(Point2D p) { return (X * p.X) + (Y * p.Y); }
-        public double Cross(Point2D p) { return (X * p.Y) - (Y * p.X); }
-        public void Clamp(Point2D low, Point2D high) { X = Math.Max(low.X, Math.Min(X, high.X)); Y = Math.Max(low.Y, Math.Min(Y, high.Y)); }
-        public void Abs() { X = Math.Abs(X); Y = Math.Abs(Y); }
-        public void Reciprocal() { if (X != 0.0 && Y != 0.0) { X = 1.0 / X; Y = 1.0 / Y; } }
-
-        public void Translate(Point2D vector) { Add(vector); }
-        public void Translate(double x, double y) { X += x; Y += y; }
-        public void Scale(Point2D vector) { Multiply(vector); }
-        public void Scale(double scalar) { Multiply(scalar); }
-        public void Scale(double x, double y) { X *= x; Y *= y; }
-        public void Rotate(double radians)
+        /// <summary>
+        /// Creates a new edge such that eNew == eOrg.Lnext and eNew.Dst is a newly created vertex.
+        /// eOrg and eNew will have the same left face.
+        /// </summary>
+        public MeshUtils.Edge AddEdgeVertex(MeshUtils.Edge eOrg)
         {
-            double cosr = Math.Cos(radians);
-            double sinr = Math.Sin(radians);
-            double xold = X;
-            double yold = Y;
-            X = (xold * cosr) - (yold * sinr);
-            Y = (xold * sinr) + (yold * cosr);
+            var eNew = MeshUtils.MakeEdge(eOrg);
+            var eNewSym = eNew._Sym;
+
+            // Connect the new edge appropriately
+            MeshUtils.Splice(eNew, eOrg._Lnext);
+
+            // Set vertex and face information
+            eNew._Org = eOrg._Dst;
+            MeshUtils.MakeVertex(eNewSym, eNew._Org);
+            eNew._Lface = eNewSym._Lface = eOrg._Lface;
+
+            return eNew;
         }
-        public void RotateDegrees(double degrees)
+
+        /// <summary>
+        /// Splits eOrg into two edges eOrg and eNew such that eNew == eOrg.Lnext.
+        /// The new vertex is eOrg.Dst == eNew.Org.
+        /// eOrg and eNew will have the same left face.
+        /// </summary>
+        public MeshUtils.Edge SplitEdge(MeshUtils.Edge eOrg)
         {
-            double radians = degrees * Math.PI / 180.0;
-            Rotate(radians);
+            var eTmp = AddEdgeVertex(eOrg);
+            var eNew = eTmp._Sym;
+
+            // Disconnect eOrg from eOrg->Dst and connect it to eNew->Org
+            MeshUtils.Splice(eOrg._Sym, eOrg._Sym._Oprev);
+            MeshUtils.Splice(eOrg._Sym, eNew);
+
+            // Set the vertex and face information
+            eOrg._Dst = eNew._Org;
+            eNew._Dst._anEdge = eNew._Sym; // may have pointed to eOrg->Sym
+            eNew._Rface = eOrg._Rface;
+            eNew._winding = eOrg._winding; // copy old winding information
+            eNew._Sym._winding = eOrg._Sym._winding;
+
+            return eNew;
         }
 
-        public static double Dot(Point2D lhs, Point2D rhs) { return (lhs.X * rhs.X) + (lhs.Y * rhs.Y); }
-        public static double Cross(Point2D lhs, Point2D rhs) { return (lhs.X * rhs.Y) - (lhs.Y * rhs.X); }
-        public static Point2D Clamp(Point2D a, Point2D low, Point2D high) { Point2D p = new Point2D(a); p.Clamp(low, high); return p; }
-        public static Point2D Min(Point2D a, Point2D b) { Point2D p = new Point2D(); p.X = Math.Min(a.X, b.X); p.Y = Math.Min(a.Y, b.Y); return p; }
-        public static Point2D Max(Point2D a, Point2D b) { Point2D p = new Point2D(); p.X = Math.Max(a.X, b.X); p.Y = Math.Max(a.Y, b.Y); return p; }
-        public static Point2D Abs(Point2D a) { Point2D p = new Point2D(Math.Abs(a.X), Math.Abs(a.Y)); return p; }
-        public static Point2D Reciprocal(Point2D a) { Point2D p = new Point2D(1.0 / a.X, 1.0 / a.Y); return p; }
+        /// <summary>
+        /// Creates a new edge from eOrg->Dst to eDst->Org, and returns the corresponding half-edge eNew.
+        /// If eOrg->Lface == eDst->Lface, this splits one loop into two,
+        /// and the newly created loop is eNew->Lface.  Otherwise, two disjoint
+        /// loops are merged into one, and the loop eDst->Lface is destroyed.
+        /// 
+        /// If (eOrg == eDst), the new face will have only two edges.
+        /// If (eOrg->Lnext == eDst), the old face is reduced to a single edge.
+        /// If (eOrg->Lnext->Lnext == eDst), the old face is reduced to two edges.
+        /// </summary>
+        public MeshUtils.Edge Connect(MeshUtils.Edge eOrg, MeshUtils.Edge eDst)
+        {
+            var eNew = MeshUtils.MakeEdge(eOrg);
+            var eNewSym = eNew._Sym;
 
-        // returns a scaled perpendicular vector.  Which direction it goes depends on the order in which the arguments are passed
-        public static Point2D Perpendicular(Point2D lhs, double scalar) { Point2D p = new Point2D(lhs.Y * scalar, lhs.X * -scalar); return p; }
-        public static Point2D Perpendicular(double scalar, Point2D rhs) { Point2D p = new Point2D(-scalar * rhs.Y, scalar * rhs.X); return p; }
+            bool joiningLoops = false;
+            if (eDst._Lface != eOrg._Lface)
+            {
+                // We are connecting two disjoint loops -- destroy eDst->Lface
+                joiningLoops = true;
+                MeshUtils.KillFace(eDst._Lface, eOrg._Lface);
+            }
 
-        
-        //
-        // operator overloading
-        //
+            // Connect the new edge appropriately
+            MeshUtils.Splice(eNew, eOrg._Lnext);
+            MeshUtils.Splice(eNewSym, eDst);
 
-        // Binary Operators
-        // Note that in C#, when a binary operator is overloaded, its corresponding compound assignment operator is also automatically
-        // overloaded.  So, for example, overloading operator + implicitly overloads += as well
-        public static Point2D operator +(Point2D lhs, Point2D rhs) { Point2D result = new Point2D(lhs);  result.Add(rhs);  return result; }
-        public static Point2D operator +(Point2D lhs, double scalar) { Point2D result = new Point2D(lhs); result.Add(scalar); return result; }
-        public static Point2D operator -(Point2D lhs, Point2D rhs) { Point2D result = new Point2D(lhs); result.Subtract(rhs); return result; }
-        public static Point2D operator -(Point2D lhs, double scalar) { Point2D result = new Point2D(lhs); result.Subtract(scalar); return result; }
-        public static Point2D operator *(Point2D lhs, Point2D rhs) { Point2D result = new Point2D(lhs); result.Multiply(rhs); return result; }
-        public static Point2D operator *(Point2D lhs, double scalar) { Point2D result = new Point2D(lhs); result.Multiply(scalar); return result; }
-        public static Point2D operator *(double scalar, Point2D lhs) { Point2D result = new Point2D(lhs); result.Multiply(scalar); return result; }
-        public static Point2D operator /(Point2D lhs, Point2D rhs) { Point2D result = new Point2D(lhs); result.Divide(rhs); return result; }
-        public static Point2D operator /(Point2D lhs, double scalar) { Point2D result = new Point2D(lhs); result.Divide(scalar); return result; }
+            // Set the vertex and face information
+            eNew._Org = eOrg._Dst;
+            eNewSym._Org = eDst._Org;
+            eNew._Lface = eNewSym._Lface = eOrg._Lface;
 
-        // Unary Operators
-        public static Point2D operator -(Point2D p) { Point2D tmp = new Point2D(p); tmp.Negate(); return tmp; }
+            // Make sure the old face points to a valid half-edge
+            eOrg._Lface._anEdge = eNewSym;
 
-        // Relational Operators
-        //public static bool operator ==(Point2D lhs, Point2D rhs) { if ((object)lhs != null) { return lhs.Equals(rhs, 0.0); } if ((object)rhs == null) { return true; } else { return false; } }
-        //public static bool operator !=(Point2D lhs, Point2D rhs) { if ((object)lhs != null) { return !lhs.Equals(rhs, 0.0); } if ((object)rhs == null) { return false; } else { return true; } }
-        public static bool operator <(Point2D lhs, Point2D rhs) { return (lhs.CompareTo(rhs) == -1) ? true : false; }
-        public static bool operator >(Point2D lhs, Point2D rhs) { return (lhs.CompareTo(rhs) == 1) ? true : false; }
-        public static bool operator <=(Point2D lhs, Point2D rhs) { return (lhs.CompareTo(rhs) <= 0) ? true : false; }
-        public static bool operator >=(Point2D lhs, Point2D rhs) { return (lhs.CompareTo(rhs) >= 0) ? true : false; }
+            if (!joiningLoops)
+            {
+                MeshUtils.MakeFace(eNew, eOrg._Lface);
+            }
+
+            return eNew;
+        }
+
+        /// <summary>
+        /// Destroys a face and removes it from the global face list. All edges of
+        /// fZap will have a NULL pointer as their left face. Any edges which
+        /// also have a NULL pointer as their right face are deleted entirely
+        /// (along with any isolated vertices this produces).
+        /// An entire mesh can be deleted by zapping its faces, one at a time,
+        /// in any order. Zapped faces cannot be used in further mesh operations!
+        /// </summary>
+        public void ZapFace(MeshUtils.Face fZap)
+        {
+            var eStart = fZap._anEdge;
+
+            // walk around face, deleting edges whose right face is also NULL
+            var eNext = eStart._Lnext;
+            MeshUtils.Edge e, eSym;
+            do {
+                e = eNext;
+                eNext = e._Lnext;
+
+                e._Lface = null;
+                if (e._Rface == null)
+                {
+                    // delete the edge -- see TESSmeshDelete above
+
+                    if (e._Onext == e)
+                    {
+                        MeshUtils.KillVertex(e._Org, null);
+                    }
+                    else
+                    {
+                        // Make sure that e._Org points to a valid half-edge
+                        e._Org._anEdge = e._Onext;
+                        MeshUtils.Splice(e, e._Oprev);
+                    }
+                    eSym = e._Sym;
+                    if (eSym._Onext == eSym)
+                    {
+                        MeshUtils.KillVertex(eSym._Org, null);
+                    }
+                    else
+                    {
+                        // Make sure that eSym._Org points to a valid half-edge
+                        eSym._Org._anEdge = eSym._Onext;
+                        MeshUtils.Splice(eSym, eSym._Oprev);
+                    }
+                    MeshUtils.KillEdge(e);
+                }
+            } while (e != eStart);
+
+            /* delete from circular doubly-linked list */
+            var fPrev = fZap._prev;
+            var fNext = fZap._next;
+            fNext._prev = fPrev;
+            fPrev._next = fNext;
+
+            fZap.Free();
+        }
+
+        public void MergeConvexFaces(int maxVertsPerFace)
+        {
+            for (var f = _fHead._next; f != _fHead; f = f._next)
+            {
+                // Skip faces which are outside the result
+                if (!f._inside)
+                {
+                    continue;
+                }
+
+                var eCur = f._anEdge;
+                var vStart = eCur._Org;
+
+                while (true)
+                {
+                    var eNext = eCur._Lnext;
+                    var eSym = eCur._Sym;
+
+                    if (eSym != null && eSym._Lface != null && eSym._Lface._inside)
+                    {
+                        // Try to merge the neighbour faces if the resulting polygons
+                        // does not exceed maximum number of vertices.
+                        int curNv = f.VertsCount;
+                        int symNv = eSym._Lface.VertsCount;
+                        if ((curNv + symNv - 2) <= maxVertsPerFace)
+                        {
+                            // Merge if the resulting poly is convex.
+                            if (Geom.VertCCW(eCur._Lprev._Org, eCur._Org, eSym._Lnext._Lnext._Org) &&
+                                Geom.VertCCW(eSym._Lprev._Org, eSym._Org, eCur._Lnext._Lnext._Org))
+                            {
+                                eNext = eSym._Lnext;
+                                Delete(eSym);
+                                eCur = null;
+                            }
+                        }
+                    }
+
+                    if (eCur != null && eCur._Lnext._Org == vStart)
+                        break;
+
+                    // Continue to next edge.
+                    eCur = eNext;
+                }
+            }
+        }
+
+        [Conditional("DEBUG")]
+        public void Check()
+        {
+            MeshUtils.Edge e;
+
+            MeshUtils.Face fPrev = _fHead, f;
+            for (fPrev = _fHead; (f = fPrev._next) != _fHead; fPrev = f)
+            {
+                e = f._anEdge;
+                do {
+                    Debug.Assert(e._Sym != e);
+                    Debug.Assert(e._Sym._Sym == e);
+                    Debug.Assert(e._Lnext._Onext._Sym == e);
+                    Debug.Assert(e._Onext._Sym._Lnext == e);
+                    Debug.Assert(e._Lface == f);
+                    e = e._Lnext;
+                } while (e != f._anEdge);
+            }
+            Debug.Assert(f._prev == fPrev && f._anEdge == null);
+
+            MeshUtils.Vertex vPrev = _vHead, v;
+            for (vPrev = _vHead; (v = vPrev._next) != _vHead; vPrev = v)
+            {
+                Debug.Assert(v._prev == vPrev);
+                e = v._anEdge;
+                do
+                {
+                    Debug.Assert(e._Sym != e);
+                    Debug.Assert(e._Sym._Sym == e);
+                    Debug.Assert(e._Lnext._Onext._Sym == e);
+                    Debug.Assert(e._Onext._Sym._Lnext == e);
+                    Debug.Assert(e._Org == v);
+                    e = e._Onext;
+                } while (e != v._anEdge);
+            }
+            Debug.Assert(v._prev == vPrev && v._anEdge == null);
+
+            MeshUtils.Edge ePrev = _eHead;
+            for (ePrev = _eHead; (e = ePrev._next) != _eHead; ePrev = e)
+            {
+                Debug.Assert(e._Sym._next == ePrev._Sym);
+                Debug.Assert(e._Sym != e);
+                Debug.Assert(e._Sym._Sym == e);
+                Debug.Assert(e._Org != null);
+                Debug.Assert(e._Dst != null);
+                Debug.Assert(e._Lnext._Onext._Sym == e);
+                Debug.Assert(e._Onext._Sym._Lnext == e);
+            }
+            Debug.Assert(e._Sym._next == ePrev._Sym
+                && e._Sym == _eHeadSym
+                && e._Sym._Sym == e
+                && e._Org == null && e._Dst == null
+                && e._Lface == null && e._Rface == null);
+        }
     }
+}
 
+// ----------------------------------------------------------------------
+// MeshUtils.cs
 
-    public class Point2DEnumerator : IEnumerator<Point2D>
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+
+#if DOUBLE
+// using Real = System.Double;
+namespace LibTessDotNet.Double
+#else
+// using Real = System.Single;
+namespace LibTessDotNet
+#endif
+{
+    public struct Vec3
     {
-        protected IList<Point2D> mPoints;
-        protected int position = -1;  // Enumerators are positioned before the first element until the first MoveNext() call.
+        public readonly static Vec3 Zero = new Vec3();
 
+        public Real X, Y, Z;
 
-        public Point2DEnumerator(IList<Point2D> points)
-        {
-            mPoints = points;
-        }
-
-        public bool MoveNext()
-        {
-            position++;
-            return (position < mPoints.Count);
-        }
-
-        public void Reset()
-        {
-            position = -1;
-        }
-
-        void IDisposable.Dispose() { }
-
-        Object IEnumerator.Current { get { return Current; } }
-
-        public Point2D Current
+        public Real this[int index]
         {
             get
             {
-                if (position < 0 || position >= mPoints.Count)
-                {
-                    return null;
-                }
-                return mPoints[position];
+                if (index == 0) return X;
+                if (index == 1) return Y;
+                if (index == 2) return Z;
+                throw new IndexOutOfRangeException();
             }
-        }
-    }
-
-}
-
-// ----------------------------------------------------------------------
-// Point2DList.cs
-
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * The Following notice applies to the Methods CheckPolygon and 
- * MergeParallelEdges.   Both are altered only enough to convert to C#
- * and take advantage of some of C#'s language features.   Any errors
- * are thus mine from the conversion and not Eric's.
- * 
- * Copyright (c) 2007 Eric Jordan
- * 
- * This software is provided 'as-is', without any express or implied
- * warranty.  In no event will the authors be held liable for any damages
- * arising from the use of this software.
- * Permission is granted to anyone to use this software for any purpose,
- * including commercial applications, and to alter it and redistribute it
- * freely, subject to the following restrictions:
- * 1. The origin of this software must not be misrepresented; you must not
- *    claim that you wrote the original software. If you use this software
- *    in a product, an acknowledgment in the product documentation would be
- *    appreciated but is not required.
- * 2. Altered source versions must be plainly marked as such, and must not be
- *    misrepresented as being the original software.
- * 3. This notice may not be removed or altered from any source distribution.
- * */
-
-
-// using System;
-// using System.Collections;
-// using System.Collections.Generic;
-// using System.Text;
-
-
-namespace Poly2Tri
-{
-    public class Point2DList : IEnumerable<Point2D>, IList<Point2D> // : List<Point2D>
-    {
-        public static readonly int kMaxPolygonVertices = 100000; // adjust to suit...
-
-        /// A small length used as a collision and constraint tolerance. Usually it is
-        /// chosen to be numerically significant, but visually insignificant.
-        public static readonly double kLinearSlop = 0.005;
-
-        /// A small angle used as a collision and constraint tolerance. Usually it is
-        /// chosen to be numerically significant, but visually insignificant.
-        public static readonly double kAngularSlop = (2.0 / (180.0 * Math.PI));
-
-        public enum WindingOrderType
-        {
-            CW,
-            CCW,
-            Unknown,
-
-            Default = CCW,
-        }
-
-        [Flags]
-        public enum PolygonError : uint
-        {
-            None = 0,
-            NotEnoughVertices           = 1 << 0,
-            NotConvex                   = 1 << 1,
-            NotSimple                   = 1 << 2,
-            AreaTooSmall                = 1 << 3,
-            SidesTooCloseToParallel     = 1 << 4,
-            TooThin                     = 1 << 5,
-            Degenerate                  = 1 << 6,
-            Unknown                     = 1 << 30,
-        }
-
-
-        protected List<Point2D> mPoints = new List<Point2D>();
-        protected Rect2D mBoundingBox = new Rect2D();
-        protected WindingOrderType mWindingOrder = WindingOrderType.Unknown;
-        protected double mEpsilon = MathUtil.EPSILON;    // Epsilon is a function of the size of the bounds of the polygon
-
-        public Rect2D BoundingBox { get { return mBoundingBox; } }
-        public WindingOrderType WindingOrder
-        {
-            get { return mWindingOrder; }
             set
             {
-                if (mWindingOrder == WindingOrderType.Unknown)
-                {
-                    mWindingOrder = CalculateWindingOrder();
-                }
-                if (value != mWindingOrder)
-                {
-                    mPoints.Reverse();
-                    mWindingOrder = value;
-                }
+                if (index == 0) X = value;
+                else if (index == 1) Y = value;
+                else if (index == 2) Z = value;
+                else throw new IndexOutOfRangeException();
             }
         }
-        public double Epsilon { get { return mEpsilon; } }
-        public Point2D this[int index]
-        {
-            get { return mPoints[index]; }
-            set { mPoints[index] = value; }
-        }
-        public int Count { get { return mPoints.Count; } }
-        public virtual bool IsReadOnly { get { return false; } }
 
-
-        public Point2DList()
+        public static void Sub(ref Vec3 lhs, ref Vec3 rhs, out Vec3 result)
         {
+            result.X = lhs.X - rhs.X;
+            result.Y = lhs.Y - rhs.Y;
+            result.Z = lhs.Z - rhs.Z;
         }
 
-
-        public Point2DList(int capacity)
+        public static void Neg(ref Vec3 v)
         {
-            mPoints.Capacity = capacity;
+            v.X = -v.X;
+            v.Y = -v.Y;
+            v.Z = -v.Z;
         }
 
-
-        public Point2DList(IList<Point2D> l)
+        public static void Dot(ref Vec3 u, ref Vec3 v, out Real dot)
         {
-            AddRange(l.GetEnumerator(), WindingOrderType.Unknown);
+            dot = u.X * v.X + u.Y * v.Y + u.Z * v.Z;
         }
 
-
-        public Point2DList(Point2DList l)
+        public static void Normalize(ref Vec3 v)
         {
-            int numPoints = l.Count;
-            for (int i = 0; i < numPoints; ++i)
-            {
-                mPoints.Add(l[i]);
-            }
-            mBoundingBox.Set(l.BoundingBox);
-            mEpsilon = l.Epsilon;
-            mWindingOrder = l.WindingOrder;
+            var len = v.X * v.X + v.Y * v.Y + v.Z * v.Z;
+            Debug.Assert(len >= 0.0f);
+            len = 1.0f / (Real)Math.Sqrt(len);
+            v.X *= len;
+            v.Y *= len;
+            v.Z *= len;
         }
 
+        public static int LongAxis(ref Vec3 v)
+        {
+            int i = 0;
+            if (Math.Abs(v.Y) > Math.Abs(v.X)) i = 1;
+            if (Math.Abs(v.Z) > Math.Abs(i == 0 ? v.X : v.Y)) i = 2;
+            return i;
+        }
 
         public override string ToString()
         {
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < Count; i++)
+            return string.Format("{0}, {1}, {2}", X, Y, Z);
+        }
+    }
+
+    internal static class MeshUtils
+    {
+        public const int Undef = ~0;
+
+        public abstract class Pooled<T> where T : Pooled<T>, new()
+        {
+            private static Stack<T> _stack;
+
+            public abstract void Reset();
+            public virtual void OnFree() {}
+
+            public static T Create()
             {
-                builder.Append(this[i].ToString());
-                if (i < Count - 1)
+                if (_stack != null && _stack.Count > 0)
                 {
-                    builder.Append(" ");
+                    return _stack.Pop();
+                }
+                return new T();
+            }
+
+            public void Free()
+            {
+                OnFree();
+                Reset();
+                if (_stack == null)
+                {
+                    _stack = new Stack<T>();
+                }
+                _stack.Push((T)this);
+            }
+        }
+
+        public class Vertex : Pooled<Vertex>
+        {
+            internal Vertex _prev, _next;
+            internal Edge _anEdge;
+
+            internal Vec3 _coords;
+            internal Real _s, _t;
+            internal PQHandle _pqHandle;
+            internal int _n;
+            internal object _data;
+
+            public override void Reset()
+            {
+                _prev = _next = null;
+                _anEdge = null;
+                _coords = Vec3.Zero;
+                _s = 0;
+                _t = 0;
+                _pqHandle = new PQHandle();
+                _n = 0;
+                _data = null;
+            }
+        }
+
+        public class Face : Pooled<Face>
+        {
+            internal Face _prev, _next;
+            internal Edge _anEdge;
+
+            internal Face _trail;
+            internal int _n;
+            internal bool _marked, _inside;
+
+            internal int VertsCount
+            {
+                get
+                {
+                    int n = 0;
+                    var eCur = _anEdge;
+                    do {
+                        n++;
+                        eCur = eCur._Lnext;
+                    } while (eCur != _anEdge);
+                    return n;
                 }
             }
-            return builder.ToString();
-        }
 
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return mPoints.GetEnumerator();
-        }
-
-        
-        IEnumerator<Point2D> IEnumerable<Point2D>.GetEnumerator()
-        {
-            return new Point2DEnumerator(mPoints);
-        }
-        
-
-        public void Clear()
-        {
-            mPoints.Clear();
-            mBoundingBox.Clear();
-            mEpsilon = MathUtil.EPSILON;
-            mWindingOrder = WindingOrderType.Unknown;
-        }
-
-
-        public int IndexOf(Point2D p)
-        {
-            return mPoints.IndexOf(p);
-        }
-
-
-        public virtual void Add(Point2D p)
-        {
-            Add(p, -1, true);
-        }
-
-
-        protected virtual void Add(Point2D p, int idx, bool bCalcWindingOrderAndEpsilon)
-        {
-            if (idx < 0)
+            public override void Reset()
             {
-                mPoints.Add(p);
+                _prev = _next = null;
+                _anEdge = null;
+                _trail = null;
+                _n = 0;
+                _marked = false;
+                _inside = false;
+            }
+        }
+
+        public struct EdgePair
+        {
+            internal Edge _e, _eSym;
+
+            public static EdgePair Create()
+            {
+                var pair = new MeshUtils.EdgePair();
+                pair._e = MeshUtils.Edge.Create();
+                pair._e._pair = pair;
+                pair._eSym = MeshUtils.Edge.Create();
+                pair._eSym._pair = pair;
+                return pair;
+            }
+
+            public void Reset()
+            {
+                _e = _eSym = null;
+            }
+        }
+
+        public class Edge : Pooled<Edge>
+        {
+            internal EdgePair _pair;
+            internal Edge _next, _Sym, _Onext, _Lnext;
+            internal Vertex _Org;
+            internal Face _Lface;
+            internal Tess.ActiveRegion _activeRegion;
+            internal int _winding;
+
+            internal Face _Rface { get { return _Sym._Lface; } set { _Sym._Lface = value; } }
+            internal Vertex _Dst { get { return _Sym._Org; }  set { _Sym._Org = value; } }
+
+            internal Edge _Oprev { get { return _Sym._Lnext; } set { _Sym._Lnext = value; } }
+            internal Edge _Lprev { get { return _Onext._Sym; } set { _Onext._Sym = value; } }
+            internal Edge _Dprev { get { return _Lnext._Sym; } set { _Lnext._Sym = value; } }
+            internal Edge _Rprev { get { return _Sym._Onext; } set { _Sym._Onext = value; } }
+            internal Edge _Dnext { get { return _Rprev._Sym; } set { _Rprev._Sym = value; } }
+            internal Edge _Rnext { get { return _Oprev._Sym; } set { _Oprev._Sym = value; } }
+
+            internal static void EnsureFirst(ref Edge e)
+            {
+                if (e == e._pair._eSym)
+                {
+                    e = e._Sym;
+                }
+            }
+
+            public override void Reset()
+            {
+                _pair.Reset();
+                _next = _Sym = _Onext = _Lnext = null;
+                _Org = null;
+                _Lface = null;
+                _activeRegion = null;
+                _winding = 0;
+            }
+        }
+
+        /// <summary>
+        /// MakeEdge creates a new pair of half-edges which form their own loop.
+        /// No vertex or face structures are allocated, but these must be assigned
+        /// before the current edge operation is completed.
+        /// </summary>
+        public static Edge MakeEdge(Edge eNext)
+        {
+            Debug.Assert(eNext != null);
+
+            var pair = EdgePair.Create();
+            var e = pair._e;
+            var eSym = pair._eSym;
+
+            // Make sure eNext points to the first edge of the edge pair
+            Edge.EnsureFirst(ref eNext);
+
+            // Insert in circular doubly-linked list before eNext.
+            // Note that the prev pointer is stored in Sym->next.
+            var ePrev = eNext._Sym._next;
+            eSym._next = ePrev;
+            ePrev._Sym._next = e;
+            e._next = eNext;
+            eNext._Sym._next = eSym;
+
+            e._Sym = eSym;
+            e._Onext = e;
+            e._Lnext = eSym;
+            e._Org = null;
+            e._Lface = null;
+            e._winding = 0;
+            e._activeRegion = null;
+
+            eSym._Sym = e;
+            eSym._Onext = eSym;
+            eSym._Lnext = e;
+            eSym._Org = null;
+            eSym._Lface = null;
+            eSym._winding = 0;
+            eSym._activeRegion = null;
+
+            return e;
+        }
+
+        /// <summary>
+        /// Splice( a, b ) is best described by the Guibas/Stolfi paper or the
+        /// CS348a notes (see Mesh.cs). Basically it modifies the mesh so that
+        /// a->Onext and b->Onext are exchanged. This can have various effects
+        /// depending on whether a and b belong to different face or vertex rings.
+        /// For more explanation see Mesh.Splice().
+        /// </summary>
+        public static void Splice(Edge a, Edge b)
+        {
+            var aOnext = a._Onext;
+            var bOnext = b._Onext;
+
+            aOnext._Sym._Lnext = b;
+            bOnext._Sym._Lnext = a;
+            a._Onext = bOnext;
+            b._Onext = aOnext;
+        }
+
+        /// <summary>
+        /// MakeVertex( eOrig, vNext ) attaches a new vertex and makes it the
+        /// origin of all edges in the vertex loop to which eOrig belongs. "vNext" gives
+        /// a place to insert the new vertex in the global vertex list. We insert
+        /// the new vertex *before* vNext so that algorithms which walk the vertex
+        /// list will not see the newly created vertices.
+        /// </summary>
+        public static void MakeVertex(Edge eOrig, Vertex vNext)
+        {
+            var vNew = MeshUtils.Vertex.Create();
+
+            // insert in circular doubly-linked list before vNext
+            var vPrev = vNext._prev;
+            vNew._prev = vPrev;
+            vPrev._next = vNew;
+            vNew._next = vNext;
+            vNext._prev = vNew;
+
+            vNew._anEdge = eOrig;
+            // leave coords, s, t undefined
+
+            // fix other edges on this vertex loop
+            var e = eOrig;
+            do {
+                e._Org = vNew;
+                e = e._Onext;
+            } while (e != eOrig);
+        }
+
+        /// <summary>
+        /// MakeFace( eOrig, fNext ) attaches a new face and makes it the left
+        /// face of all edges in the face loop to which eOrig belongs. "fNext" gives
+        /// a place to insert the new face in the global face list. We insert
+        /// the new face *before* fNext so that algorithms which walk the face
+        /// list will not see the newly created faces.
+        /// </summary>
+        public static void MakeFace(Edge eOrig, Face fNext)
+        {
+            var fNew = MeshUtils.Face.Create();
+
+            // insert in circular doubly-linked list before fNext
+            var fPrev = fNext._prev;
+            fNew._prev = fPrev;
+            fPrev._next = fNew;
+            fNew._next = fNext;
+            fNext._prev = fNew;
+
+            fNew._anEdge = eOrig;
+            fNew._trail = null;
+            fNew._marked = false;
+
+            // The new face is marked "inside" if the old one was. This is a
+            // convenience for the common case where a face has been split in two.
+            fNew._inside = fNext._inside;
+
+            // fix other edges on this face loop
+            var e = eOrig;
+            do {
+                e._Lface = fNew;
+                e = e._Lnext;
+            } while (e != eOrig);
+        }
+
+        /// <summary>
+        /// KillEdge( eDel ) destroys an edge (the half-edges eDel and eDel->Sym),
+        /// and removes from the global edge list.
+        /// </summary>
+        public static void KillEdge(Edge eDel)
+        {
+            // Half-edges are allocated in pairs, see EdgePair above
+            Edge.EnsureFirst(ref eDel);
+
+            // delete from circular doubly-linked list
+            var eNext = eDel._next;
+            var ePrev = eDel._Sym._next;
+            eNext._Sym._next = ePrev;
+            ePrev._Sym._next = eNext;
+
+            eDel.Free();
+        }
+
+        /// <summary>
+        /// KillVertex( vDel ) destroys a vertex and removes it from the global
+        /// vertex list. It updates the vertex loop to point to a given new vertex.
+        /// </summary>
+        public static void KillVertex(Vertex vDel, Vertex newOrg)
+        {
+            var eStart = vDel._anEdge;
+
+            // change the origin of all affected edges
+            var e = eStart;
+            do {
+                e._Org = newOrg;
+                e = e._Onext;
+            } while (e != eStart);
+
+            // delete from circular doubly-linked list
+            var vPrev = vDel._prev;
+            var vNext = vDel._next;
+            vNext._prev = vPrev;
+            vPrev._next = vNext;
+
+            vDel.Free();
+        }
+
+        /// <summary>
+        /// KillFace( fDel ) destroys a face and removes it from the global face
+        /// list. It updates the face loop to point to a given new face.
+        /// </summary>
+        public static void KillFace(Face fDel, Face newLFace)
+        {
+            var eStart = fDel._anEdge;
+
+            // change the left face of all affected edges
+            var e = eStart;
+            do {
+                e._Lface = newLFace;
+                e = e._Lnext;
+            } while (e != eStart);
+
+            // delete from circular doubly-linked list
+            var fPrev = fDel._prev;
+            var fNext = fDel._next;
+            fNext._prev = fPrev;
+            fPrev._next = fNext;
+
+            fDel.Free();
+        }
+
+        /// <summary>
+        /// Return signed area of face.
+        /// </summary>
+        public static Real FaceArea(Face f)
+        {
+            Real area = 0;
+            var e = f._anEdge;
+            do
+            {
+                area += (e._Org._s - e._Dst._s) * (e._Org._t + e._Dst._t);
+                e = e._Lnext;
+            } while (e != f._anEdge);
+            return area;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// PriorityHeap.cs
+
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
+
+// using System;
+// using System.Diagnostics;
+
+#if DOUBLE
+namespace LibTessDotNet.Double
+#else
+namespace LibTessDotNet
+#endif
+{
+    internal struct PQHandle
+    {
+        public static readonly int Invalid = 0x0fffffff;
+        internal int _handle;
+    }
+
+    internal class PriorityHeap<TValue> where TValue : class
+    {
+        public delegate bool LessOrEqual(TValue lhs, TValue rhs);
+
+        protected class HandleElem
+        {
+            internal TValue _key;
+            internal int _node;
+        }
+
+        private LessOrEqual _leq;
+        private int[] _nodes;
+        private HandleElem[] _handles;
+        private int _size, _max;
+        private int _freeList;
+        private bool _initialized;
+
+        public bool Empty { get { return _size == 0; } }
+
+        public PriorityHeap(int initialSize, LessOrEqual leq)
+        {
+            _leq = leq;
+
+            _nodes = new int[initialSize + 1];
+            _handles = new HandleElem[initialSize + 1];
+
+            _size = 0;
+            _max = initialSize;
+            _freeList = 0;
+            _initialized = false;
+
+            _nodes[1] = 1;
+            _handles[1] = new HandleElem { _key = null };
+        }
+
+        private void FloatDown(int curr)
+        {
+            int child;
+            int hCurr, hChild;
+
+            hCurr = _nodes[curr];
+            while (true)
+            {
+                child = curr << 1;
+                if (child < _size && _leq(_handles[_nodes[child + 1]]._key, _handles[_nodes[child]]._key))
+                {
+                    ++child;
+                }
+
+                Debug.Assert(child <= _max);
+
+                hChild = _nodes[child];
+                if (child > _size || _leq(_handles[hCurr]._key, _handles[hChild]._key))
+                {
+                    _nodes[curr] = hCurr;
+                    _handles[hCurr]._node = curr;
+                    break;
+                }
+
+                _nodes[curr] = hChild;
+                _handles[hChild]._node = curr;
+                curr = child;
+            }
+        }
+
+        private void FloatUp(int curr)
+        {
+            int parent;
+            int hCurr, hParent;
+
+            hCurr = _nodes[curr];
+            while (true)
+            {
+                parent = curr >> 1;
+                hParent = _nodes[parent];
+                if (parent == 0 || _leq(_handles[hParent]._key, _handles[hCurr]._key))
+                {
+                    _nodes[curr] = hCurr;
+                    _handles[hCurr]._node = curr;
+                    break;
+                }
+                _nodes[curr] = hParent;
+                _handles[hParent]._node = curr;
+                curr = parent;
+            }
+        }
+
+        public void Init()
+        {
+            for (int i = _size; i >= 1; --i)
+            {
+                FloatDown(i);
+            }
+            _initialized = true;
+        }
+
+        public PQHandle Insert(TValue value)
+        {
+            int curr = ++_size;
+            if ((curr * 2) > _max)
+            {
+                _max <<= 1;
+                Array.Resize(ref _nodes, _max + 1);
+                Array.Resize(ref _handles, _max + 1);
+            }
+
+            int free;
+            if (_freeList == 0)
+            {
+                free = curr;
             }
             else
             {
-                mPoints.Insert(idx, p);
+                free = _freeList;
+                _freeList = _handles[free]._node;
             }
-            mBoundingBox.AddPoint(p);
-            if (bCalcWindingOrderAndEpsilon)
+
+            _nodes[curr] = free;
+            if (_handles[free] == null)
             {
-                if (mWindingOrder == WindingOrderType.Unknown)
-                {
-                    mWindingOrder = CalculateWindingOrder();
-                }
-                mEpsilon = CalculateEpsilon();
+                _handles[free] = new HandleElem { _key = value, _node = curr };
             }
+            else
+            {
+                _handles[free]._node = curr;
+                _handles[free]._key = value;
+            }
+
+            if (_initialized)
+            {
+                FloatUp(curr);
+            }
+
+            Debug.Assert(free != PQHandle.Invalid);
+            return new PQHandle { _handle = free };
         }
 
-
-        public virtual void AddRange(Point2DList l)
+        public TValue ExtractMin()
         {
-            AddRange(l.mPoints.GetEnumerator(), l.WindingOrder);
+            Debug.Assert(_initialized);
+
+            int hMin = _nodes[1];
+            TValue min = _handles[hMin]._key;
+
+            if (_size > 0)
+            {
+                _nodes[1] = _nodes[_size];
+                _handles[_nodes[1]]._node = 1;
+
+                _handles[hMin]._key = null;
+                _handles[hMin]._node = _freeList;
+                _freeList = hMin;
+
+                if (--_size > 0)
+                {
+                    FloatDown(1);
+                }
+            }
+
+            return min;
         }
 
-
-        public virtual void AddRange(IEnumerator<Point2D> iter, WindingOrderType windingOrder)
+        public TValue Minimum()
         {
-            if (iter == null)
-            {
-                return;
-            }
+            Debug.Assert(_initialized);
+            return _handles[_nodes[1]]._key;
+        }
 
-            if (mWindingOrder == WindingOrderType.Unknown && Count == 0)
+        public void Remove(PQHandle handle)
+        {
+            Debug.Assert(_initialized);
+
+            int hCurr = handle._handle;
+            Debug.Assert(hCurr >= 1 && hCurr <= _max && _handles[hCurr]._key != null);
+
+            int curr = _handles[hCurr]._node;
+            _nodes[curr] = _nodes[_size];
+            _handles[_nodes[curr]]._node = curr;
+
+            if (curr <= --_size)
             {
-                mWindingOrder = windingOrder;
-            }
-            bool bReverseReadOrder = (WindingOrder != WindingOrderType.Unknown) && (windingOrder != WindingOrderType.Unknown) && (WindingOrder != windingOrder);
-            bool bAddedFirst = true;
-            int startCount = mPoints.Count;
-            iter.Reset();
-            while (iter.MoveNext())
-            {
-                if (!bAddedFirst)
+                if (curr <= 1 || _leq(_handles[_nodes[curr >> 1]]._key, _handles[_nodes[curr]]._key))
                 {
-                    bAddedFirst = true;
-                    mPoints.Add(iter.Current);
-                }
-                else if (bReverseReadOrder)
-                {
-                    mPoints.Insert(startCount, iter.Current);
+                    FloatDown(curr);
                 }
                 else
                 {
-                    mPoints.Add(iter.Current);
+                    FloatUp(curr);
                 }
-                mBoundingBox.AddPoint(iter.Current);
-            }
-            if (mWindingOrder == WindingOrderType.Unknown && windingOrder == WindingOrderType.Unknown)
-            {
-                mWindingOrder = CalculateWindingOrder();
-            }
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        public virtual void Insert(int idx, Point2D item)
-        {
-            Add(item, idx, true);
-        }
-
-
-        public virtual bool Remove(Point2D p)
-        {
-            if (mPoints.Remove(p))
-            {
-                CalculateBounds();
-                mEpsilon = CalculateEpsilon();
-                return true;
             }
 
-            return false;
+            _handles[hCurr]._key = null;
+            _handles[hCurr]._node = _freeList;
+            _freeList = hCurr;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// PriorityQueue.cs
+
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+
+#if DOUBLE
+namespace LibTessDotNet.Double
+#else
+namespace LibTessDotNet
+#endif
+{
+    internal class PriorityQueue<TValue> where TValue : class
+    {
+        private PriorityHeap<TValue>.LessOrEqual _leq;
+        private PriorityHeap<TValue> _heap;
+        private TValue[] _keys;
+        private int[] _order;
+
+        private int _size, _max;
+        private bool _initialized;
+
+        public bool Empty { get { return _size == 0 && _heap.Empty; } }
+
+        public PriorityQueue(int initialSize, PriorityHeap<TValue>.LessOrEqual leq)
+        {
+            _leq = leq;
+            _heap = new PriorityHeap<TValue>(initialSize, leq);
+
+            _keys = new TValue[initialSize];
+
+            _size = 0;
+            _max = initialSize;
+            _initialized = false;
         }
 
-
-        public virtual void RemoveAt(int idx)
+        class StackItem
         {
-            if (idx < 0 || idx >= Count)
+            internal int p, r;
+        };
+
+        static void Swap(ref int a, ref int b)
+        {
+            int tmp = a;
+            a = b;
+            b = tmp;
+        }
+
+        public void Init()
+        {
+            var stack = new Stack<StackItem>();
+            int p, r, i, j, piv;
+            uint seed = 2016473283;
+
+            p = 0;
+            r = _size - 1;
+            _order = new int[_size + 1];
+            for (piv = 0, i = p; i <= r; ++piv, ++i)
             {
+                _order[i] = piv;
+            }
+
+            stack.Push(new StackItem { p = p, r = r });
+            while (stack.Count > 0)
+            {
+                var top = stack.Pop();
+                p = top.p;
+                r = top.r;
+
+                while (r > p + 10)
+                {
+                    seed = seed * 1539415821 + 1;
+                    i = p + (int)(seed % (r - p + 1));
+                    piv = _order[i];
+                    _order[i] = _order[p];
+                    _order[p] = piv;
+                    i = p - 1;
+                    j = r + 1;
+                    do {
+                        do { ++i; } while (!_leq(_keys[_order[i]], _keys[piv]));
+                        do { --j; } while (!_leq(_keys[piv], _keys[_order[j]]));
+                        Swap(ref _order[i], ref _order[j]);
+                    } while (i < j);
+                    Swap(ref _order[i], ref _order[j]);
+                    if (i - p < r - j)
+                    {
+                        stack.Push(new StackItem { p = j + 1, r = r });
+                        r = i - 1;
+                    }
+                    else
+                    {
+                        stack.Push(new StackItem { p = p, r = i - 1 });
+                        p = j + 1;
+                    }
+                }
+                for (i = p + 1; i <= r; ++i)
+                {
+                    piv = _order[i];
+                    for (j = i; j > p && !_leq(_keys[piv], _keys[_order[j - 1]]); --j)
+                    {
+                        _order[j] = _order[j - 1];
+                    }
+                    _order[j] = piv;
+                }
+            }
+
+#if DEBUG
+            p = 0;
+            r = _size - 1;
+            for (i = p; i < r; ++i)
+            {
+                Debug.Assert(_leq(_keys[_order[i + 1]], _keys[_order[i]]), "Wrong sort");
+            }
+#endif
+
+            _max = _size;
+            _initialized = true;
+            _heap.Init();
+        }
+
+        public PQHandle Insert(TValue value)
+        {
+            if (_initialized)
+            {
+                return _heap.Insert(value);
+            }
+
+            int curr = _size;
+            if (++_size >= _max)
+            {
+                _max <<= 1;
+                Array.Resize(ref _keys, _max);
+            }
+
+            _keys[curr] = value;
+            return new PQHandle { _handle = -(curr + 1) };
+        }
+
+        public TValue ExtractMin()
+        {
+            Debug.Assert(_initialized);
+
+            if (_size == 0)
+            {
+                return _heap.ExtractMin();
+            }
+            TValue sortMin = _keys[_order[_size - 1]];
+            if (!_heap.Empty)
+            {
+                TValue heapMin = _heap.Minimum();
+                if (_leq(heapMin, sortMin))
+                    return _heap.ExtractMin();
+            }
+            do {
+                --_size;
+            } while (_size > 0 && _keys[_order[_size - 1]] == null);
+
+            return sortMin;
+        }
+
+        public TValue Minimum()
+        {
+            Debug.Assert(_initialized);
+
+            if (_size == 0)
+            {
+                return _heap.Minimum();
+            }
+            TValue sortMin = _keys[_order[_size - 1]];
+            if (!_heap.Empty)
+            {
+                TValue heapMin = _heap.Minimum();
+                if (_leq(heapMin, sortMin))
+                    return heapMin;
+            }
+            return sortMin;
+        }
+
+        public void Remove(PQHandle handle)
+        {
+            Debug.Assert(_initialized);
+
+            int curr = handle._handle;
+            if (curr >= 0)
+            {
+                _heap.Remove(handle);
                 return;
             }
-            mPoints.RemoveAt(idx);
-            CalculateBounds();
-            mEpsilon = CalculateEpsilon();
-        }
+            curr = -(curr + 1);
+            Debug.Assert(curr < _max && _keys[curr] != null);
 
-
-        public virtual void RemoveRange(int idxStart, int count)
-        {
-            if (idxStart < 0 || idxStart >= Count)
+            _keys[curr] = null;
+            while (_size > 0 && _keys[_order[_size - 1]] == null)
             {
-                return;
-            }
-            if (count == 0)
-            {
-                return;
-            }
-
-            mPoints.RemoveRange(idxStart, count);
-            CalculateBounds();
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        public bool Contains(Point2D p)
-        {
-            return mPoints.Contains(p);
-        }
-
-
-        public void CopyTo(Point2D[] array, int arrayIndex)
-        {
-            int numElementsToCopy = Math.Min(Count, array.Length - arrayIndex);
-            for (int i = 0; i < numElementsToCopy; ++i)
-            {
-                array[arrayIndex + i] = mPoints[i];
+                --_size;
             }
         }
+    }
+}
 
+// ----------------------------------------------------------------------
+// Sweep.cs
 
-        public void CalculateBounds()
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
+
+// using System;
+// using System.Diagnostics;
+
+#if DOUBLE
+// using Real = System.Double;
+namespace LibTessDotNet.Double
+#else
+// using Real = System.Single;
+namespace LibTessDotNet
+#endif
+{
+    public partial class Tess
+    {
+        internal class ActiveRegion
         {
-            mBoundingBox.Clear();
-            foreach (Point2D pt in mPoints)
-            {
-                mBoundingBox.AddPoint(pt);
-            }
+            internal MeshUtils.Edge _eUp;
+            internal Dict<ActiveRegion>.Node _nodeUp;
+            internal int _windingNumber;
+            internal bool _inside, _sentinel, _dirty, _fixUpperEdge;
         }
 
-
-        public double CalculateEpsilon()
+        private ActiveRegion RegionBelow(ActiveRegion reg)
         {
-            return Math.Max(Math.Min(mBoundingBox.Width, mBoundingBox.Height) * 0.001f, MathUtil.EPSILON);
+            return reg._nodeUp._prev._key;
         }
 
-
-        public WindingOrderType CalculateWindingOrder()
+        private ActiveRegion RegionAbove(ActiveRegion reg)
         {
-            // the sign of the 'area' of the polygon is all we are interested in.
-            double area = GetSignedArea();
-            if (area < 0.0)
-            {
-                return WindingOrderType.CW;
-            }
-            else if (area > 0.0)
-            {
-                return WindingOrderType.CCW;
-            }
-
-            // error condition - not even verts to calculate, non-simple poly, etc.
-            return WindingOrderType.Unknown;
+            return reg._nodeUp._next._key;
         }
-
-
-        public int NextIndex(int index)
-        {
-            if (index == Count - 1)
-            {
-                return 0;
-            }
-            return index + 1;
-        }
-
 
         /// <summary>
-        /// Gets the previous index.
+        /// Both edges must be directed from right to left (this is the canonical
+        /// direction for the upper edge of each region).
+        /// 
+        /// The strategy is to evaluate a "t" value for each edge at the
+        /// current sweep line position, given by tess->event. The calculations
+        /// are designed to be very stable, but of course they are not perfect.
+        /// 
+        /// Special case: if both edge destinations are at the sweep event,
+        /// we sort the edges by slope (they would otherwise compare equally).
         /// </summary>
-        /// <param name="index">The index.</param>
-        /// <returns></returns>
-        public int PreviousIndex(int index)
+        private bool EdgeLeq(ActiveRegion reg1, ActiveRegion reg2)
         {
-            if (index == 0)
+            var e1 = reg1._eUp;
+            var e2 = reg2._eUp;
+
+            if (e1._Dst == _event)
             {
-                return Count - 1;
+                if (e2._Dst == _event)
+                {
+                    // Two edges right of the sweep line which meet at the sweep event.
+                    // Sort them by slope.
+                    if (Geom.VertLeq(e1._Org, e2._Org))
+                    {
+                        return Geom.EdgeSign(e2._Dst, e1._Org, e2._Org) <= 0.0f;
+                    }
+                    return Geom.EdgeSign(e1._Dst, e2._Org, e1._Org) >= 0.0f;
+                }
+                return Geom.EdgeSign(e2._Dst, _event, e2._Org) <= 0.0f;
             }
-            return index - 1;
+            if (e2._Dst == _event)
+            {
+                return Geom.EdgeSign(e1._Dst, _event, e1._Org) >= 0.0f;
+            }
+
+            // General case - compute signed distance *from* e1, e2 to event
+            var t1 = Geom.EdgeEval(e1._Dst, _event, e1._Org);
+            var t2 = Geom.EdgeEval(e2._Dst, _event, e2._Org);
+            return (t1 >= t2);
         }
 
+        private void DeleteRegion(ActiveRegion reg)
+        {
+            if (reg._fixUpperEdge)
+            {
+                // It was created with zero winding number, so it better be
+                // deleted with zero winding number (ie. it better not get merged
+                // with a real edge).
+                Debug.Assert(reg._eUp._winding == 0);
+            }
+            reg._eUp._activeRegion = null;
+            _dict.Remove(reg._nodeUp);
+        }
 
         /// <summary>
-        /// Gets the signed area.
+        /// Replace an upper edge which needs fixing (see ConnectRightVertex).
         /// </summary>
-        /// <returns></returns>
-        public double GetSignedArea()
+        private void FixUpperEdge(ActiveRegion reg, MeshUtils.Edge newEdge)
         {
-            double area = 0.0;
-            for (int i = 0; i < Count; i++)
-            {
-                int j = (i + 1) % Count;
-                area += this[i].X * this[j].Y;
-                area -= this[i].Y * this[j].X;
-            }
-            area /= 2.0f;
-
-            return area;
+            Debug.Assert(reg._fixUpperEdge);
+            _mesh.Delete(reg._eUp);
+            reg._fixUpperEdge = false;
+            reg._eUp = newEdge;
+            newEdge._activeRegion = reg;
         }
 
+        private ActiveRegion TopLeftRegion(ActiveRegion reg)
+        {
+            var org = reg._eUp._Org;
+
+            // Find the region above the uppermost edge with the same origin
+            do {
+                reg = RegionAbove(reg);
+            } while (reg._eUp._Org == org);
+
+            // If the edge above was a temporary edge introduced by ConnectRightVertex,
+            // now is the time to fix it.
+            if (reg._fixUpperEdge)
+            {
+                var e = _mesh.Connect(RegionBelow(reg)._eUp._Sym, reg._eUp._Lnext);
+                FixUpperEdge(reg, e);
+                reg = RegionAbove(reg);
+            }
+
+            return reg;
+        }
+
+        private ActiveRegion TopRightRegion(ActiveRegion reg)
+        {
+            var dst = reg._eUp._Dst;
+
+            // Find the region above the uppermost edge with the same destination
+            do {
+                reg = RegionAbove(reg);
+            } while (reg._eUp._Dst == dst);
+
+            return reg;
+        }
 
         /// <summary>
-        /// Gets the area.
+        /// Add a new active region to the sweep line, *somewhere* below "regAbove"
+        /// (according to where the new edge belongs in the sweep-line dictionary).
+        /// The upper edge of the new region will be "eNewUp".
+        /// Winding number and "inside" flag are not updated.
         /// </summary>
-        /// <returns></returns>
-        public double GetArea()
+        private ActiveRegion AddRegionBelow(ActiveRegion regAbove, MeshUtils.Edge eNewUp)
         {
-            int i;
-            double area = 0;
+            var regNew = new ActiveRegion();
 
-            for (i = 0; i < Count; i++)
-            {
-                int j = (i + 1) % Count;
-                area += this[i].X * this[j].Y;
-                area -= this[i].Y * this[j].X;
-            }
-            area /= 2.0f;
-            return (area < 0 ? -area : area);
+            regNew._eUp = eNewUp;
+            regNew._nodeUp = _dict.InsertBefore(regAbove._nodeUp, regNew);
+            regNew._fixUpperEdge = false;
+            regNew._sentinel = false;
+            regNew._dirty = false;
+
+            eNewUp._activeRegion = regNew;
+
+            return regNew;
         }
 
+        private void ComputeWinding(ActiveRegion reg)
+        {
+            reg._windingNumber = RegionAbove(reg)._windingNumber + reg._eUp._winding;
+            reg._inside = Geom.IsWindingInside(_windingRule, reg._windingNumber);
+        }
 
         /// <summary>
-        /// Gets the centroid.
+        /// Delete a region from the sweep line. This happens when the upper
+        /// and lower chains of a region meet (at a vertex on the sweep line).
+        /// The "inside" flag is copied to the appropriate mesh face (we could
+        /// not do this before -- since the structure of the mesh is always
+        /// changing, this face may not have even existed until now).
         /// </summary>
-        /// <returns></returns>
-        public Point2D GetCentroid()
+        private void FinishRegion(ActiveRegion reg)
         {
-            // Same algorithm is used by Box2D
+            var e = reg._eUp;
+            var f = e._Lface;
 
-            Point2D c = new Point2D();
-            double area = 0.0f;
-
-            const double inv3 = 1.0 / 3.0;
-            Point2D pRef = new Point2D();
-            for (int i = 0; i < Count; ++i)
-            {
-                // Triangle vertices.
-                Point2D p1 = pRef;
-                Point2D p2 = this[i];
-                Point2D p3 = i + 1 < Count ? this[i + 1] : this[0];
-
-                Point2D e1 = p2 - p1;
-                Point2D e2 = p3 - p1;
-
-                double D = Point2D.Cross(e1, e2);
-
-                double triangleArea = 0.5f * D;
-                area += triangleArea;
-
-                // Area weighted centroid
-                c += triangleArea * inv3 * (p1 + p2 + p3);
-            }
-
-            // Centroid
-            c *= 1.0f / area;
-            return c;
+            f._inside = reg._inside;
+            f._anEdge = e;
+            DeleteRegion(reg);
         }
-
-
-        //    /// <summary>
-        /// Translates the vertices with the specified vector.
-        /// </summary>
-        /// <param name="vector">The vector.</param>
-        public void Translate(Point2D vector)
-        {
-            for (int i = 0; i < Count; i++)
-            {
-                this[i] += vector;
-            }
-        }
-
 
         /// <summary>
-        /// Scales the vertices with the specified vector.
+        /// We are given a vertex with one or more left-going edges.  All affected
+        /// edges should be in the edge dictionary.  Starting at regFirst->eUp,
+        /// we walk down deleting all regions where both edges have the same
+        /// origin vOrg.  At the same time we copy the "inside" flag from the
+        /// active region to the face, since at this point each face will belong
+        /// to at most one region (this was not necessarily true until this point
+        /// in the sweep).  The walk stops at the region above regLast; if regLast
+        /// is null we walk as far as possible.  At the same time we relink the
+        /// mesh if necessary, so that the ordering of edges around vOrg is the
+        /// same as in the dictionary.
         /// </summary>
-        /// <param name="value">The Value.</param>
-        public void Scale(Point2D value)
+        private MeshUtils.Edge FinishLeftRegions(ActiveRegion regFirst, ActiveRegion regLast)
         {
-            for (int i = 0; i < Count; i++)
-            {
-                this[i] *= value;
-            }
-        }
+            var regPrev = regFirst;
+            var ePrev = regFirst._eUp;
 
+            while (regPrev != regLast)
+            {
+                regPrev._fixUpperEdge = false;	// placement was OK
+                var reg = RegionBelow(regPrev);
+                var e = reg._eUp;
+                if (e._Org != ePrev._Org)
+                {
+                    if (!reg._fixUpperEdge)
+                    {
+                        // Remove the last left-going edge.  Even though there are no further
+                        // edges in the dictionary with this origin, there may be further
+                        // such edges in the mesh (if we are adding left edges to a vertex
+                        // that has already been processed).  Thus it is important to call
+                        // FinishRegion rather than just DeleteRegion.
+                        FinishRegion(regPrev);
+                        break;
+                    }
+                    // If the edge below was a temporary edge introduced by
+                    // ConnectRightVertex, now is the time to fix it.
+                    e = _mesh.Connect(ePrev._Lprev, e._Sym);
+                    FixUpperEdge(reg, e);
+                }
+
+                // Relink edges so that ePrev.Onext == e
+                if (ePrev._Onext != e)
+                {
+                    _mesh.Splice(e._Oprev, e);
+                    _mesh.Splice(ePrev, e);
+                }
+                FinishRegion(regPrev); // may change reg.eUp
+                ePrev = reg._eUp;
+                regPrev = reg;
+            }
+
+            return ePrev;
+        }
 
         /// <summary>
-        /// Rotate the vertices with the defined value in radians.
+        /// Purpose: insert right-going edges into the edge dictionary, and update
+        /// winding numbers and mesh connectivity appropriately.  All right-going
+        /// edges share a common origin vOrg.  Edges are inserted CCW starting at
+        /// eFirst; the last edge inserted is eLast.Oprev.  If vOrg has any
+        /// left-going edges already processed, then eTopLeft must be the edge
+        /// such that an imaginary upward vertical segment from vOrg would be
+        /// contained between eTopLeft.Oprev and eTopLeft; otherwise eTopLeft
+        /// should be null.
         /// </summary>
-        /// <param name="value">The amount to rotate by in radians.</param>
-        public void Rotate(double radians)
+        private void AddRightEdges(ActiveRegion regUp, MeshUtils.Edge eFirst, MeshUtils.Edge eLast, MeshUtils.Edge eTopLeft, bool cleanUp)
         {
-            // kickin' it old-skool since I don't want to create a Matrix class for now.
-            double cosr = Math.Cos(radians);
-            double sinr = Math.Sin(radians);
-            foreach (Point2D p in mPoints)
+            bool firstTime = true;
+
+            var e = eFirst; do
             {
-                double xold = p.X;
-                p.X = xold * cosr - p.Y * sinr;
-                p.Y = xold * sinr + p.Y * cosr;
+                Debug.Assert(Geom.VertLeq(e._Org, e._Dst));
+                AddRegionBelow(regUp, e._Sym);
+                e = e._Onext;
+            } while (e != eLast);
+
+            // Walk *all* right-going edges from e.Org, in the dictionary order,
+            // updating the winding numbers of each region, and re-linking the mesh
+            // edges to match the dictionary ordering (if necessary).
+            if (eTopLeft == null)
+            {
+                eTopLeft = RegionBelow(regUp)._eUp._Rprev;
+            }
+
+            ActiveRegion regPrev = regUp, reg;
+            var ePrev = eTopLeft;
+            while (true)
+            {
+                reg = RegionBelow(regPrev);
+                e = reg._eUp._Sym;
+                if (e._Org != ePrev._Org) break;
+
+                if (e._Onext != ePrev)
+                {
+                    // Unlink e from its current position, and relink below ePrev
+                    _mesh.Splice(e._Oprev, e);
+                    _mesh.Splice(ePrev._Oprev, e);
+                }
+                // Compute the winding number and "inside" flag for the new regions
+                reg._windingNumber = regPrev._windingNumber - e._winding;
+                reg._inside = Geom.IsWindingInside(_windingRule, reg._windingNumber);
+
+                // Check for two outgoing edges with same slope -- process these
+                // before any intersection tests (see example in tessComputeInterior).
+                regPrev._dirty = true;
+                if (!firstTime && CheckForRightSplice(regPrev))
+                {
+                    Geom.AddWinding(e, ePrev);
+                    DeleteRegion(regPrev);
+                    _mesh.Delete(ePrev);
+                }
+                firstTime = false;
+                regPrev = reg;
+                ePrev = e;
+            }
+            regPrev._dirty = true;
+            Debug.Assert(regPrev._windingNumber - e._winding == reg._windingNumber);
+
+            if (cleanUp)
+            {
+                // Check for intersections between newly adjacent edges.
+                WalkDirtyRegions(regPrev);
             }
         }
 
-        // A degenerate polygon is one in which some vertex lies on an edge joining two other vertices. 
-        // This can happen in one of two ways: either the vertices V(i-1), V(i), and V(i+1) can be collinear or
-        // the vertices V(i) and V(i+1) can overlap (fail to be distinct). In either of these cases, our polygon of
-        // n vertices will appear to have n - 1 or fewer -- it will have "degenerated" from an n-gon to an (n-1)-gon.
-        // (In the case of triangles, this will result in either a line segment or a point.) 
-        public bool IsDegenerate()
+        /// <summary>
+        /// Two vertices with idential coordinates are combined into one.
+        /// e1.Org is kept, while e2.Org is discarded.
+        /// </summary>
+        private void SpliceMergeVertices(MeshUtils.Edge e1, MeshUtils.Edge e2)
         {
-            if (Count < 3)
+            _mesh.Splice(e1, e2);
+        }
+
+        /// <summary>
+        /// Find some weights which describe how the intersection vertex is
+        /// a linear combination of "org" and "dest".  Each of the two edges
+        /// which generated "isect" is allocated 50% of the weight; each edge
+        /// splits the weight between its org and dst according to the
+        /// relative distance to "isect".
+        /// </summary>
+        private void VertexWeights(MeshUtils.Vertex isect, MeshUtils.Vertex org, MeshUtils.Vertex dst, out Real w0, out Real w1)
+        {
+            var t1 = Geom.VertL1dist(org, isect);
+            var t2 = Geom.VertL1dist(dst, isect);
+
+            w0 = (t2 / (t1 + t2)) / 2.0f;
+            w1 = (t1 / (t1 + t2)) / 2.0f;
+
+            isect._coords.X += w0 * org._coords.X + w1 * dst._coords.X;
+            isect._coords.Y += w0 * org._coords.Y + w1 * dst._coords.Y;
+            isect._coords.Z += w0 * org._coords.Z + w1 * dst._coords.Z;
+        }
+
+        /// <summary>
+        /// We've computed a new intersection point, now we need a "data" pointer
+        /// from the user so that we can refer to this new vertex in the
+        /// rendering callbacks.
+        /// </summary>
+        private void GetIntersectData(MeshUtils.Vertex isect, MeshUtils.Vertex orgUp, MeshUtils.Vertex dstUp, MeshUtils.Vertex orgLo, MeshUtils.Vertex dstLo)
+        {
+            isect._coords = Vec3.Zero;
+            Real w0, w1, w2, w3;
+            VertexWeights(isect, orgUp, dstUp, out w0, out w1);
+            VertexWeights(isect, orgLo, dstLo, out w2, out w3);
+
+            if (_combineCallback != null)
             {
+                isect._data = _combineCallback(
+                    isect._coords,
+                    new object[] { orgUp._data, dstUp._data, orgLo._data, dstLo._data },
+                    new Real[] { w0, w1, w2, w3 }
+                );
+            }
+        }
+
+        /// <summary>
+        /// Check the upper and lower edge of "regUp", to make sure that the
+        /// eUp->Org is above eLo, or eLo->Org is below eUp (depending on which
+        /// origin is leftmost).
+        /// 
+        /// The main purpose is to splice right-going edges with the same
+        /// dest vertex and nearly identical slopes (ie. we can't distinguish
+        /// the slopes numerically).  However the splicing can also help us
+        /// to recover from numerical errors.  For example, suppose at one
+        /// point we checked eUp and eLo, and decided that eUp->Org is barely
+        /// above eLo.  Then later, we split eLo into two edges (eg. from
+        /// a splice operation like this one).  This can change the result of
+        /// our test so that now eUp->Org is incident to eLo, or barely below it.
+        /// We must correct this condition to maintain the dictionary invariants.
+        /// 
+        /// One possibility is to check these edges for intersection again
+        /// (ie. CheckForIntersect).  This is what we do if possible.  However
+        /// CheckForIntersect requires that tess->event lies between eUp and eLo,
+        /// so that it has something to fall back on when the intersection
+        /// calculation gives us an unusable answer.  So, for those cases where
+        /// we can't check for intersection, this routine fixes the problem
+        /// by just splicing the offending vertex into the other edge.
+        /// This is a guaranteed solution, no matter how degenerate things get.
+        /// Basically this is a combinatorial solution to a numerical problem.
+        /// </summary>
+        private bool CheckForRightSplice(ActiveRegion regUp)
+        {
+            var regLo = RegionBelow(regUp);
+            var eUp = regUp._eUp;
+            var eLo = regLo._eUp;
+
+            if (Geom.VertLeq(eUp._Org, eLo._Org))
+            {
+                if (Geom.EdgeSign(eLo._Dst, eUp._Org, eLo._Org) > 0.0f)
+                {
+                    return false;
+                }
+
+                // eUp.Org appears to be below eLo
+                if (!Geom.VertEq(eUp._Org, eLo._Org))
+                {
+                    // Splice eUp._Org into eLo
+                    _mesh.SplitEdge(eLo._Sym);
+                    _mesh.Splice(eUp, eLo._Oprev);
+                    regUp._dirty = regLo._dirty = true;
+                }
+                else if (eUp._Org != eLo._Org)
+                {
+                    // merge the two vertices, discarding eUp.Org
+                    _pq.Remove(eUp._Org._pqHandle);
+                    SpliceMergeVertices(eLo._Oprev, eUp);
+                }
+            }
+            else
+            {
+                if (Geom.EdgeSign(eUp._Dst, eLo._Org, eUp._Org) < 0.0f)
+                {
+                    return false;
+                }
+
+                // eLo.Org appears to be above eUp, so splice eLo.Org into eUp
+                RegionAbove(regUp)._dirty = regUp._dirty = true;
+                _mesh.SplitEdge(eUp._Sym);
+                _mesh.Splice(eLo._Oprev, eUp);
+            }
+            return true;
+        }
+        
+        /// <summary>
+        /// Check the upper and lower edge of "regUp", to make sure that the
+        /// eUp->Dst is above eLo, or eLo->Dst is below eUp (depending on which
+        /// destination is rightmost).
+        /// 
+        /// Theoretically, this should always be true.  However, splitting an edge
+        /// into two pieces can change the results of previous tests.  For example,
+        /// suppose at one point we checked eUp and eLo, and decided that eUp->Dst
+        /// is barely above eLo.  Then later, we split eLo into two edges (eg. from
+        /// a splice operation like this one).  This can change the result of
+        /// the test so that now eUp->Dst is incident to eLo, or barely below it.
+        /// We must correct this condition to maintain the dictionary invariants
+        /// (otherwise new edges might get inserted in the wrong place in the
+        /// dictionary, and bad stuff will happen).
+        /// 
+        /// We fix the problem by just splicing the offending vertex into the
+        /// other edge.
+        /// </summary>
+        private bool CheckForLeftSplice(ActiveRegion regUp)
+        {
+            var regLo = RegionBelow(regUp);
+            var eUp = regUp._eUp;
+            var eLo = regLo._eUp;
+
+            Debug.Assert(!Geom.VertEq(eUp._Dst, eLo._Dst));
+
+            if (Geom.VertLeq(eUp._Dst, eLo._Dst))
+            {
+                if (Geom.EdgeSign(eUp._Dst, eLo._Dst, eUp._Org) < 0.0f)
+                {
+                    return false;
+                }
+
+                // eLo.Dst is above eUp, so splice eLo.Dst into eUp
+                RegionAbove(regUp)._dirty = regUp._dirty = true;
+                var e = _mesh.SplitEdge(eUp);
+                _mesh.Splice(eLo._Sym, e);
+                e._Lface._inside = regUp._inside;
+            }
+            else
+            {
+                if (Geom.EdgeSign(eLo._Dst, eUp._Dst, eLo._Org) > 0.0f)
+                {
+                    return false;
+                }
+
+                // eUp.Dst is below eLo, so splice eUp.Dst into eLo
+                regUp._dirty = regLo._dirty = true;
+                var e = _mesh.SplitEdge(eLo);
+                _mesh.Splice(eUp._Lnext, eLo._Sym);
+                e._Rface._inside = regUp._inside;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Check the upper and lower edges of the given region to see if
+        /// they intersect.  If so, create the intersection and add it
+        /// to the data structures.
+        /// 
+        /// Returns TRUE if adding the new intersection resulted in a recursive
+        /// call to AddRightEdges(); in this case all "dirty" regions have been
+        /// checked for intersections, and possibly regUp has been deleted.
+        /// </summary>
+        private bool CheckForIntersect(ActiveRegion regUp)
+        {
+            var regLo = RegionBelow(regUp);
+            var eUp = regUp._eUp;
+            var eLo = regLo._eUp;
+            var orgUp = eUp._Org;
+            var orgLo = eLo._Org;
+            var dstUp = eUp._Dst;
+            var dstLo = eLo._Dst;
+
+            Debug.Assert(!Geom.VertEq(dstLo, dstUp));
+            Debug.Assert(Geom.EdgeSign(dstUp, _event, orgUp) <= 0.0f);
+            Debug.Assert(Geom.EdgeSign(dstLo, _event, orgLo) >= 0.0f);
+            Debug.Assert(orgUp != _event && orgLo != _event);
+            Debug.Assert(!regUp._fixUpperEdge && !regLo._fixUpperEdge);
+
+            if( orgUp == orgLo )
+            {
+                // right endpoints are the same
                 return false;
             }
-            if (Count < 3)
+
+            var tMinUp = Math.Min(orgUp._t, dstUp._t);
+            var tMaxLo = Math.Max(orgLo._t, dstLo._t);
+            if( tMinUp > tMaxLo )
             {
+                // t ranges do not overlap
                 return false;
             }
-            for (int k = 0; k < Count; ++k)
+
+            if (Geom.VertLeq(orgUp, orgLo))
             {
-                int j = PreviousIndex(k);
-                if (mPoints[j].Equals(mPoints[k], Epsilon))
+                if (Geom.EdgeSign( dstLo, orgUp, orgLo ) > 0.0f)
                 {
-                    return true;
-                }
-                int i = PreviousIndex(j);
-                Orientation orientation = TriangulationUtil.Orient2d(mPoints[i], mPoints[j], mPoints[k]);
-                if (orientation == Orientation.Collinear)
-                {
-                    return true;
+                    return false;
                 }
             }
-
-            return false;
-        }
-
-
-        /// <summary>
-        /// Assuming the polygon is simple; determines whether the polygon is convex.
-        /// </summary>
-        /// <returns>
-        ///   <c>true</c> if it is convex; otherwise, <c>false</c>.
-        /// </returns>
-        public bool IsConvex()
-        {
-            bool isPositive = false;
-
-            for (int i = 0; i < Count; ++i)
+            else
             {
-                int lower = (i == 0) ? (Count - 1) : (i - 1);
-                int middle = i;
-                int upper = (i == Count - 1) ? (0) : (i + 1);
-
-                double dx0 = this[middle].X - this[lower].X;
-                double dy0 = this[middle].Y - this[lower].Y;
-                double dx1 = this[upper].X - this[middle].X;
-                double dy1 = this[upper].Y - this[middle].Y;
-
-                double cross = dx0 * dy1 - dx1 * dy0;
-
-                // Cross product should have same sign
-                // for each vertex if poly is convex.
-                bool newIsP = (cross >= 0) ? true : false;
-                if (i == 0)
-                {
-                    isPositive = newIsP;
-                }
-                else if (isPositive != newIsP)
+                if (Geom.EdgeSign( dstUp, orgLo, orgUp ) < 0.0f)
                 {
                     return false;
                 }
             }
 
-            return true;
-        }
+            // At this point the edges intersect, at least marginally
 
+            var isect = MeshUtils.Vertex.Create();
+            Geom.EdgeIntersect(dstUp, orgUp, dstLo, orgLo, isect);
+            // The following properties are guaranteed:
+            Debug.Assert(Math.Min(orgUp._t, dstUp._t) <= isect._t);
+            Debug.Assert(isect._t <= Math.Max(orgLo._t, dstLo._t));
+            Debug.Assert(Math.Min(dstLo._s, dstUp._s) <= isect._s);
+            Debug.Assert(isect._s <= Math.Max(orgLo._s, orgUp._s));
+
+            if (Geom.VertLeq(isect, _event))
+            {
+                // The intersection point lies slightly to the left of the sweep line,
+                // so move it until it''s slightly to the right of the sweep line.
+                // (If we had perfect numerical precision, this would never happen
+                // in the first place). The easiest and safest thing to do is
+                // replace the intersection by tess._event.
+                isect._s = _event._s;
+                isect._t = _event._t;
+            }
+            // Similarly, if the computed intersection lies to the right of the
+            // rightmost origin (which should rarely happen), it can cause
+            // unbelievable inefficiency on sufficiently degenerate inputs.
+            // (If you have the test program, try running test54.d with the
+            // "X zoom" option turned on).
+            var orgMin = Geom.VertLeq(orgUp, orgLo) ? orgUp : orgLo;
+            if (Geom.VertLeq(orgMin, isect))
+            {
+                isect._s = orgMin._s;
+                isect._t = orgMin._t;
+            }
+
+            if (Geom.VertEq(isect, orgUp) || Geom.VertEq(isect, orgLo))
+            {
+                // Easy case -- intersection at one of the right endpoints
+                CheckForRightSplice(regUp);
+                return false;
+            }
+
+            if (   (! Geom.VertEq(dstUp, _event)
+                && Geom.EdgeSign(dstUp, _event, isect) >= 0.0f)
+                || (! Geom.VertEq(dstLo, _event)
+                && Geom.EdgeSign(dstLo, _event, isect) <= 0.0f))
+            {
+                // Very unusual -- the new upper or lower edge would pass on the
+                // wrong side of the sweep event, or through it. This can happen
+                // due to very small numerical errors in the intersection calculation.
+                if (dstLo == _event)
+                {
+                    // Splice dstLo into eUp, and process the new region(s)
+                    _mesh.SplitEdge(eUp._Sym);
+                    _mesh.Splice(eLo._Sym, eUp);
+                    regUp = TopLeftRegion(regUp);
+                    eUp = RegionBelow(regUp)._eUp;
+                    FinishLeftRegions(RegionBelow(regUp), regLo);
+                    AddRightEdges(regUp, eUp._Oprev, eUp, eUp, true);
+                    return true;
+                }
+                if( dstUp == _event ) {
+                    /* Splice dstUp into eLo, and process the new region(s) */
+                    _mesh.SplitEdge(eLo._Sym);
+                    _mesh.Splice(eUp._Lnext, eLo._Oprev);
+                    regLo = regUp;
+                    regUp = TopRightRegion(regUp);
+                    var e = RegionBelow(regUp)._eUp._Rprev;
+                    regLo._eUp = eLo._Oprev;
+                    eLo = FinishLeftRegions(regLo, null);
+                    AddRightEdges(regUp, eLo._Onext, eUp._Rprev, e, true);
+                    return true;
+                }
+                // Special case: called from ConnectRightVertex. If either
+                // edge passes on the wrong side of tess._event, split it
+                // (and wait for ConnectRightVertex to splice it appropriately).
+                if (Geom.EdgeSign( dstUp, _event, isect ) >= 0.0f)
+                {
+                    RegionAbove(regUp)._dirty = regUp._dirty = true;
+                    _mesh.SplitEdge(eUp._Sym);
+                    eUp._Org._s = _event._s;
+                    eUp._Org._t = _event._t;
+                }
+                if (Geom.EdgeSign(dstLo, _event, isect) <= 0.0f)
+                {
+                    regUp._dirty = regLo._dirty = true;
+                    _mesh.SplitEdge(eLo._Sym);
+                    eLo._Org._s = _event._s;
+                    eLo._Org._t = _event._t;
+                }
+                // leave the rest for ConnectRightVertex
+                return false;
+            }
+
+            // General case -- split both edges, splice into new vertex.
+            // When we do the splice operation, the order of the arguments is
+            // arbitrary as far as correctness goes. However, when the operation
+            // creates a new face, the work done is proportional to the size of
+            // the new face.  We expect the faces in the processed part of
+            // the mesh (ie. eUp._Lface) to be smaller than the faces in the
+            // unprocessed original contours (which will be eLo._Oprev._Lface).
+            _mesh.SplitEdge(eUp._Sym);
+            _mesh.SplitEdge(eLo._Sym);
+            _mesh.Splice(eLo._Oprev, eUp);
+            eUp._Org._s = isect._s;
+            eUp._Org._t = isect._t;
+            eUp._Org._pqHandle = _pq.Insert(eUp._Org);
+            if (eUp._Org._pqHandle._handle == PQHandle.Invalid)
+            {
+                throw new InvalidOperationException("PQHandle should not be invalid");
+            }
+            GetIntersectData(eUp._Org, orgUp, dstUp, orgLo, dstLo);
+            RegionAbove(regUp)._dirty = regUp._dirty = regLo._dirty = true;
+            return false;
+        }
 
         /// <summary>
-        /// Check for edge crossings
+        /// When the upper or lower edge of any region changes, the region is
+        /// marked "dirty".  This routine walks through all the dirty regions
+        /// and makes sure that the dictionary invariants are satisfied
+        /// (see the comments at the beginning of this file).  Of course
+        /// new dirty regions can be created as we make changes to restore
+        /// the invariants.
         /// </summary>
-        /// <returns></returns>
-        public bool IsSimple()
+        private void WalkDirtyRegions(ActiveRegion regUp)
         {
-            for (int i = 0; i < Count; ++i)
+            var regLo = RegionBelow(regUp);
+            MeshUtils.Edge eUp, eLo;
+
+            while (true)
             {
-                int iplus = NextIndex(i);
-                for (int j = i + 1; j < Count; ++j)
+                // Find the lowest dirty region (we walk from the bottom up).
+                while (regLo._dirty)
                 {
-                    int jplus = NextIndex(j);
-                    Point2D temp = null;
-                    if (TriangulationUtil.LinesIntersect2D(mPoints[i], mPoints[iplus], mPoints[j], mPoints[jplus], ref temp, mEpsilon))
+                    regUp = regLo;
+                    regLo = RegionBelow(regLo);
+                }
+                if (!regUp._dirty)
+                {
+                    regLo = regUp;
+                    regUp = RegionAbove( regUp );
+                    if(regUp == null || !regUp._dirty)
                     {
-                        return false;
+                        // We've walked all the dirty regions
+                        return;
                     }
                 }
-            }
-            return true;
-        }
+                regUp._dirty = false;
+                eUp = regUp._eUp;
+                eLo = regLo._eUp;
 
+                if (eUp._Dst != eLo._Dst)
+                {
+                    // Check that the edge ordering is obeyed at the Dst vertices.
+                    if (CheckForLeftSplice(regUp))
+                    {
+
+                        // If the upper or lower edge was marked fixUpperEdge, then
+                        // we no longer need it (since these edges are needed only for
+                        // vertices which otherwise have no right-going edges).
+                        if (regLo._fixUpperEdge)
+                        {
+                            DeleteRegion(regLo);
+                            _mesh.Delete(eLo);
+                            regLo = RegionBelow(regUp);
+                            eLo = regLo._eUp;
+                        }
+                        else if( regUp._fixUpperEdge )
+                        {
+                            DeleteRegion(regUp);
+                            _mesh.Delete(eUp);
+                            regUp = RegionAbove(regLo);
+                            eUp = regUp._eUp;
+                        }
+                    }
+                }
+                if (eUp._Org != eLo._Org)
+                {
+                    if(    eUp._Dst != eLo._Dst
+                        && ! regUp._fixUpperEdge && ! regLo._fixUpperEdge
+                        && (eUp._Dst == _event || eLo._Dst == _event) )
+                    {
+                        // When all else fails in CheckForIntersect(), it uses tess._event
+                        // as the intersection location. To make this possible, it requires
+                        // that tess._event lie between the upper and lower edges, and also
+                        // that neither of these is marked fixUpperEdge (since in the worst
+                        // case it might splice one of these edges into tess.event, and
+                        // violate the invariant that fixable edges are the only right-going
+                        // edge from their associated vertex).
+                        if (CheckForIntersect(regUp))
+                        {
+                            // WalkDirtyRegions() was called recursively; we're done
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // Even though we can't use CheckForIntersect(), the Org vertices
+                        // may violate the dictionary edge ordering. Check and correct this.
+                        CheckForRightSplice(regUp);
+                    }
+                }
+                if (eUp._Org == eLo._Org && eUp._Dst == eLo._Dst)
+                {
+                    // A degenerate loop consisting of only two edges -- delete it.
+                    Geom.AddWinding(eLo, eUp);
+                    DeleteRegion(regUp);
+                    _mesh.Delete(eUp);
+                    regUp = RegionAbove(regLo);
+                }
+            }
+        }
 
         /// <summary>
-        /// Checks if polygon is valid for use in Box2d engine.
-        /// Last ditch effort to ensure no invalid polygons are
-        /// added to world geometry.
-        ///
-        /// Performs a full check, for simplicity, convexity,
-        /// orientation, minimum angle, and volume.  This won't
-        /// be very efficient, and a lot of it is redundant when
-        /// other tools in this section are used.
-        ///
-        /// From Eric Jordan's convex decomposition library
+        /// Purpose: connect a "right" vertex vEvent (one where all edges go left)
+        /// to the unprocessed portion of the mesh.  Since there are no right-going
+        /// edges, two regions (one above vEvent and one below) are being merged
+        /// into one.  "regUp" is the upper of these two regions.
+        /// 
+        /// There are two reasons for doing this (adding a right-going edge):
+        ///  - if the two regions being merged are "inside", we must add an edge
+        ///    to keep them separated (the combined region would not be monotone).
+        ///  - in any case, we must leave some record of vEvent in the dictionary,
+        ///    so that we can merge vEvent with features that we have not seen yet.
+        ///    For example, maybe there is a vertical edge which passes just to
+        ///    the right of vEvent; we would like to splice vEvent into this edge.
+        /// 
+        /// However, we don't want to connect vEvent to just any vertex.  We don''t
+        /// want the new edge to cross any other edges; otherwise we will create
+        /// intersection vertices even when the input data had no self-intersections.
+        /// (This is a bad thing; if the user's input data has no intersections,
+        /// we don't want to generate any false intersections ourselves.)
+        /// 
+        /// Our eventual goal is to connect vEvent to the leftmost unprocessed
+        /// vertex of the combined region (the union of regUp and regLo).
+        /// But because of unseen vertices with all right-going edges, and also
+        /// new vertices which may be created by edge intersections, we don''t
+        /// know where that leftmost unprocessed vertex is.  In the meantime, we
+        /// connect vEvent to the closest vertex of either chain, and mark the region
+        /// as "fixUpperEdge".  This flag says to delete and reconnect this edge
+        /// to the next processed vertex on the boundary of the combined region.
+        /// Quite possibly the vertex we connected to will turn out to be the
+        /// closest one, in which case we won''t need to make any changes.
         /// </summary>
-        /// <param name="printErrors"></param>
-        /// <returns></returns>
-        public PolygonError CheckPolygon()
+        private void ConnectRightVertex(ActiveRegion regUp, MeshUtils.Edge eBottomLeft)
         {
-            PolygonError error = PolygonError.None;
-            if (Count < 3 || Count > Point2DList.kMaxPolygonVertices)
+            var eTopLeft = eBottomLeft._Onext;
+            var regLo = RegionBelow(regUp);
+            var eUp = regUp._eUp;
+            var eLo = regLo._eUp;
+            bool degenerate = false;
+
+            if (eUp._Dst != eLo._Dst)
             {
-                error |= PolygonError.NotEnoughVertices;
-                // no other tests will be valid at this point, so just return
-                return error;
-            }
-            if (IsDegenerate())
-            {
-                error |= PolygonError.Degenerate;
-            }
-            //bool bIsConvex = IsConvex();
-            //if (!IsConvex())
-            //{
-            //    error |= PolygonError.NotConvex;
-            //}
-            if (!IsSimple())
-            {
-                error |= PolygonError.NotSimple;
-            }
-            if (GetArea() < MathUtil.EPSILON)
-            {
-                error |= PolygonError.AreaTooSmall;
+                CheckForIntersect(regUp);
             }
 
-            // the following tests don't make sense if the polygon is not simple
-            if ((error & PolygonError.NotSimple) != PolygonError.NotSimple)
+            // Possible new degeneracies: upper or lower edge of regUp may pass
+            // through vEvent, or may coincide with new intersection vertex
+            if (Geom.VertEq(eUp._Org, _event))
             {
-                bool bReversed = false;
-                WindingOrderType expectedWindingOrder = WindingOrderType.CCW;
-                WindingOrderType reverseWindingOrder = WindingOrderType.CW;
-                if (WindingOrder == reverseWindingOrder)
-                {
-                    WindingOrder = expectedWindingOrder;
-                    bReversed = true;
-                }
-
-                //Compute normals
-                Point2D[] normals = new Point2D[Count];
-                Point2DList vertices = new Point2DList(Count);
-                for (int i = 0; i < Count; ++i)
-                {
-                    vertices.Add(new Point2D(this[i].X, this[i].Y));
-                    int i1 = i;
-                    int i2 = NextIndex(i);
-                    Point2D edge = new Point2D(this[i2].X - this[i1].X, this[i2].Y - this[i1].Y);
-                    normals[i] = Point2D.Perpendicular(edge, 1.0);
-                    normals[i].Normalize();
-                }
-
-                //Required side checks
-                for (int i = 0; i < Count; ++i)
-                {
-                    int iminus = PreviousIndex(i);
-
-                    //Parallel sides check
-                    double cross = Point2D.Cross(normals[iminus], normals[i]);
-                    cross = MathUtil.Clamp(cross, -1.0f, 1.0f);
-                    float angle = (float)Math.Asin(cross);
-                    if (Math.Abs(angle) <= Point2DList.kAngularSlop)
-                    {
-                        error |= PolygonError.SidesTooCloseToParallel;
-                        break;
-                    }
-
-                    // For some reason, the following checks do not seem to work
-                    // correctly in all cases - they return false positives.
-                //    //Too skinny check - only valid for convex polygons
-                //    if (bIsConvex)
-                //    {
-                //        for (int j = 0; j < Count; ++j)
-                //        {
-                //            if (j == i || j == NextIndex(i))
-                //            {
-                //                continue;
-                //            }
-                //            Point2D testVector = vertices[j] - vertices[i];
-                //            testVector.Normalize();
-                //            double s = Point2D.Dot(testVector, normals[i]);
-                //            if (s >= -Point2DList.kLinearSlop)
-                //            {
-                //                error |= PolygonError.TooThin;
-                //            }
-                //        }
-
-                //        Point2D centroid = vertices.GetCentroid();
-                //        Point2D n1 = normals[iminus];
-                //        Point2D n2 = normals[i];
-                //        Point2D v = vertices[i] - centroid;
-
-                //        Point2D d = new Point2D();
-                //        d.X = Point2D.Dot(n1, v); // - toiSlop;
-                //        d.Y = Point2D.Dot(n2, v); // - toiSlop;
-
-                //        // Shifting the edge inward by toiSlop should
-                //        // not cause the plane to pass the centroid.
-                //        if ((d.X < 0.0f) || (d.Y < 0.0f))
-                //        {
-                //            error |= PolygonError.TooThin;
-                //        }
-                //    }
-                }
-
-                if (bReversed)
-                {
-                    WindingOrder = reverseWindingOrder;
-                }
+                _mesh.Splice(eTopLeft._Oprev, eUp);
+                regUp = TopLeftRegion(regUp);
+                eTopLeft = RegionBelow(regUp)._eUp;
+                FinishLeftRegions(RegionBelow(regUp), regLo);
+                degenerate = true;
+            }
+            if (Geom.VertEq(eLo._Org, _event))
+            {
+                _mesh.Splice(eBottomLeft, eLo._Oprev);
+                eBottomLeft = FinishLeftRegions(regLo, null);
+                degenerate = true;
+            }
+            if (degenerate)
+            {
+                AddRightEdges(regUp, eBottomLeft._Onext, eTopLeft, eTopLeft, true);
+                return;
             }
 
-            //if (error != PolygonError.None)
-            //{
-            //    Console.WriteLine("Found invalid polygon: {0} {1}\n", Point2DList.GetErrorString(error), this.ToString());
-            //}
-
-            return error;
-        }
-
-
-        public static string GetErrorString(PolygonError error)
-        {
-            StringBuilder sb = new StringBuilder(256);
-            if (error == PolygonError.None)
+            // Non-degenerate situation -- need to add a temporary, fixable edge.
+            // Connect to the closer of eLo.Org, eUp.Org.
+            MeshUtils.Edge eNew;
+            if (Geom.VertLeq(eLo._Org, eUp._Org))
             {
-                sb.AppendFormat("No errors.\n");
+                eNew = eLo._Oprev;
             }
             else
             {
-                if ((error & PolygonError.NotEnoughVertices) == PolygonError.NotEnoughVertices)
+                eNew = eUp;
+            }
+            eNew = _mesh.Connect(eBottomLeft._Lprev, eNew);
+
+            // Prevent cleanup, otherwise eNew might disappear before we've even
+            // had a chance to mark it as a temporary edge.
+            AddRightEdges(regUp, eNew, eNew._Onext, eNew._Onext, false);
+            eNew._Sym._activeRegion._fixUpperEdge = true;
+            WalkDirtyRegions(regUp);
+        }
+
+        /// <summary>
+        /// The event vertex lies exacty on an already-processed edge or vertex.
+        /// Adding the new vertex involves splicing it into the already-processed
+        /// part of the mesh.
+        /// </summary>
+        private void ConnectLeftDegenerate(ActiveRegion regUp, MeshUtils.Vertex vEvent)
+        {
+            var e = regUp._eUp;
+            if (Geom.VertEq(e._Org, vEvent))
+            {
+                // e.Org is an unprocessed vertex - just combine them, and wait
+                // for e.Org to be pulled from the queue
+                // C# : in the C version, there is a flag but it was never implemented
+                // the vertices are before beginning the tesselation
+                throw new InvalidOperationException("Vertices should have been merged before");
+            }
+
+            if (!Geom.VertEq(e._Dst, vEvent))
+            {
+                // General case -- splice vEvent into edge e which passes through it
+                _mesh.SplitEdge(e._Sym);
+                if (regUp._fixUpperEdge)
                 {
-                    sb.AppendFormat("NotEnoughVertices: must have between 3 and {0} vertices.\n", kMaxPolygonVertices);
+                    // This edge was fixable -- delete unused portion of original edge
+                    _mesh.Delete(e._Onext);
+                    regUp._fixUpperEdge = false;
                 }
-                if ((error & PolygonError.NotConvex) == PolygonError.NotConvex)
+                _mesh.Splice(vEvent._anEdge, e);
+                SweepEvent(vEvent);	// recurse
+                return;
+            }
+
+            // See above
+            throw new InvalidOperationException("Vertices should have been merged before");
+        }
+
+        /// <summary>
+        /// Purpose: connect a "left" vertex (one where both edges go right)
+        /// to the processed portion of the mesh.  Let R be the active region
+        /// containing vEvent, and let U and L be the upper and lower edge
+        /// chains of R.  There are two possibilities:
+        /// 
+        /// - the normal case: split R into two regions, by connecting vEvent to
+        ///   the rightmost vertex of U or L lying to the left of the sweep line
+        /// 
+        /// - the degenerate case: if vEvent is close enough to U or L, we
+        ///   merge vEvent into that edge chain.  The subcases are:
+        ///     - merging with the rightmost vertex of U or L
+        ///     - merging with the active edge of U or L
+        ///     - merging with an already-processed portion of U or L
+        /// </summary>
+        private void ConnectLeftVertex(MeshUtils.Vertex vEvent)
+        {
+            var tmp = new ActiveRegion();
+
+            // Get a pointer to the active region containing vEvent
+            tmp._eUp = vEvent._anEdge._Sym;
+            var regUp = _dict.Find(tmp).Key;
+            var regLo = RegionBelow(regUp);
+            if (regLo == null)
+            {
+                // This may happen if the input polygon is coplanar.
+                return;
+            }
+            var eUp = regUp._eUp;
+            var eLo = regLo._eUp;
+
+            // Try merging with U or L first
+            if (Geom.EdgeSign(eUp._Dst, vEvent, eUp._Org) == 0.0f)
+            {
+                ConnectLeftDegenerate(regUp, vEvent);
+                return;
+            }
+
+            // Connect vEvent to rightmost processed vertex of either chain.
+            // e._Dst is the vertex that we will connect to vEvent.
+            var reg = Geom.VertLeq(eLo._Dst, eUp._Dst) ? regUp : regLo;
+
+            if (regUp._inside || reg._fixUpperEdge)
+            {
+                MeshUtils.Edge eNew;
+                if (reg == regUp)
                 {
-                    sb.AppendFormat("NotConvex: Polygon is not convex.\n");
+                    eNew = _mesh.Connect(vEvent._anEdge._Sym, eUp._Lnext);
                 }
-                if ((error & PolygonError.NotSimple) == PolygonError.NotSimple)
+                else
                 {
-                    sb.AppendFormat("NotSimple: Polygon is not simple (i.e. it intersects itself).\n");
+                    eNew = _mesh.Connect(eLo._Dnext, vEvent._anEdge)._Sym;
                 }
-                if ((error & PolygonError.AreaTooSmall) == PolygonError.AreaTooSmall)
+                if (reg._fixUpperEdge)
                 {
-                    sb.AppendFormat("AreaTooSmall: Polygon's area is too small.\n");
+                    FixUpperEdge(reg, eNew);
                 }
-                if ((error & PolygonError.SidesTooCloseToParallel) == PolygonError.SidesTooCloseToParallel)
+                else
                 {
-                    sb.AppendFormat("SidesTooCloseToParallel: Polygon's sides are too close to parallel.\n");
+                    ComputeWinding(AddRegionBelow(regUp, eNew));
                 }
-                if ((error & PolygonError.TooThin) == PolygonError.TooThin)
+                SweepEvent(vEvent);
+            }
+            else
+            {
+                // The new vertex is in a region which does not belong to the polygon.
+                // We don't need to connect this vertex to the rest of the mesh.
+                AddRightEdges(regUp, vEvent._anEdge, vEvent._anEdge, null, true);
+            }
+        }
+
+        /// <summary>
+        /// Does everything necessary when the sweep line crosses a vertex.
+        /// Updates the mesh and the edge dictionary.
+        /// </summary>
+        private void SweepEvent(MeshUtils.Vertex vEvent)
+        {
+            _event = vEvent;
+
+            // Check if this vertex is the right endpoint of an edge that is
+            // already in the dictionary. In this case we don't need to waste
+            // time searching for the location to insert new edges.
+            var e = vEvent._anEdge;
+            while (e._activeRegion == null)
+            {
+                e = e._Onext;
+                if (e == vEvent._anEdge)
                 {
-                    sb.AppendFormat("TooThin: Polygon is too thin or core shape generation would move edge past centroid.\n");
-                }
-                if ((error & PolygonError.Degenerate) == PolygonError.Degenerate)
-                {
-                    sb.AppendFormat("Degenerate: Polygon is degenerate (contains collinear points or duplicate coincident points).\n");
-                }
-                if ((error & PolygonError.Unknown) == PolygonError.Unknown)
-                {
-                    sb.AppendFormat("Unknown: Unknown Polygon error!.\n");
+                    // All edges go right -- not incident to any processed edges
+                    ConnectLeftVertex(vEvent);
+                    return;
                 }
             }
 
-            return sb.ToString();
+            // Processing consists of two phases: first we "finish" all the
+            // active regions where both the upper and lower edges terminate
+            // at vEvent (ie. vEvent is closing off these regions).
+            // We mark these faces "inside" or "outside" the polygon according
+            // to their winding number, and delete the edges from the dictionary.
+            // This takes care of all the left-going edges from vEvent.
+            var regUp = TopLeftRegion(e._activeRegion);
+            var reg = RegionBelow(regUp);
+            var eTopLeft = reg._eUp;
+            var eBottomLeft = FinishLeftRegions(reg, null);
+
+            // Next we process all the right-going edges from vEvent. This
+            // involves adding the edges to the dictionary, and creating the
+            // associated "active regions" which record information about the
+            // regions between adjacent dictionary edges.
+            if (eBottomLeft._Onext == eTopLeft)
+            {
+                // No right-going edges -- add a temporary "fixable" edge
+                ConnectRightVertex(regUp, eBottomLeft);
+            }
+            else
+            {
+                AddRightEdges(regUp, eBottomLeft._Onext, eTopLeft, eTopLeft, true);
+            }
         }
 
+        /// <summary>
+        /// Make the sentinel coordinates big enough that they will never be
+        /// merged with real input features.
+        /// 
+        /// We add two sentinel edges above and below all other edges,
+        /// to avoid special cases at the top and bottom.
+        /// </summary>
+        private void AddSentinel(Real smin, Real smax, Real t)
+        {
+            var e = _mesh.MakeEdge();
+            e._Org._s = smax;
+            e._Org._t = t;
+            e._Dst._s = smin;
+            e._Dst._t = t;
+            _event = e._Dst; // initialize it
+
+            var reg = new ActiveRegion();
+            reg._eUp = e;
+            reg._windingNumber = 0;
+            reg._inside = false;
+            reg._fixUpperEdge = false;
+            reg._sentinel = true;
+            reg._dirty = false;
+            reg._nodeUp = _dict.Insert(reg);
+        }
 
         /// <summary>
-        /// Removes duplicate points that lie next to each other in the list
+        /// We maintain an ordering of edge intersections with the sweep line.
+        /// This order is maintained in a dynamic dictionary.
         /// </summary>
-        public void RemoveDuplicateNeighborPoints()
+        private void InitEdgeDict()
         {
-            int numPoints = Count;
-            int i = numPoints - 1;
-            int j = 0;
-            while (numPoints > 1 && j < numPoints)
+            _dict = new Dict<ActiveRegion>(EdgeLeq);
+
+            AddSentinel(-SentinelCoord, SentinelCoord, -SentinelCoord);
+            AddSentinel(-SentinelCoord, SentinelCoord, +SentinelCoord);
+        }
+
+        private void DoneEdgeDict()
+        {
+            int fixedEdges = 0;
+
+            ActiveRegion reg;
+            while ((reg = _dict.Min().Key) != null)
             {
-                if(mPoints[i].Equals(mPoints[j]))
+                // At the end of all processing, the dictionary should contain
+                // only the two sentinel edges, plus at most one "fixable" edge
+                // created by ConnectRightVertex().
+                if (!reg._sentinel)
                 {
-                    int idxToRemove = Math.Max(i, j);
-                    mPoints.RemoveAt(idxToRemove);
-                    --numPoints;
-                    if (i >= numPoints)
+                    Debug.Assert(reg._fixUpperEdge);
+                    Debug.Assert(++fixedEdges == 1);
+                }
+                Debug.Assert(reg._windingNumber == 0);
+                DeleteRegion(reg);
+            }
+
+            _dict = null;
+        }
+
+        /// <summary>
+        /// Remove zero-length edges, and contours with fewer than 3 vertices.
+        /// </summary>
+        private void RemoveDegenerateEdges()
+        {
+            MeshUtils.Edge eHead = _mesh._eHead, e, eNext, eLnext;
+
+            for (e = eHead._next; e != eHead; e = eNext)
+            {
+                eNext = e._next;
+                eLnext = e._Lnext;
+
+                if (Geom.VertEq(e._Org, e._Dst) && e._Lnext._Lnext != e)
+                {
+                    // Zero-length edge, contour has at least 3 edges
+
+                    SpliceMergeVertices(eLnext, e);	// deletes e.Org
+                    _mesh.Delete(e); // e is a self-loop
+                    e = eLnext;
+                    eLnext = e._Lnext;
+                }
+                if (eLnext._Lnext == e)
+                {
+                    // Degenerate contour (one or two edges)
+
+                    if (eLnext != e)
                     {
-                        // can happen if first element in list is deleted...
-                        i = numPoints - 1;
+                        if (eLnext == eNext || eLnext == eNext._Sym)
+                        {
+                            eNext = eNext._next;
+                        }
+                        _mesh.Delete(eLnext);
                     }
-                    // don't increment i, j in this case because we want to check i against the new value at j
-                }
-                else
-                {
-                    i = NextIndex(i);
-                    ++j;  // intentionally not wrapping value of j so we have a valid end-point for the loop
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// Removes all collinear points on the polygon.
-        /// Has a default bias of 0
-        /// </summary>
-        /// <param name="polygon">The polygon that needs simplification.</param>
-        /// <returns>A simplified polygon.</returns>
-        public void Simplify()
-        {
-            Simplify(0.0);
-        }
-
-
-        /// <summary>
-        /// Removes all collinear points on the polygon.   Note that this is NOT safe to run on a complex
-        /// polygon as it will remove points that it should not.   For example, consider this polygon:
-        /// 
-        ///           2
-        ///           +
-        ///          / \
-        ///         /   \
-        ///        /     \
-        /// 0 +---+-------+
-        ///       3       1
-        /// 
-        /// This algorithm would delete point 3, leaving you with the polygon 0,1,2 - definitely NOT the correct
-        /// polygon.  Caveat Emptor!
-        /// 
-        /// </summary>
-        /// <param name="polygon">The polygon that needs simplification.</param>
-        /// <param name="bias">The distance bias between points. Points closer than this will be 'joined'.</param>
-        /// <returns>A simplified polygon.</returns>
-        public void Simplify(double bias)
-        {
-            //We can't simplify polygons under 3 vertices
-            if (Count < 3)
-            {
-                return;
-            }
-
-//#if DEBUG
-//            if (!IsSimple())
-//            {
-//                throw new Exception("Do not run Simplify on a non-simple polygon!");
-//            }
-//#endif
-
-            int curr = 0;
-            int numVerts = Count;
-            double biasSquared = bias * bias;
-            while (curr < numVerts && numVerts >= 3)
-            {
-                int prevId = PreviousIndex(curr);
-                int nextId = NextIndex(curr);
-
-                Point2D prev = this[prevId];
-                Point2D current = this[curr];
-                Point2D next = this[nextId];
-
-                //If they are closer than the bias, continue
-                if ((prev - current).MagnitudeSquared() <= biasSquared)
-                {
-                    RemoveAt(curr);
-                    --numVerts;
-                    continue;
-                }
-
-                //If they collinear, continue
-                Orientation orientation = TriangulationUtil.Orient2d(prev, current, next);
-                if (orientation == Orientation.Collinear)
-                {
-                    RemoveAt(curr);
-                    --numVerts;
-                    continue;
-                }
-
-                ++curr;
-            }
-        }
-
-
-        // From Eric Jordan's convex decomposition library
-        /// <summary>
-        /// Merges all parallel edges in the list of vertices
-        /// </summary>
-        /// <param name="tolerance"></param>
-        public void MergeParallelEdges(double tolerance)
-        {
-            if (Count <= 3)
-            {
-                // Can't do anything useful here to a triangle
-                return;
-            }
-
-            bool[] mergeMe = new bool[Count];
-            int newNVertices = Count;
-
-            //Gather points to process
-            for (int i = 0; i < Count; ++i)
-            {
-                int lower = (i == 0) ? (Count - 1) : (i - 1);
-                int middle = i;
-                int upper = (i == Count - 1) ? (0) : (i + 1);
-
-                double dx0 = this[middle].X - this[lower].X;
-                double dy0 = this[middle].Y - this[lower].Y;
-                double dx1 = this[upper].Y - this[middle].X;
-                double dy1 = this[upper].Y - this[middle].Y;
-                double norm0 = Math.Sqrt(dx0 * dx0 + dy0 * dy0);
-                double norm1 = Math.Sqrt(dx1 * dx1 + dy1 * dy1);
-
-                if (!(norm0 > 0.0 && norm1 > 0.0) && newNVertices > 3)
-                {
-                    //Merge identical points
-                    mergeMe[i] = true;
-                    --newNVertices;
-                }
-
-                dx0 /= norm0;
-                dy0 /= norm0;
-                dx1 /= norm1;
-                dy1 /= norm1;
-                double cross = dx0 * dy1 - dx1 * dy0;
-                double dot = dx0 * dx1 + dy0 * dy1;
-
-                if (Math.Abs(cross) < tolerance && dot > 0 && newNVertices > 3)
-                {
-                    mergeMe[i] = true;
-                    --newNVertices;
-                }
-                else
-                {
-                    mergeMe[i] = false;
-                }
-            }
-
-            if (newNVertices == Count || newNVertices == 0)
-            {
-                return;
-            }
-
-            int currIndex = 0;
-
-            // Copy the vertices to a new list and clear the old
-            Point2DList oldVertices = new Point2DList(this);
-            Clear();
-
-            for (int i = 0; i < oldVertices.Count; ++i)
-            {
-                if (mergeMe[i] || newNVertices == 0 || currIndex == newNVertices)
-                {
-                    continue;
-                }
-
-                if (currIndex >= newNVertices)
-                {
-                    throw new Exception("Point2DList::MergeParallelEdges - currIndex[ " + currIndex.ToString() + "] >= newNVertices[" + newNVertices + "]");
-                }
-
-                mPoints.Add(oldVertices[i]);
-                mBoundingBox.AddPoint(oldVertices[i]);
-                ++currIndex;
-            }
-            mWindingOrder = CalculateWindingOrder();
-            mEpsilon = CalculateEpsilon();
-        }
-
-
-        /// <summary>
-        /// Projects to axis.
-        /// </summary>
-        /// <param name="axis">The axis.</param>
-        /// <param name="min">The min.</param>
-        /// <param name="max">The max.</param>
-        public void ProjectToAxis(Point2D axis, out double min, out double max)
-        {
-            // To project a point on an axis use the dot product
-            double dotProduct = Point2D.Dot(axis, this[0]);
-            min = dotProduct;
-            max = dotProduct;
-
-            for (int i = 0; i < Count; i++)
-            {
-                dotProduct = Point2D.Dot(this[i], axis);
-                if (dotProduct < min)
-                {
-                    min = dotProduct;
-                }
-                else
-                {
-                    if (dotProduct > max)
+                    if (e == eNext || e == eNext._Sym)
                     {
-                        max = dotProduct;
+                        eNext = eNext._next;
                     }
+                    _mesh.Delete(e);
                 }
             }
+        }
+
+        /// <summary>
+        /// Insert all vertices into the priority queue which determines the
+        /// order in which vertices cross the sweep line.
+        /// </summary>
+        private void InitPriorityQ()
+        {
+            MeshUtils.Vertex vHead = _mesh._vHead, v;
+            int vertexCount = 0;
+
+            for (v = vHead._next; v != vHead; v = v._next)
+            {
+                vertexCount++;
+            }
+            // Make sure there is enough space for sentinels.
+            vertexCount += 8;
+    
+            _pq = new PriorityQueue<MeshUtils.Vertex>(vertexCount, Geom.VertLeq);
+
+            vHead = _mesh._vHead;
+            for( v = vHead._next; v != vHead; v = v._next ) {
+                v._pqHandle = _pq.Insert(v);
+                if (v._pqHandle._handle == PQHandle.Invalid)
+                {
+                    throw new InvalidOperationException("PQHandle should not be invalid");
+                }
+            }
+            _pq.Init();
+        }
+
+        private void DonePriorityQ()
+        {
+            _pq = null;
+        }
+
+        /// <summary>
+        /// Delete any degenerate faces with only two edges.  WalkDirtyRegions()
+        /// will catch almost all of these, but it won't catch degenerate faces
+        /// produced by splice operations on already-processed edges.
+        /// The two places this can happen are in FinishLeftRegions(), when
+        /// we splice in a "temporary" edge produced by ConnectRightVertex(),
+        /// and in CheckForLeftSplice(), where we splice already-processed
+        /// edges to ensure that our dictionary invariants are not violated
+        /// by numerical errors.
+        /// 
+        /// In both these cases it is *very* dangerous to delete the offending
+        /// edge at the time, since one of the routines further up the stack
+        /// will sometimes be keeping a pointer to that edge.
+        /// </summary>
+        private void RemoveDegenerateFaces()
+        {
+            MeshUtils.Face f, fNext;
+            MeshUtils.Edge e;
+
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = fNext)
+            {
+                fNext = f._next;
+                e = f._anEdge;
+                Debug.Assert(e._Lnext != e);
+
+                if (e._Lnext._Lnext == e)
+                {
+                    // A face with only two edges
+                    Geom.AddWinding(e._Onext, e);
+                    _mesh.Delete(e);
+                }
+            }
+        }
+
+        /// <summary>
+        /// ComputeInterior computes the planar arrangement specified
+        /// by the given contours, and further subdivides this arrangement
+        /// into regions.  Each region is marked "inside" if it belongs
+        /// to the polygon, according to the rule given by windingRule.
+        /// Each interior region is guaranteed to be monotone.
+        /// </summary>
+        protected void ComputeInterior()
+        {
+            // Each vertex defines an event for our sweep line. Start by inserting
+            // all the vertices in a priority queue. Events are processed in
+            // lexicographic order, ie.
+            // 
+            // e1 < e2  iff  e1.x < e2.x || (e1.x == e2.x && e1.y < e2.y)
+            RemoveDegenerateEdges();
+            InitPriorityQ();
+            RemoveDegenerateFaces();
+            InitEdgeDict();
+
+            MeshUtils.Vertex v, vNext;
+            while ((v = _pq.ExtractMin()) != null)
+            {
+                 while (true)
+                 {
+                    vNext = _pq.Minimum();
+                    if (vNext == null || !Geom.VertEq(vNext, v))
+                    {
+                        break;
+                    }
+
+                    // Merge together all vertices at exactly the same location.
+                    // This is more efficient than processing them one at a time,
+                    // simplifies the code (see ConnectLeftDegenerate), and is also
+                    // important for correct handling of certain degenerate cases.
+                    // For example, suppose there are two identical edges A and B
+                    // that belong to different contours (so without this code they would
+                    // be processed by separate sweep events). Suppose another edge C
+                    // crosses A and B from above. When A is processed, we split it
+                    // at its intersection point with C. However this also splits C,
+                    // so when we insert B we may compute a slightly different
+                    // intersection point. This might leave two edges with a small
+                    // gap between them. This kind of error is especially obvious
+                    // when using boundary extraction (BoundaryOnly).
+                    vNext = _pq.ExtractMin();
+                    SpliceMergeVertices(v._anEdge, vNext._anEdge);
+                }
+                SweepEvent(v);
+            }
+
+            DoneEdgeDict();
+            DonePriorityQ();
+
+            RemoveDegenerateFaces();
+            _mesh.Check();
         }
     }
 }
 
 // ----------------------------------------------------------------------
-// Rect2D.cs
+// Tess.cs
 
-/* Poly2Tri
- * Copyright (c) 2009-2010, Poly2Tri Contributors
- * http://code.google.com/p/poly2tri/
- *
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * * Neither the name of Poly2Tri nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without specific
- *   prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+/*
+** SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008) 
+** Copyright (C) 2011 Silicon Graphics, Inc.
+** All Rights Reserved.
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+** of the Software, and to permit persons to whom the Software is furnished to do so,
+** subject to the following conditions:
+** 
+** The above copyright notice including the dates of first publication and either this
+** permission notice or a reference to http://oss.sgi.com/projects/FreeB/ shall be
+** included in all copies or substantial portions of the Software. 
+**
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+** INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+** PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC.
+** BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+** OR OTHER DEALINGS IN THE SOFTWARE.
+** 
+** Except as contained in this notice, the name of Silicon Graphics, Inc. shall not
+** be used in advertising or otherwise to promote the sale, use or other dealings in
+** this Software without prior written authorization from Silicon Graphics, Inc.
+*/
+/*
+** Original Author: Eric Veach, July 1994.
+** libtess2: Mikko Mononen, http://code.google.com/p/libtess2/.
+** LibTessDotNet: Remi Gillig, https://github.com/speps/LibTessDotNet
+*/
 
 // using System;
+// using System.Diagnostics;
 
-
-namespace Poly2Tri
+#if DOUBLE
+// using Real = System.Double;
+namespace LibTessDotNet.Double
+#else
+// using Real = System.Single;
+namespace LibTessDotNet
+#endif
 {
-    public class Rect2D
+    public enum WindingRule
     {
-        private double mMinX;   // left
-        private double mMaxX;   // right
-        private double mMinY;   // bottom // top
-        private double mMaxY;   // top    // bottom
+        EvenOdd,
+        NonZero,
+        Positive,
+        Negative,
+        AbsGeqTwo
+    }
 
-        public double MinX { get { return mMinX; } set { mMinX = value; } }
-        public double MaxX { get { return mMaxX; } set { mMaxX = value; } }
-        public double MinY { get { return mMinY; } set { mMinY = value; } }
-        public double MaxY { get { return mMaxY; } set { mMaxY = value; } }
-        public double Left { get { return mMinX; } set { mMinX = value; } }
-        public double Right { get { return mMaxX; } set { mMaxX = value; } }
-        public double Top { get { return mMaxY; } set { mMaxY = value; } }
-        public double Bottom { get { return mMinY; } set { mMinY = value; } }
+    public enum ElementType
+    {
+        Polygons,
+        ConnectedPolygons,
+        BoundaryContours
+    }
 
-        public double Width { get { return (Right - Left); } }
-        public double Height { get { return (Top - Bottom); } }
-        public bool Empty { get { return (Left == Right) || (Top == Bottom); } }
+    public enum ContourOrientation
+    {
+        Original,
+        Clockwise,
+        CounterClockwise
+    }
 
+    public struct ContourVertex
+    {
+        public Vec3 Position;
+        public object Data;
 
-        public Rect2D()
+        public override string ToString()
         {
-            Clear();
+            return string.Format("{0}, {1}", Position, Data);
         }
+    }
 
+    public delegate object CombineCallback(Vec3 position, object[] data, Real[] weights);
 
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
+    public partial class Tess
+    {
+        private Mesh _mesh;
+        private Vec3 _normal;
+        private Vec3 _sUnit;
+        private Vec3 _tUnit;
 
+        private Real _bminX, _bminY, _bmaxX, _bmaxY;
 
-        public override bool Equals(Object obj)
-        {
-            Rect2D r = obj as Rect2D;
-            if( r != null)
-            {
-                return Equals(r);
-            }
+        private WindingRule _windingRule;
 
-            return base.Equals(obj);
-        }
+        private Dict<ActiveRegion> _dict;
+        private PriorityQueue<MeshUtils.Vertex> _pq;
+        private MeshUtils.Vertex _event;
 
+        private CombineCallback _combineCallback;
 
-        public bool Equals(Rect2D r)
-        {
-            return Equals(r, MathUtil.EPSILON);
-        }
+        private ContourVertex[] _vertices;
+        private int _vertexCount;
+        private int[] _elements;
+        private int _elementCount;
 
+        public Vec3 Normal { get { return _normal; } set { _normal = value; } }
 
-        public bool Equals(Rect2D r, double epsilon)
-        {
-            if (!MathUtil.AreValuesEqual(MinX, r.MinX, epsilon))
-            {
-                return false;
-            }
-            if (!MathUtil.AreValuesEqual(MaxX, r.MaxX))
-            {
-                return false;
-            }
-            if (!MathUtil.AreValuesEqual(MinY, r.MinY, epsilon))
-            {
-                return false;
-            }
-            if (!MathUtil.AreValuesEqual(MaxY, r.MaxY, epsilon))
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-
-        public void Clear()
-        {
-            MinX = Double.MaxValue;
-            MaxX = Double.MinValue;
-            MinY = Double.MaxValue;
-            MaxY = Double.MinValue;
-        }
-
-
-        public void Set(double xmin, double xmax, double ymin, double ymax)
-        {
-            MinX = xmin;
-            MaxX = xmax;
-            MinY = ymin;
-            MaxY = ymax;
-            Normalize();
-        }
-
-
-        public void Set(Rect2D b)
-        {
-            MinX = b.MinX;
-            MaxX = b.MaxX;
-            MinY = b.MinY;
-            MaxY = b.MaxY;
-        }
-
-
-        public void SetSize(double w, double h)
-        {
-            Right = Left + w;
-            Top = Bottom + h;
-        }
-
+        public Real SUnitX = 1;
+        public Real SUnitY = 0;
+#if DOUBLE
+        public Real SentinelCoord = 4e150;
+#else
+        public Real SentinelCoord = 4e30f;
+#endif
 
         /// <summary>
-        /// Returns whether the coordinate is inside the bounding box.  Note that this will return
-        /// false if the point is ON the edge of the bounding box.  If you want to test for whether
-        /// the point is inside OR on the rect, use ContainsInclusive
+        /// If true, will remove empty (zero area) polygons.
         /// </summary>
-        public bool Contains(double x, double y)
-        {
-            return (x > Left) && (y > Bottom) && (x < Right) && (y < Top);
-        }
-        public bool Contains(Point2D p) { return Contains(p.X, p.Y); }
-        public bool Contains(Rect2D r)
-        {
-            return (Left < r.Left) && (Right > r.Right) && (Top < r.Top) && (Bottom > r.Bottom);
-        }
-
+        public bool NoEmptyPolygons = false;
 
         /// <summary>
-        /// Returns whether the coordinate is inside the bounding box.  Note that this will return
-        /// false if the point is ON the edge of the bounding box.  If you want to test for whether
-        /// the point is inside OR on the rect, use ContainsInclusive
+        /// If true, will use pooling to reduce GC (compare performance with/without, can vary wildly).
         /// </summary>
-        public bool ContainsInclusive(double x, double y)
-        {
-            return (x >= Left) && (y >= Top) && (x <= Right) && (y <= Bottom);
-        }
-        public bool ContainsInclusive(double x, double y, double epsilon)
-        {
-            return ((x + epsilon) >= Left) && ((y + epsilon) >= Top) && ((x - epsilon) <= Right) && ((y - epsilon) <= Bottom);
-        }
-        public bool ContainsInclusive(Point2D p) { return ContainsInclusive(p.X, p.Y); }
-        public bool ContainsInclusive(Point2D p, double epsilon) { return ContainsInclusive(p.X, p.Y, epsilon); }
-        public bool ContainsInclusive(Rect2D r)
-        {
-            return (Left <= r.Left) && (Right >= r.Right) && (Top <= r.Top) && (Bottom >= r.Bottom);
-        }
-        public bool ContainsInclusive(Rect2D r, double epsilon)
-        {
-            return ((Left - epsilon) <= r.Left) && ((Right + epsilon) >= r.Right) && ((Top - epsilon) <= r.Top) && ((Bottom + epsilon) >= r.Bottom);
-        }
+        public bool UsePooling = false;
 
+        public ContourVertex[] Vertices { get { return _vertices; } }
+        public int VertexCount { get { return _vertexCount; } }
 
-        public bool Intersects(Rect2D r)
+        public int[] Elements { get { return _elements; } }
+        public int ElementCount { get { return _elementCount; } }
+
+        public Tess()
         {
-            return  (Right > r.Left) &&
-                    (Left < r.Right) &&
-                    (Bottom < r.Top) &&
-                    (Top > r.Bottom);
+            _normal = Vec3.Zero;
+            _bminX = _bminY = _bmaxX = _bmaxY = 0;
+
+            _windingRule = WindingRule.EvenOdd;
+            _mesh = null;
+
+            _vertices = null;
+            _vertexCount = 0;
+            _elements = null;
+            _elementCount = 0;
         }
 
-
-        public Point2D GetCenter()
+        private void ComputeNormal(ref Vec3 norm)
         {
-            Point2D p = new Point2D((Left + Right ) / 2, (Bottom + Top) / 2);
-            return p;
-        }
+            var v = _mesh._vHead._next;
 
- 
-        public bool IsNormalized()
-        {
-            return (Right >= Left) && (Bottom <= Top);
-        }
+            var minVal = new Real[3] { v._coords.X, v._coords.Y, v._coords.Z };
+            var minVert = new MeshUtils.Vertex[3] { v, v, v };
+            var maxVal = new Real[3] { v._coords.X, v._coords.Y, v._coords.Z };
+            var maxVert = new MeshUtils.Vertex[3] { v, v, v };
 
-
-        public void Normalize()
-        {
-            if (Left > Right)
+            for (; v != _mesh._vHead; v = v._next)
             {
-                MathUtil.Swap<double>(ref mMinX, ref mMaxX);
+                if (v._coords.X < minVal[0]) { minVal[0] = v._coords.X; minVert[0] = v; }
+                if (v._coords.Y < minVal[1]) { minVal[1] = v._coords.Y; minVert[1] = v; }
+                if (v._coords.Z < minVal[2]) { minVal[2] = v._coords.Z; minVert[2] = v; }
+                if (v._coords.X > maxVal[0]) { maxVal[0] = v._coords.X; maxVert[0] = v; }
+                if (v._coords.Y > maxVal[1]) { maxVal[1] = v._coords.Y; maxVert[1] = v; }
+                if (v._coords.Z > maxVal[2]) { maxVal[2] = v._coords.Z; maxVert[2] = v; }
             }
 
-            if (Bottom < Top)
+            // Find two vertices separated by at least 1/sqrt(3) of the maximum
+            // distance between any two vertices
+            int i = 0;
+            if (maxVal[1] - minVal[1] > maxVal[0] - minVal[0]) { i = 1; }
+            if (maxVal[2] - minVal[2] > maxVal[i] - minVal[i]) { i = 2; }
+            if (minVal[i] >= maxVal[i])
             {
-                MathUtil.Swap<double>(ref mMinY, ref mMaxY);
+                // All vertices are the same -- normal doesn't matter
+                norm = new Vec3 { X = 0, Y = 0, Z = 1 };
+                return;
+            }
+
+            // Look for a third vertex which forms the triangle with maximum area
+            // (Length of normal == twice the triangle area)
+            Real maxLen2 = 0, tLen2;
+            var v1 = minVert[i];
+            var v2 = maxVert[i];
+            Vec3 d1, d2, tNorm;
+            Vec3.Sub(ref v1._coords, ref v2._coords, out d1);
+            for (v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            {
+                Vec3.Sub(ref v._coords, ref v2._coords, out d2);
+                tNorm.X = d1.Y * d2.Z - d1.Z * d2.Y;
+                tNorm.Y = d1.Z * d2.X - d1.X * d2.Z;
+                tNorm.Z = d1.X * d2.Y - d1.Y * d2.X;
+                tLen2 = tNorm.X*tNorm.X + tNorm.Y*tNorm.Y + tNorm.Z*tNorm.Z;
+                if (tLen2 > maxLen2)
+                {
+                    maxLen2 = tLen2;
+                    norm = tNorm;
+                }
+            }
+
+            if (maxLen2 <= 0.0f)
+            {
+                // All points lie on a single line -- any decent normal will do
+                norm = Vec3.Zero;
+                i = Vec3.LongAxis(ref d1);
+                norm[i] = 1;
             }
         }
 
-
-        public void AddPoint(Point2D p)
+        private void CheckOrientation()
         {
-            MinX = Math.Min(MinX, p.X);
-            MaxX = Math.Max(MaxX, p.X);
-            MinY = Math.Min(MinY, p.Y);
-            MaxY = Math.Max(MaxY, p.Y);
-        }
-
-
-        public void Inflate(double w, double h)
-        { 
-            Left   -= w; 
-            Top    += h; 
-            Right  += w; 
-            Bottom -= h; 
-        }
-
-
-        public void Inflate(double left, double top, double right, double bottom)
-        { 
-            Left   -= left; 
-            Top    += top; 
-            Right  += right; 
-            Bottom -= bottom; 
-        }
-
-
-        public void Offset(double w, double h)
-        {
-            Left   += w; 
-            Top    += h; 
-            Right  += w; 
-            Bottom += h;
-        }
-
-
-        public void SetPosition(double x, double y)
-        {
-            double w = Right  - Left;
-            double h = Bottom - Top;
-            Left   = x; 
-            Bottom = y; 
-            Right  = x + w; 
-            Top    = y + h;
-        }
-
-
-        /// Intersection
-        ///
-        /// Sets the rectangle to the intersection of two rectangles. 
-        /// Returns true if there is any intersection between the two rectangles.
-        /// If there is no intersection, the rectangle is set to 0, 0, 0, 0.
-        /// Either of the input rectangles may be the same as destination rectangle.
-        ///
-        public bool Intersection(Rect2D r1, Rect2D r2)
-        {
-            if (!TriangulationUtil.RectsIntersect(r1, r2))
+            // When we compute the normal automatically, we choose the orientation
+            // so that the the sum of the signed areas of all contours is non-negative.
+            Real area = 0.0f;
+            for (var f = _mesh._fHead._next; f != _mesh._fHead; f = f._next)
             {
-                Left = Right = Top = Bottom = 0.0;
-                return false;
+                if (f._anEdge._winding <= 0)
+                {
+                    continue;
+                }
+                area += MeshUtils.FaceArea(f);
+            }
+            if (area < 0.0f)
+            {
+                // Reverse the orientation by flipping all the t-coordinates
+                for (var v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+                {
+                    v._t = -v._t;
+                }
+                Vec3.Neg(ref _tUnit);
+            }
+        }
+
+        private void ProjectPolygon()
+        {
+            var norm = _normal;
+
+            bool computedNormal = false;
+            if (norm.X == 0.0f && norm.Y == 0.0f && norm.Z == 0.0f)
+            {
+                ComputeNormal(ref norm);
+                _normal = norm;
+                computedNormal = true;
             }
 
-            Left   = (r1.Left   > r2.Left)   ? r1.Left   : r2.Left;
-            Top    = (r1.Top    < r2.Top )   ? r1.Top    : r2.Top;
-            Right  = (r1.Right  < r2.Right)  ? r1.Right  : r2.Right;
-            Bottom = (r1.Bottom > r2.Bottom) ? r1.Bottom : r2.Bottom;
+            int i = Vec3.LongAxis(ref norm);
 
-            return true;
+            _sUnit[i] = 0;
+            _sUnit[(i + 1) % 3] = SUnitX;
+            _sUnit[(i + 2) % 3] = SUnitY;
+
+            _tUnit[i] = 0;
+            _tUnit[(i + 1) % 3] = norm[i] > 0.0f ? -SUnitY : SUnitY;
+            _tUnit[(i + 2) % 3] = norm[i] > 0.0f ? SUnitX : -SUnitX;
+
+            // Project the vertices onto the sweep plane
+            for (var v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            {
+                Vec3.Dot(ref v._coords, ref _sUnit, out v._s);
+                Vec3.Dot(ref v._coords, ref _tUnit, out v._t);
+            }
+            if (computedNormal)
+            {
+                CheckOrientation();
+            }
+
+            // Compute ST bounds.
+            bool first = true;
+            for (var v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            {
+                if (first)
+                {
+                    _bminX = _bmaxX = v._s;
+                    _bminY = _bmaxY = v._t;
+                    first = false;
+                }
+                else
+                {
+                    if (v._s < _bminX) _bminX = v._s;
+                    if (v._s > _bmaxX) _bmaxX = v._s;
+                    if (v._t < _bminY) _bminY = v._t;
+                    if (v._t > _bmaxY) _bmaxY = v._t;
+                }
+            }
         }
 
-
-        /// Union
-        ///
-        /// Sets the rectangle to the union of two rectangles r1 and r2. 
-        /// If either rect is empty, it is ignored. If both are empty, the rectangle
-        /// is set to r1.
-        /// Either of the input rectangle references may refer to the destination rectangle.
-        ///
-        public void Union(Rect2D r1, Rect2D r2)
+        /// <summary>
+        /// TessellateMonoRegion( face ) tessellates a monotone region
+        /// (what else would it do??)  The region must consist of a single
+        /// loop of half-edges (see mesh.h) oriented CCW.  "Monotone" in this
+        /// case means that any vertical line intersects the interior of the
+        /// region in a single interval.  
+        /// 
+        /// Tessellation consists of adding interior edges (actually pairs of
+        /// half-edges), to split the region into non-overlapping triangles.
+        /// 
+        /// The basic idea is explained in Preparata and Shamos (which I don't
+        /// have handy right now), although their implementation is more
+        /// complicated than this one.  The are two edge chains, an upper chain
+        /// and a lower chain.  We process all vertices from both chains in order,
+        /// from right to left.
+        /// 
+        /// The algorithm ensures that the following invariant holds after each
+        /// vertex is processed: the untessellated region consists of two
+        /// chains, where one chain (say the upper) is a single edge, and
+        /// the other chain is concave.  The left vertex of the single edge
+        /// is always to the left of all vertices in the concave chain.
+        /// 
+        /// Each step consists of adding the rightmost unprocessed vertex to one
+        /// of the two chains, and forming a fan of triangles from the rightmost
+        /// of two chain endpoints.  Determining whether we can add each triangle
+        /// to the fan is a simple orientation test.  By making the fan as large
+        /// as possible, we restore the invariant (check it yourself).
+        /// </summary>
+        private void TessellateMonoRegion(MeshUtils.Face face)
         {
-            if ((r2.Right == r2.Left) || (r2.Bottom == r2.Top))
+            // All edges are oriented CCW around the boundary of the region.
+            // First, find the half-edge whose origin vertex is rightmost.
+            // Since the sweep goes from left to right, face->anEdge should
+            // be close to the edge we want.
+            var up = face._anEdge;
+            Debug.Assert(up._Lnext != up && up._Lnext._Lnext != up);
+
+            while (Geom.VertLeq(up._Dst, up._Org)) up = up._Lprev;
+            while (Geom.VertLeq(up._Org, up._Dst)) up = up._Lnext;
+
+            var lo = up._Lprev;
+
+            while (up._Lnext != lo)
             {
-                Set(r1);
+                if (Geom.VertLeq(up._Dst, lo._Org))
+                {
+                    // up.Dst is on the left. It is safe to form triangles from lo.Org.
+                    // The EdgeGoesLeft test guarantees progress even when some triangles
+                    // are CW, given that the upper and lower chains are truly monotone.
+                    while (lo._Lnext != up && (Geom.EdgeGoesLeft(lo._Lnext)
+                        || Geom.EdgeSign(lo._Org, lo._Dst, lo._Lnext._Dst) <= 0.0f))
+                    {
+                        lo = _mesh.Connect(lo._Lnext, lo)._Sym;
+                    }
+                    lo = lo._Lprev;
+                }
+                else
+                {
+                    // lo.Org is on the left.  We can make CCW triangles from up.Dst.
+                    while (lo._Lnext != up && (Geom.EdgeGoesRight(up._Lprev)
+                        || Geom.EdgeSign(up._Dst, up._Org, up._Lprev._Org) >= 0.0f))
+                    {
+                        up = _mesh.Connect(up, up._Lprev)._Sym;
+                    }
+                    up = up._Lnext;
+                }
             }
-            else if ((r1.Right == r1.Left) || (r1.Bottom == r1.Top))
+
+            // Now lo.Org == up.Dst == the leftmost vertex.  The remaining region
+            // can be tessellated in a fan from this leftmost vertex.
+            Debug.Assert(lo._Lnext != up);
+            while (lo._Lnext._Lnext != up)
             {
-                Set(r2);
+                lo = _mesh.Connect(lo._Lnext, lo)._Sym;
+            }
+        }
+
+        /// <summary>
+        /// TessellateInterior( mesh ) tessellates each region of
+        /// the mesh which is marked "inside" the polygon. Each such region
+        /// must be monotone.
+        /// </summary>
+        private void TessellateInterior()
+        {
+            MeshUtils.Face f, next;
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = next)
+            {
+                // Make sure we don't try to tessellate the new triangles.
+                next = f._next;
+                if (f._inside)
+                {
+                    TessellateMonoRegion(f);
+                }
+            }
+        }
+
+        /// <summary>
+        /// DiscardExterior zaps (ie. sets to null) all faces
+        /// which are not marked "inside" the polygon.  Since further mesh operations
+        /// on NULL faces are not allowed, the main purpose is to clean up the
+        /// mesh so that exterior loops are not represented in the data structure.
+        /// </summary>
+        private void DiscardExterior()
+        {
+            MeshUtils.Face f, next;
+
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = next)
+            {
+                // Since f will be destroyed, save its next pointer.
+                next = f._next;
+                if( ! f._inside ) {
+                    _mesh.ZapFace(f);
+                }
+            }
+        }
+
+        /// <summary>
+        /// SetWindingNumber( value, keepOnlyBoundary ) resets the
+        /// winding numbers on all edges so that regions marked "inside" the
+        /// polygon have a winding number of "value", and regions outside
+        /// have a winding number of 0.
+        /// 
+        /// If keepOnlyBoundary is TRUE, it also deletes all edges which do not
+        /// separate an interior region from an exterior one.
+        /// </summary>
+        private void SetWindingNumber(int value, bool keepOnlyBoundary)
+        {
+            MeshUtils.Edge e, eNext;
+
+            for (e = _mesh._eHead._next; e != _mesh._eHead; e = eNext)
+            {
+                eNext = e._next;
+                if (e._Rface._inside != e._Lface._inside)
+                {
+
+                    /* This is a boundary edge (one side is interior, one is exterior). */
+                    e._winding = (e._Lface._inside) ? value : -value;
+                }
+                else
+                {
+
+                    /* Both regions are interior, or both are exterior. */
+                    if (!keepOnlyBoundary)
+                    {
+                        e._winding = 0;
+                    }
+                    else
+                    {
+                        _mesh.Delete(e);
+                    }
+                }
+            }
+
+        }
+
+        private int GetNeighbourFace(MeshUtils.Edge edge)
+        {
+            if (edge._Rface == null)
+                return MeshUtils.Undef;
+            if (!edge._Rface._inside)
+                return MeshUtils.Undef;
+            return edge._Rface._n;
+        }
+
+        private void OutputPolymesh(ElementType elementType, int polySize)
+        {
+            MeshUtils.Vertex v;
+            MeshUtils.Face f;
+            MeshUtils.Edge edge;
+            int maxFaceCount = 0;
+            int maxVertexCount = 0;
+            int faceVerts, i;
+
+            if (polySize < 3)
+            {
+                polySize = 3;
+            }
+            // Assume that the input data is triangles now.
+            // Try to merge as many polygons as possible
+            if (polySize > 3)
+            {
+                _mesh.MergeConvexFaces(polySize);
+            }
+
+            // Mark unused
+            for (v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+                v._n = MeshUtils.Undef;
+
+            // Create unique IDs for all vertices and faces.
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = f._next)
+            {
+                f._n = MeshUtils.Undef;
+                if (!f._inside) continue;
+
+                if (NoEmptyPolygons)
+                {
+                    var area = MeshUtils.FaceArea(f);
+                    if (Math.Abs(area) < Real.Epsilon)
+                    {
+                        continue;
+                    }
+                }
+
+                edge = f._anEdge;
+                faceVerts = 0;
+                do {
+                    v = edge._Org;
+                    if (v._n == MeshUtils.Undef)
+                    {
+                        v._n = maxVertexCount;
+                        maxVertexCount++;
+                    }
+                    faceVerts++;
+                    edge = edge._Lnext;
+                }
+                while (edge != f._anEdge);
+
+                Debug.Assert(faceVerts <= polySize);
+
+                f._n = maxFaceCount;
+                ++maxFaceCount;
+            }
+
+            _elementCount = maxFaceCount;
+            if (elementType == ElementType.ConnectedPolygons)
+                maxFaceCount *= 2;
+            _elements = new int[maxFaceCount * polySize];
+
+            _vertexCount = maxVertexCount;
+            _vertices = new ContourVertex[_vertexCount];
+
+            // Output vertices.
+            for (v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            {
+                if (v._n != MeshUtils.Undef)
+                {
+                    // Store coordinate
+                    _vertices[v._n].Position = v._coords;
+                    _vertices[v._n].Data = v._data;
+                }
+            }
+
+            // Output indices.
+            int elementIndex = 0;
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = f._next)
+            {
+                if (!f._inside) continue;
+
+                if (NoEmptyPolygons)
+                {
+                    var area = MeshUtils.FaceArea(f);
+                    if (Math.Abs(area) < Real.Epsilon)
+                    {
+                        continue;
+                    }
+                }
+
+                // Store polygon
+                edge = f._anEdge;
+                faceVerts = 0;
+                do {
+                    v = edge._Org;
+                    _elements[elementIndex++] = v._n;
+                    faceVerts++;
+                    edge = edge._Lnext;
+                } while (edge != f._anEdge);
+                // Fill unused.
+                for (i = faceVerts; i < polySize; ++i)
+                {
+                    _elements[elementIndex++] = MeshUtils.Undef;
+                }
+
+                // Store polygon connectivity
+                if (elementType == ElementType.ConnectedPolygons)
+                {
+                    edge = f._anEdge;
+                    do
+                    {
+                        _elements[elementIndex++] = GetNeighbourFace(edge);
+                        edge = edge._Lnext;
+                    } while (edge != f._anEdge);
+                    // Fill unused.
+                    for (i = faceVerts; i < polySize; ++i)
+                    {
+                        _elements[elementIndex++] = MeshUtils.Undef;
+                    }
+                }
+            }
+        }
+
+        private void OutputContours()
+        {
+            MeshUtils.Face f;
+            MeshUtils.Edge edge, start;
+            int startVert = 0;
+            int vertCount = 0;
+
+            _vertexCount = 0;
+            _elementCount = 0;
+
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = f._next)
+            {
+                if (!f._inside) continue;
+
+                start = edge = f._anEdge;
+                do
+                {
+                    ++_vertexCount;
+                    edge = edge._Lnext;
+                }
+                while (edge != start);
+
+                ++_elementCount;
+            }
+
+            _elements = new int[_elementCount * 2];
+            _vertices = new ContourVertex[_vertexCount];
+
+            int vertIndex = 0;
+            int elementIndex = 0;
+
+            startVert = 0;
+
+            for (f = _mesh._fHead._next; f != _mesh._fHead; f = f._next)
+            {
+                if (!f._inside) continue;
+
+                vertCount = 0;
+                start = edge = f._anEdge;
+                do {
+                    _vertices[vertIndex].Position = edge._Org._coords;
+                    _vertices[vertIndex].Data = edge._Org._data;
+                    ++vertIndex;
+                    ++vertCount;
+                    edge = edge._Lnext;
+                } while (edge != start);
+
+                _elements[elementIndex++] = startVert;
+                _elements[elementIndex++] = vertCount;
+
+                startVert += vertCount;
+            }
+        }
+
+        private Real SignedArea(ContourVertex[] vertices)
+        {
+            Real area = 0.0f;
+
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                var v0 = vertices[i];
+                var v1 = vertices[(i + 1) % vertices.Length];
+
+                area += v0.Position.X * v1.Position.Y;
+                area -= v0.Position.Y * v1.Position.X;
+            }
+
+            return 0.5f * area;
+        }
+
+        public void AddContour(ContourVertex[] vertices)
+        {
+            AddContour(vertices, ContourOrientation.Original);
+        }
+
+        public void AddContour(ContourVertex[] vertices, ContourOrientation forceOrientation)
+        {
+            if (_mesh == null)
+            {
+                _mesh = new Mesh();
+            }
+
+            bool reverse = false;
+            if (forceOrientation != ContourOrientation.Original)
+            {
+                var area = SignedArea(vertices);
+                reverse = (forceOrientation == ContourOrientation.Clockwise && area < 0.0f) || (forceOrientation == ContourOrientation.CounterClockwise && area > 0.0f);
+            }
+
+            MeshUtils.Edge e = null;
+            for (int i = 0; i < vertices.Length; ++i)
+            {
+                if (e == null)
+                {
+                    e = _mesh.MakeEdge();
+                    _mesh.Splice(e, e._Sym);
+                }
+                else
+                {
+                    // Create a new vertex and edge which immediately follow e
+                    // in the ordering around the left face.
+                    _mesh.SplitEdge(e);
+                    e = e._Lnext;
+                }
+
+                int index = reverse ? vertices.Length - 1 - i : i;
+                // The new vertex is now e._Org.
+                e._Org._coords = vertices[index].Position;
+                e._Org._data = vertices[index].Data;
+
+                // The winding of an edge says how the winding number changes as we
+                // cross from the edge's right face to its left face.  We add the
+                // vertices in such an order that a CCW contour will add +1 to
+                // the winding number of the region inside the contour.
+                e._winding = 1;
+                e._Sym._winding = -1;
+            }
+        }
+
+        public void Tessellate(WindingRule windingRule, ElementType elementType, int polySize)
+        {
+            Tessellate(windingRule, elementType, polySize, null);
+        }
+
+        public void Tessellate(WindingRule windingRule, ElementType elementType, int polySize, CombineCallback combineCallback)
+        {
+            _normal = Vec3.Zero;
+            _vertices = null;
+            _elements = null;
+
+            _windingRule = windingRule;
+            _combineCallback = combineCallback;
+
+            if (_mesh == null)
+            {
+                return;
+            }
+
+            // Determine the polygon normal and project vertices onto the plane
+            // of the polygon.
+            ProjectPolygon();
+
+            // ComputeInterior computes the planar arrangement specified
+            // by the given contours, and further subdivides this arrangement
+            // into regions.  Each region is marked "inside" if it belongs
+            // to the polygon, according to the rule given by windingRule.
+            // Each interior region is guaranteed be monotone.
+            ComputeInterior();
+
+            // If the user wants only the boundary contours, we throw away all edges
+            // except those which separate the interior from the exterior.
+            // Otherwise we tessellate all the regions marked "inside".
+            if (elementType == ElementType.BoundaryContours)
+            {
+                SetWindingNumber(1, true);
             }
             else
             {
-                Left = (r1.Left < r2.Left) ? r1.Left : r2.Left;
-                Top = (r1.Top > r2.Top) ? r1.Top : r2.Top;
-                Right = (r1.Right > r2.Right) ? r1.Right : r2.Right;
-                Bottom = (r1.Bottom < r2.Bottom) ? r1.Bottom : r2.Bottom;
+                TessellateInterior();
             }
-        }
 
+            _mesh.Check();
+
+            if (elementType == ElementType.BoundaryContours)
+            {
+                OutputContours();
+            }
+            else
+            {
+                OutputPolymesh(elementType, polySize);
+            }
+
+            if (UsePooling)
+            {
+                _mesh.Free();
+            }
+            _mesh = null;
+        }
     }
 }
 
@@ -18038,29 +12601,14 @@ namespace Tiled2Unity
 {
     public partial class TmxLayer : TmxLayerBase
     {
-        public enum IgnoreSettings
-        {
-            False,      // Ingore nothing (layer fully-enabled)
-            True,       // Ignore everything (like layer doesn't exist)
-            Collision,  // Ignore collision on layer
-            Visual,     // Ignore visual on layer
-        };
-
-        public TmxMap TmxMap { get; private set; }
-        public string Name { get; private set; }
-        public bool Visible { get; private set; }
-        public float Opacity { get; private set; }
-        public PointF Offset { get; private set; }
         public int Width { get; private set; }
         public int Height { get; private set; }
-        public IgnoreSettings Ignore { get; private set; }
         public uint[] TileIds { get; private set; }
         public List<TmxMesh> Meshes { get; private set; }
         public List<TmxLayer> CollisionLayers { get; private set; }
 
-        public TmxLayer(TmxMap map)
+        public TmxLayer(TmxMap map) : base(map)
         {
-            this.TmxMap = map;
             this.Visible = true;
             this.Opacity = 1.0f;
             this.CollisionLayers = new List<TmxLayer>();
@@ -18424,6 +12972,7 @@ namespace Tiled2Unity
 
 // using System;
 // using System.Collections.Generic;
+// using System.Drawing;
 // using System.Linq;
 // using System.Text;
 
@@ -18433,6 +12982,22 @@ namespace Tiled2Unity
     // (In Tiled2Unity we treat image layers as a special case of tile layer)
     public class TmxLayerBase : TmxHasProperties
     {
+        public enum IgnoreSettings
+        {
+            False,      // Ingore nothing (layer fully-enabled)
+            True,       // Ignore everything (like layer doesn't exist)
+            Collision,  // Ignore collision on layer
+            Visual,     // Ignore visual on layer
+        };
+
+        public TmxMap TmxMap { get; private set; }
+
+        public string Name { get; protected set; }
+        public bool Visible { get; protected set; }
+        public float Opacity { get; protected set; }
+        public PointF Offset { get; protected set; }
+        public IgnoreSettings Ignore { get; protected set; }
+
         public TmxProperties Properties { get; protected set; }
 
         public int XmlElementIndex { get; protected set; }
@@ -18441,6 +13006,11 @@ namespace Tiled2Unity
         public int SortingOrder { get; set; }
 
         public string UnityLayerOverrideName { get; protected set; }
+
+        public TmxLayerBase(TmxMap tmxMap)
+        {
+            this.TmxMap = tmxMap;
+        }
     }
 }
 
@@ -18815,7 +13385,7 @@ namespace Tiled2Unity
                     {
                         uint localId = (uint) tilesToAdd.Count();
                         uint globalId = firstId + localId;
-                        TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                        TmxTile tile = new TmxTile(this, globalId, localId, tilesetName, tmxImage);
                         tile.Offset = tileOffset;
                         tile.SetTileSize(tileWidth, tileHeight);
                         tile.SetLocationOnSource(end_x - tileWidth, end_y - tileHeight);
@@ -18837,7 +13407,7 @@ namespace Tiled2Unity
                     localId = TmxHelper.GetAttributeAsUInt(t, "id", localId);
 
                     uint globalId = firstId + localId;
-                    TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                    TmxTile tile = new TmxTile(this, globalId, localId, tilesetName, tmxImage);
                     tile.Offset = tileOffset;
                     tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
                     tile.SetLocationOnSource(0, 0);
@@ -18907,7 +13477,7 @@ namespace Tiled2Unity
             uint localId = 1;
             uint globalId = firstId + localId;
 
-            TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+            TmxTile tile = new TmxTile(this, globalId, localId, tilesetName, tmxImage);
             tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
             tile.SetLocationOnSource(0, 0);
             this.Tiles[tile.GlobalId] = tile;
@@ -19219,7 +13789,14 @@ namespace Tiled2Unity
             return new PointF(a.X + b.X, a.Y + b.Y);
         }
 
-        public static PointF ScalePoints(PointF p, float s)
+        public static PointF MidPoint(PointF a, PointF b)
+        {
+            float mx = (a.X + b.X) * 0.5f;
+            float my = (a.Y + b.Y) * 0.5f;
+            return new PointF(mx, my);
+        }
+
+        public static PointF ScalePoint(PointF p, float s)
         {
             return new PointF(p.X * s, p.Y * s);
         }
@@ -19355,25 +13932,27 @@ namespace Tiled2Unity
                     frameTileId |= (tileId & TmxMath.FLIPPED_DIAGONALLY_FLAG);
 
                     // Find a mesh to stick this tile into (if it exists)
-                    TmxMesh mesh = meshes.Find(m => m.CanAddFrame(tile, timeMs, frame.DurationMs));
+                    TmxMesh mesh = meshes.Find(m => m.CanAddFrame(tile, timeMs, frame.DurationMs, tile.Animation.TotalTimeMs));
                     if (mesh == null)
                     {
+                        var frameTile = layer.TmxMap.GetTileFromTileId(frameTileId);
+
                         // Create a new mesh and add it to our list
                         mesh = new TmxMesh();
                         mesh.TileIds = new uint[layer.TileIds.Count()];
                         mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
-                        mesh.TmxImage = tile.TmxImage;
+                        mesh.TmxImage = frameTile.TmxImage;
 
                         // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
                         mesh.StartTimeMs = timeMs;
                         mesh.DurationMs = frame.DurationMs;
                         mesh.FullAnimationDurationMs = tile.Animation.TotalTimeMs;
+                        mesh.ObjectName = Path.GetFileNameWithoutExtension(frameTile.TmxImage.AbsolutePath);
 
-                        mesh.ObjectName = Path.GetFileNameWithoutExtension(tile.TmxImage.AbsolutePath);
                         if (mesh.DurationMs != 0)
                         {
                             // Decorate the name a bit with some animation details for the frame
-                            mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
+                            mesh.ObjectName += string.Format("[{0}-{1}][{2}]", timeMs, timeMs + mesh.DurationMs, mesh.FullAnimationDurationMs);
                         }
 
                         meshes.Add(mesh);
@@ -19417,7 +13996,7 @@ namespace Tiled2Unity
                 if (mesh.DurationMs != 0)
                 {
                     // Decorate the name a bit with some animation details for the frame
-                    mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
+                    mesh.ObjectName += string.Format("[{0}-{1}][{2}]", timeMs, timeMs + mesh.DurationMs, mesh.FullAnimationDurationMs);
                 }
 
                 // Advance time
@@ -19430,7 +14009,7 @@ namespace Tiled2Unity
             return meshes;
         }
 
-        private bool CanAddFrame(TmxTile tile, int startMs, int durationMs)
+        private bool CanAddFrame(TmxTile tile, int startMs, int durationMs, int totalTimeMs)
         {
             if (IsMeshFull())
                 return false;
@@ -19442,6 +14021,9 @@ namespace Tiled2Unity
                 return false;
 
             if (this.DurationMs != durationMs)
+                return false;
+
+            if (this.FullAnimationDurationMs != totalTimeMs)
                 return false;
 
             return true;
@@ -19659,13 +14241,10 @@ namespace Tiled2Unity
 {
     public partial class TmxObjectGroup : TmxLayerBase
     {
-        public string Name { get; private set; }
-        public bool Visible { get; private set; }
         public List<TmxObject> Objects { get; private set; }
         public Color Color { get; private set; }
-        public PointF Offset { get; private set; }
 
-        public TmxObjectGroup()
+        public TmxObjectGroup(TmxMap tmxMap) : base(tmxMap)
         {
             this.Objects = new List<TmxObject>();
         }
@@ -19715,15 +14294,19 @@ namespace Tiled2Unity
         {
             Debug.Assert(xml.Name == "objectgroup");
 
-            TmxObjectGroup tmxObjectGroup = new TmxObjectGroup();
+            TmxObjectGroup tmxObjectGroup = new TmxObjectGroup(tmxMap);
 
             // Order within Xml file is import for layer types
             tmxObjectGroup.XmlElementIndex = xml.NodesBeforeSelf().Count();
 
             tmxObjectGroup.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
             tmxObjectGroup.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
+            tmxObjectGroup.Opacity = TmxHelper.GetAttributeAsFloat(xml, "opacity", 1);
             tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
             tmxObjectGroup.Properties = TmxProperties.FromXml(xml);
+
+            // Set the "ignore" setting on this object group
+            tmxObjectGroup.Ignore = tmxObjectGroup.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
 
             PointF offset = new PointF(0, 0);
             offset.X = TmxHelper.GetAttributeAsFloat(xml, "offsetx", 0);
@@ -19735,7 +14318,8 @@ namespace Tiled2Unity
             var objects = from obj in xml.Elements("object")
                           select TmxObject.FromXml(obj, tmxObjectGroup, tmxMap);
 
-            tmxObjectGroup.Objects = objects.ToList();
+            // The objects are ordered "visually" by Y position
+            tmxObjectGroup.Objects = objects.OrderBy(o => TmxMath.ObjectPointFToMapSpace(tmxMap, o.Position).Y).ToList();
 
             // Are we using a unity:layer override?
             tmxObjectGroup.UnityLayerOverrideName = tmxObjectGroup.Properties.GetPropertyValueAsString("unity:layer", "");
@@ -19912,7 +14496,19 @@ namespace Tiled2Unity
                          let y = float.Parse(pt.Split(',')[1])
                          select new PointF(x, y);
 
-            this.Points = points.ToList();
+            // If there are only 2 points in the polyline then we force a midpoint between them
+            // This is because the clipper library is rejecting polylines unless there is 3 or more points
+            if (points.Count() == 2)
+            {
+                var A = points.First();
+                var B = points.Last();
+                var M = TmxMath.MidPoint(A, B);
+                this.Points = new List<PointF>() { A, M, B };
+            }
+            else
+            {
+                this.Points = points.ToList();
+            }
         }
 
         protected override string InternalGetDefaultName()
@@ -20353,6 +14949,8 @@ namespace Tiled2Unity
         Int,
         Float,
         Bool,
+        Color,
+        File,
     }
 }
 
@@ -20445,6 +15043,7 @@ namespace Tiled2Unity
 {
     public partial class TmxTile : TmxHasProperties
     {
+        public TmxMap TmxMap { get; private set; }
         public uint GlobalId { get; private set; }
         public uint LocalId { get; private set; }
         public Size TileSize { get; private set; }
@@ -20459,13 +15058,14 @@ namespace Tiled2Unity
         public List<TmxMesh> Meshes { get; set; }
 
 
-        public TmxTile(uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
+        public TmxTile(TmxMap tmxMap, uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
         {
+            this.TmxMap = TmxMap;
             this.GlobalId = globalId;
             this.LocalId = localId;
             this.TmxImage = tmxImage;
             this.Properties = new TmxProperties();
-            this.ObjectGroup = new TmxObjectGroup();
+            this.ObjectGroup = new TmxObjectGroup(this.TmxMap);
             this.Animation = TmxAnimation.FromTileId(globalId);
             this.Meshes = new List<TmxMesh>();
         }

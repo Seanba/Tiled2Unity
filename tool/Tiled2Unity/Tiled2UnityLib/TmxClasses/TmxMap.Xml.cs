@@ -163,7 +163,7 @@ namespace Tiled2Unity
                     {
                         uint localId = (uint) tilesToAdd.Count();
                         uint globalId = firstId + localId;
-                        TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                        TmxTile tile = new TmxTile(this, globalId, localId, tilesetName, tmxImage);
                         tile.Offset = tileOffset;
                         tile.SetTileSize(tileWidth, tileHeight);
                         tile.SetLocationOnSource(end_x - tileWidth, end_y - tileHeight);
@@ -185,7 +185,7 @@ namespace Tiled2Unity
                     localId = TmxHelper.GetAttributeAsUInt(t, "id", localId);
 
                     uint globalId = firstId + localId;
-                    TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+                    TmxTile tile = new TmxTile(this, globalId, localId, tilesetName, tmxImage);
                     tile.Offset = tileOffset;
                     tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
                     tile.SetLocationOnSource(0, 0);
@@ -255,7 +255,7 @@ namespace Tiled2Unity
             uint localId = 1;
             uint globalId = firstId + localId;
 
-            TmxTile tile = new TmxTile(globalId, localId, tilesetName, tmxImage);
+            TmxTile tile = new TmxTile(this, globalId, localId, tilesetName, tmxImage);
             tile.SetTileSize(tmxImage.Size.Width, tmxImage.Size.Height);
             tile.SetLocationOnSource(0, 0);
             this.Tiles[tile.GlobalId] = tile;

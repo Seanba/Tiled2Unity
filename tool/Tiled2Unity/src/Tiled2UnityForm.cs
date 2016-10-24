@@ -84,7 +84,8 @@ namespace Tiled2Unity
             this.textBoxExportFolder.Text = this.tmxSession.UnityExportFolderPath;
 
             // Set the scale
-            this.textBoxScale.Text = Tiled2Unity.Settings.Scale.ToString();
+            float inverse = 1.0f / Tiled2Unity.Settings.Scale;
+            this.textBoxScale.Text = inverse.ToString();
             textBoxScale_Validating(null, null);
         }
 
@@ -257,14 +258,15 @@ namespace Tiled2Unity
 
             if (good)
             {
-                Tiled2Unity.Settings.Scale = scale;
+                float inverse = 1 / scale;
+                Tiled2Unity.Settings.Scale = inverse;
                 Properties.Settings.Default.LastVertexScale = Tiled2Unity.Settings.Scale;
                 Properties.Settings.Default.Save();
             }
             else
             {
-                // Set to 1.0
-                this.textBoxScale.Text = "1.0";
+                // Set to 1
+                this.textBoxScale.Text = "1";
             }
         }
 
@@ -282,6 +284,11 @@ namespace Tiled2Unity
         private void donateToTiled2UnityToolStripMenuItem_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("http://www.seanba.com/donate");
+        }
+
+        private void onlineDocumentationToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start("http://tiled2unity.readthedocs.io/en/latest");
         }
 
         private void checkBoxPreferConvexPolygons_CheckedChanged(object sender, EventArgs e)
@@ -332,7 +339,6 @@ namespace Tiled2Unity
             this.textBoxObjectTypesXml.Text = "";
             this.tmxSession.TmxMap.ClearObjectTypeXml();
         }
-
     }
 }
 

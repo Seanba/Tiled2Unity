@@ -27,6 +27,13 @@ namespace Tiled2Unity
 
         private float timer = 0;
 
+        private MeshRenderer meshRenderer = null;
+
+        private void Awake()
+        {
+            this.meshRenderer = this.GetComponent<MeshRenderer>();
+        }
+
         private void Start()
         {
 #if T2U_USE_ASSERTIONS
@@ -47,27 +54,7 @@ namespace Tiled2Unity
                 this.timer -= this.TotalAnimationTime;
             }
 
-            // Should our mesh be rendered or not?
-            MeshRenderer renderer = this.gameObject.GetComponent<MeshRenderer>();
-            bool isEnabled = renderer.enabled;
-
-            if (timer >= this.StartTime && timer < (this.StartTime + this.Duration))
-            {
-                // Our mesh should be visible at this time
-                if (!isEnabled)
-                {
-                    renderer.enabled = true;
-                }
-            }
-            else
-            {
-                // Mesh should not be visible at this time
-                if (isEnabled)
-                {
-                    renderer.enabled = false;
-                }
-            }
-
+            this.meshRenderer.enabled = timer >= this.StartTime && timer < (this.StartTime + this.Duration);
         }
 
     }

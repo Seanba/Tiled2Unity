@@ -20,7 +20,7 @@ namespace Tiled2Unity
     {
         // We need to call this while the renderers on the model is having its material assigned to it
         // This is invoked for every submesh in the .obj wavefront mesh
-        public Material FixMaterialForMeshRenderer(string objName, Renderer renderer)
+        public UnityEngine.Material FixMaterialForMeshRenderer(string objName, Renderer renderer)
         {
             string xmlPath = GetXmlImportAssetPath(objName);
             ImportBehaviour importBehavior = ImportBehaviour.FindOrCreateImportBehaviour(xmlPath);
@@ -53,7 +53,7 @@ namespace Tiled2Unity
             string materialPath = GetMaterialAssetPath(materialName);
 
             // Assign the material
-            Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(Material)) as Material;
+            UnityEngine.Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(UnityEngine.Material)) as UnityEngine.Material;
             if (material == null)
             {
                 Debug.LogError(String.Format("Could not find material: {0}", materialName));

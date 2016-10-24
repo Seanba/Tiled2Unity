@@ -11,5 +11,7 @@ namespace Tiled2Unity
         Int,
         Float,
         Bool,
+        Color,
+        File,
     }
 }

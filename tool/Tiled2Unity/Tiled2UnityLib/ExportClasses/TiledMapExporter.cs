@@ -161,6 +161,20 @@ namespace Tiled2Unity
             return new PointF(tx, 1.0f - ty);
         }
 
+        public static float CalculateFaceDepth(float position_y, float mapHeight)
+        {
+            float z = position_y / mapHeight * -1.0f;
+            return (z == -0.0f) ? 0 : z;
+        }
+
+        public static float CalculateLayerDepth(int layerOrder, float tileHeight, float mapHeight)
+        {
+            // Note: I don't think a layer depth of this complexity is helpful and seems to be leading to z-fighting anyhow
+            //float z = layerOrder * tileHeight / mapHeight * -1.0f;
+            float z = layerOrder * -1.0f;
+            return (z == -0.0f) ? 0 : z;
+        }
+
         private string StringToBase64String(string text)
         {
             byte[] bytes = Encoding.ASCII.GetBytes(text);

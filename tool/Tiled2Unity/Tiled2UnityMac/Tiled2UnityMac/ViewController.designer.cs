@@ -1,6 +1,6 @@
 // WARNING
 //
-// This file has been generated automatically by Xamarin Studio Community to store outlets and
+// This file has been generated automatically by Xamarin Studio to store outlets and
 // actions made in the UI designer. If it is removed, they will be lost.
 // Manual changes to this file may not be handled correctly.
 //
@@ -36,6 +36,9 @@ namespace Tiled2UnityMac
 		[Action ("ButtonClicked_BigAssExport:")]
 		partial void ButtonClicked_BigAssExport (Foundation.NSObject sender);
 
+		[Action ("ClickedButton_ClearObjectXml:")]
+		partial void ClickedButton_ClearObjectXml (Foundation.NSObject sender);
+
 		[Action ("ClickedButton_DepthBufferEnabled:")]
 		partial void ClickedButton_DepthBufferEnabled (Foundation.NSObject sender);
 
@@ -56,11 +59,6 @@ namespace Tiled2UnityMac
 		
 		void ReleaseDesignerOutlets ()
 		{
-			if (TextFieldLaunchTip != null) {
-				TextFieldLaunchTip.Dispose ();
-				TextFieldLaunchTip = null;
-			}
-
 			if (CheckButtonDepthBufferEnabled != null) {
 				CheckButtonDepthBufferEnabled.Dispose ();
 				CheckButtonDepthBufferEnabled = null;
@@ -74,6 +72,11 @@ namespace Tiled2UnityMac
 			if (TextFieldExportTo != null) {
 				TextFieldExportTo.Dispose ();
 				TextFieldExportTo = null;
+			}
+
+			if (TextFieldLaunchTip != null) {
+				TextFieldLaunchTip.Dispose ();
+				TextFieldLaunchTip = null;
 			}
 
 			if (TextFieldScale != null) {

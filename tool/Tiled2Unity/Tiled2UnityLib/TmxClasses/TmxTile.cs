@@ -8,6 +8,7 @@ namespace Tiled2Unity
 {
     public partial class TmxTile : TmxHasProperties
     {
+        public TmxMap TmxMap { get; private set; }
         public uint GlobalId { get; private set; }
         public uint LocalId { get; private set; }
         public Size TileSize { get; private set; }
@@ -22,13 +23,14 @@ namespace Tiled2Unity
         public List<TmxMesh> Meshes { get; set; }
 
 
-        public TmxTile(uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
+        public TmxTile(TmxMap tmxMap, uint globalId, uint localId, string tilesetName, TmxImage tmxImage)
         {
+            this.TmxMap = TmxMap;
             this.GlobalId = globalId;
             this.LocalId = localId;
             this.TmxImage = tmxImage;
             this.Properties = new TmxProperties();
-            this.ObjectGroup = new TmxObjectGroup();
+            this.ObjectGroup = new TmxObjectGroup(this.TmxMap);
             this.Animation = TmxAnimation.FromTileId(globalId);
             this.Meshes = new List<TmxMesh>();
         }

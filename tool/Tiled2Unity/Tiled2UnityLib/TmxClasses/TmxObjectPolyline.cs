@@ -46,7 +46,19 @@ namespace Tiled2Unity
                          let y = float.Parse(pt.Split(',')[1])
                          select new PointF(x, y);
 
-            this.Points = points.ToList();
+            // If there are only 2 points in the polyline then we force a midpoint between them
+            // This is because the clipper library is rejecting polylines unless there is 3 or more points
+            if (points.Count() == 2)
+            {
+                var A = points.First();
+                var B = points.Last();
+                var M = TmxMath.MidPoint(A, B);
+                this.Points = new List<PointF>() { A, M, B };
+            }
+            else
+            {
+                this.Points = points.ToList();
+            }
         }
 
         protected override string InternalGetDefaultName()

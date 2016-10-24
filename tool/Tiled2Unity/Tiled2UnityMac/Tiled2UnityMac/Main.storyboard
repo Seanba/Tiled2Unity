@@ -71,6 +71,11 @@
                                                 <action selector="importUnityPackage:" target="Ady-hI-5gd" id="lpZ-Jk-czn"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Online Documentation" keyEquivalent="o" id="uPh-a3-uHP">
+                                            <connections>
+                                                <action selector="onlineDocs:" target="Ady-hI-5gd" id="mQ5-6a-9Ws"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Show Command Help" keyEquivalent="h" id="rSt-f0-y9T">
                                             <connections>
                                                 <action selector="displayHelpOutput:" target="Ady-hI-5gd" id="w4u-Vc-DUx"/>
@@ -202,7 +207,7 @@
                                         <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" id="MED-l6-iOO">
                                             <rect key="frame" x="66" y="161" width="114" height="22"/>
                                             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
-                                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Vertex Scale:" id="4WS-86-eHN">
+                                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Pixels Per Unit:" id="4WS-86-eHN">
                                                 <font key="font" metaFont="system"/>
                                                 <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                                 <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
@@ -224,7 +229,7 @@
                                         <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" id="WgU-UH-YMi">
                                             <rect key="frame" x="290" y="161" width="506" height="22"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
-                                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" allowsUndo="NO" sendsActionOnEndEditing="YES" alignment="left" title="Scale is inverse of Unity's &quot;Pixels Per Unit&quot; Texture Import setting." drawsBackground="YES" id="uKp-sF-OwF">
+                                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" allowsUndo="NO" sendsActionOnEndEditing="YES" alignment="left" title="Set to same &quot;Pixels Per Unit&quot; value for Unity sprites in your project." drawsBackground="YES" id="uKp-sF-OwF">
                                                 <font key="font" metaFont="system"/>
                                                 <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                                 <color key="backgroundColor" name="controlShadowColor" catalog="System" colorSpace="catalog"/>
@@ -248,6 +253,9 @@
                                                 <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                                 <font key="font" metaFont="system"/>
                                             </buttonCell>
+                                            <connections>
+                                                <action selector="ClickedButton_ClearObjectXml:" target="XfG-lQ-9wD" id="bP4-gq-v8v"/>
+                                            </connections>
                                         </button>
                                         <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" id="WNa-Lh-NeL">
                                             <rect key="frame" x="186" y="88" width="612" height="34"/>
@@ -350,6 +358,7 @@
                     <connections>
                         <outlet property="CheckButtonDepthBufferEnabled" destination="0dk-Ib-QPF" id="t0t-PF-usA"/>
                         <outlet property="CheckButtonPreferConvexPolygons" destination="2Ei-P2-wG4" id="lHs-6W-pu7"/>
+                        <outlet property="ClickedButton_ClearObjectTypesXml" destination="ZSu-k0-pe3" id="0ge-CL-Pi8"/>
                         <outlet property="ClickedButton_ExportTo" destination="4O7-Ln-Uol" id="QQ5-Ws-PKq"/>
                         <outlet property="ObjectTypesXml" destination="vjV-3D-0E0" id="ENz-oY-hSE"/>
                         <outlet property="TextFieldExportTo" destination="51h-6Z-Ree" id="c7m-VY-Eug"/>

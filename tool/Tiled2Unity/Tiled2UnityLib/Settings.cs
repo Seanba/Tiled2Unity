@@ -13,6 +13,7 @@ namespace Tiled2Unity
         public static float Scale = 1.0f;
         public static bool PreferConvexPolygons = false;
         public static bool DepthBufferEnabled = false;
+        public static bool WriteableVertices = false;
 
         public static readonly float DefaultTexelBias = 8192.0f;
         public static float TexelBias = DefaultTexelBias;

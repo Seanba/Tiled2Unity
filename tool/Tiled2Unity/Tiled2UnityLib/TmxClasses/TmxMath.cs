@@ -242,7 +242,14 @@ namespace Tiled2Unity
             return new PointF(a.X + b.X, a.Y + b.Y);
         }
 
-        public static PointF ScalePoints(PointF p, float s)
+        public static PointF MidPoint(PointF a, PointF b)
+        {
+            float mx = (a.X + b.X) * 0.5f;
+            float my = (a.Y + b.Y) * 0.5f;
+            return new PointF(mx, my);
+        }
+
+        public static PointF ScalePoint(PointF p, float s)
         {
             return new PointF(p.X * s, p.Y * s);
         }

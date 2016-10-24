@@ -52,8 +52,16 @@ namespace Tiled2Unity
         // Creates the text for a Wavefront OBJ file for the TmxMap
         private StringWriter BuildObjString()
         {
-            HashIndexOf<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
+            IGenericDatabase<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+
+            // Are we allowing vertices to be written too (advanced option)
+            if (Tiled2Unity.Settings.WriteableVertices)
+            {
+                // Replace vertex database with class that ensure each vertex (even ones with similar values) are unique
+                Logger.WriteLine("Using writeable-vertices. This will increase the size of the mesh but will allow you mutate vertices through scripting. This is an advanced feature.");
+                vertexDatabase = new GenericListDatabase<Vertex3>();
+            }
 
             float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
 
@@ -101,7 +109,7 @@ namespace Tiled2Unity
                             float depth_z = 0.0f;
                             if (Tiled2Unity.Settings.DepthBufferEnabled)
                             {
-                                depth_z = position.Y / mapLogicalHeight * -1.0f;
+                                depth_z = CalculateFaceDepth(position.Y, mapLogicalHeight);
                             }
 
                             FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
@@ -113,10 +121,10 @@ namespace Tiled2Unity
                             var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
 
                             // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                             faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                         }
                     }
@@ -142,10 +150,10 @@ namespace Tiled2Unity
                 FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
 
                 // Adds vertices and uvs to the database as we build the face strings
-                string v0 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                string v1 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                string v2 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                string v3 = String.Format("{0}/{1}/1", vertexDatabase.Add(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+                string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
                 faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
             }
 
@@ -247,41 +255,38 @@ namespace Tiled2Unity
             points[2] = PointF.Add(imageLocation, tileSize);
             points[3] = PointF.Add(imageLocation, new Size(0, tileSize.Height));
 
+            // "Tuck in" the points a tiny bit to help avoid seams
+            // This can be turned off by setting Texel Bias to zero
+            // Note that selecting a texel bias that is too small or a texture that is too big may affect pixel-perfect rendering (pixel snapping in shader will help)
+            if (Tiled2Unity.Settings.TexelBias > 0)
+            {
+                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
+                float bias_w = bias * tileSize.Width;
+                float bias_h = bias * tileSize.Height;
+
+                points[0].X += bias_w;
+                points[0].Y += bias_h;
+
+                points[1].X -= bias_w;
+                points[1].Y += bias_h;
+
+                points[2].X -= bias_w;
+                points[2].Y -= bias_h;
+
+                points[3].X += bias_w;
+                points[3].Y -= bias_h;
+            }
+
             PointF center = new PointF(tileSize.Width * 0.5f, tileSize.Height * 0.5f);
             center.X += imageLocation.X;
             center.Y += imageLocation.Y;
             TmxMath.TransformPoints_DiagFirst(points, center, flipDiagonal, flipHorizontal, flipVertical);
-            //TmxMath.TransformPoints(points, center, flipDiagonal, flipHorizontal, flipVertical);
 
             PointF[] coordinates = new PointF[4];
             coordinates[3] = PointToTextureCoordinate(points[0], imageSize);
             coordinates[2] = PointToTextureCoordinate(points[1], imageSize);
             coordinates[1] = PointToTextureCoordinate(points[2], imageSize);
             coordinates[0] = PointToTextureCoordinate(points[3], imageSize);
-
-            // Apply a small bias to the "inner" edges of the texels
-            // This keeps us from seeing seams
-            //const float bias = 1.0f / 8192.0f;
-            //const float bias = 1.0f / 4096.0f;
-            //const float bias = 1.0f / 2048.0f;
-            if (Tiled2Unity.Settings.TexelBias > 0)
-            {
-                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
-
-                PointF[] multiply = new PointF[4];
-                multiply[0] = new PointF(1, 1);
-                multiply[1] = new PointF(-1, 1);
-                multiply[2] = new PointF(-1, -1);
-                multiply[3] = new PointF(1, -1);
-
-                // This nudge has to be transformed too
-                TmxMath.TransformPoints_DiagFirst(multiply, Point.Empty, flipDiagonal, flipHorizontal, flipVertical);
-
-                coordinates[0] = TmxMath.AddPoints(coordinates[0], TmxMath.ScalePoints(multiply[0], bias));
-                coordinates[1] = TmxMath.AddPoints(coordinates[1], TmxMath.ScalePoints(multiply[1], bias));
-                coordinates[2] = TmxMath.AddPoints(coordinates[2], TmxMath.ScalePoints(multiply[2], bias));
-                coordinates[3] = TmxMath.AddPoints(coordinates[3], TmxMath.ScalePoints(multiply[3], bias));
-            }
 
             return coordinates;
         }

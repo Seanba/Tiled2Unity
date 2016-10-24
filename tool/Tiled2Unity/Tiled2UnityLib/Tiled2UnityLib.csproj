@@ -136,17 +136,24 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ChDir.cs" />
-    <Compile Include="ConvexPolygonSet.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.AssignMaterials.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.Clipper.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.ImportFiles.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.Obj.cs" />
     <Compile Include="ExportClasses\TiledMapExporter.Prefab.cs" />
+    <Compile Include="GenericListDatabase.cs" />
+    <Compile Include="Geometry\ComposeConvexPolygons.cs" />
+    <Compile Include="Geometry\CompositionPolygon.cs" />
+    <Compile Include="Geometry\Math.cs" />
+    <Compile Include="Geometry\PolygonEdge.cs" />
+    <Compile Include="Geometry\PolygonEdgeGroup.cs" />
     <Compile Include="HashIndexOf.cs" />
+    <Compile Include="IGenericDatabase.cs" />
     <Compile Include="Info.cs" />
     <Compile Include="LayerClipper.cs" />
     <Compile Include="Logger.cs" />
+    <Compile Include="Geometry\TriangulateClipperSolution.cs" />
     <Compile Include="PolylineReduction.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Session.Args.cs" />
@@ -155,42 +162,14 @@
     <Compile Include="SummaryReport.cs" />
     <Compile Include="ThirdParty\Algorithmia\MultiValueDictionary.cs" />
     <Compile Include="ThirdParty\Clipper\clipper.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\P2T.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Orientation.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\FixedArray3.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\MathUtil.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\Point2D.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\Point2DList.cs" />
-    <Compile Include="ThirdParty\Poly2Tri\Utility\Rect2D.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\Dict.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\Geom.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\Mesh.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\MeshUtils.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\PriorityHeap.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\PriorityQueue.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\Sweep.cs" />
+    <Compile Include="ThirdParty\LibTessDotNet\Sources\Tess.cs" />
     <Compile Include="Tiled2UnityLite.Main.cs" />
     <Compile Include="TmxClasses\TmxAnimation.cs" />
     <Compile Include="TmxClasses\TmxException.cs" />
@@ -230,7 +209,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="ThirdParty\Clipper\License.txt" />
-    <Content Include="ThirdParty\Poly2Tri\License.txt" />
+    <Content Include="ThirdParty\LibTessDotNet\LICENSE.txt" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

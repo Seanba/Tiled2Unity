@@ -101,9 +101,20 @@ namespace Tiled2UnityMac
 		{
 			this.tmxSession.LoadTmxFile (path);
 
+			// Note: this isn't fully supported and is throwing an exception when the path has whitespace
 			// Add to the recently opened menu
-			NSUrl url = new NSUrl ("file://" + path);
-			NSDocumentController.SharedDocumentController.NoteNewRecentDocumentURL (url);
+			//try
+			//{
+			//	NSUrl url = new NSUrl("file://" + path);
+			//	NSDocumentController.SharedDocumentController.NoteNewRecentDocumentURL(url);
+			//}
+			//catch (Exception e)
+			//{
+			//	StringBuilder msg = new StringBuilder();
+			//	msg.AppendFormat("Error creating path reference to: {0}\n", path);
+			//	msg.AppendFormat("Exception: {0}\n", e.Message);
+			//	Tiled2Unity.Logger.WriteError(msg.ToString());
+			//}
 			return true;
 		}
 
@@ -135,6 +146,12 @@ namespace Tiled2UnityMac
 		private void DisplayHelpOutput(NSObject sender)
 		{
 			this.tmxSession.DisplayHelp ();
+		}
+
+		[Action("onlineDocs:")]
+		private void OnlineDocs(NSObject sender)
+		{
+			RunConsoleCommand("open", "http://tiled2unity.readthedocs.io");
 		}
 
 		public override void ViewWillAppear ()
@@ -233,8 +250,16 @@ namespace Tiled2UnityMac
 			Tiled2Unity.Settings.ObjectTypeXml = path;
 			this.TextViewObjectTypesXml.StringValue = path;
 
-			if (load) {
-				this.tmxSession.TmxMap.LoadObjectTypeXml (path);
+			if (load)
+			{
+				if (String.IsNullOrEmpty(path))
+				{
+					this.tmxSession.TmxMap.ClearObjectTypeXml();
+				}
+				else
+				{
+					this.tmxSession.TmxMap.LoadObjectTypeXml(path);
+				}
 			}
 
 			NSUserDefaults.StandardUserDefaults.SetString (path, ViewController.LastObjectTypeXmlFile);
@@ -247,7 +272,9 @@ namespace Tiled2UnityMac
 				scale = 1.0f;
 
 			Tiled2Unity.Settings.Scale = scale;
-			this.TextFieldScale.StringValue = scale.ToString ();
+
+			float inverse = 1.0f / scale;
+			this.TextFieldScale.StringValue = inverse.ToString ();
 
 			NSUserDefaults.StandardUserDefaults.SetFloat (scale, ViewController.LastVertexScale);
 		}
@@ -342,7 +369,14 @@ namespace Tiled2UnityMac
 			if (dlg.RunModal () == 1) {
 				RememberLastOpenPanelDirectory(dlg.Directory, ViewController.LastOpenPanel_ObjectTypeXml);
 				AssignObjectTypeXml(dlg.Filename, true);
+		
 			}	
+		}
+
+
+		partial void ClickedButton_ClearObjectXml(NSObject sender)
+		{
+			AssignObjectTypeXml("", true);
 		}
 
 		partial void ClickedButton_ExportTo (NSObject sender)
@@ -397,7 +431,9 @@ namespace Tiled2UnityMac
 		{
 			float scale = 1.0f;
 			float.TryParse(this.TextFieldScale.StringValue, out scale);
-			AssignScale(scale);
+
+			float inverse = 1.0f / scale;
+			AssignScale(inverse);
 		}
 
 		partial void ClickedButton_PreferConvexPolygons (NSObject sender)

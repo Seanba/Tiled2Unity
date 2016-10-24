@@ -6,7 +6,7 @@ using System.Text;
 namespace Tiled2Unity
 {
     // Generic collection class that gives us O(1) insertion with distinct values and O(1) IndexOf
-    public class HashIndexOf<T>
+    public class HashIndexOf<T> : IGenericDatabase<T>
     {
         private Dictionary<T, int> dictionary = new Dictionary<T, int>();
 
@@ -35,6 +35,11 @@ namespace Tiled2Unity
         public int IndexOf(T value)
         {
             return this.dictionary[value];
+        }
+
+        public int AddToDatabase(T value)
+        {
+            return Add(value);
         }
     }
 }

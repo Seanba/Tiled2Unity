@@ -102,25 +102,27 @@ namespace Tiled2Unity
                     frameTileId |= (tileId & TmxMath.FLIPPED_DIAGONALLY_FLAG);
 
                     // Find a mesh to stick this tile into (if it exists)
-                    TmxMesh mesh = meshes.Find(m => m.CanAddFrame(tile, timeMs, frame.DurationMs));
+                    TmxMesh mesh = meshes.Find(m => m.CanAddFrame(tile, timeMs, frame.DurationMs, tile.Animation.TotalTimeMs));
                     if (mesh == null)
                     {
+                        var frameTile = layer.TmxMap.GetTileFromTileId(frameTileId);
+
                         // Create a new mesh and add it to our list
                         mesh = new TmxMesh();
                         mesh.TileIds = new uint[layer.TileIds.Count()];
                         mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
-                        mesh.TmxImage = tile.TmxImage;
+                        mesh.TmxImage = frameTile.TmxImage;
 
                         // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
                         mesh.StartTimeMs = timeMs;
                         mesh.DurationMs = frame.DurationMs;
                         mesh.FullAnimationDurationMs = tile.Animation.TotalTimeMs;
+                        mesh.ObjectName = Path.GetFileNameWithoutExtension(frameTile.TmxImage.AbsolutePath);
 
-                        mesh.ObjectName = Path.GetFileNameWithoutExtension(tile.TmxImage.AbsolutePath);
                         if (mesh.DurationMs != 0)
                         {
                             // Decorate the name a bit with some animation details for the frame
-                            mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
+                            mesh.ObjectName += string.Format("[{0}-{1}][{2}]", timeMs, timeMs + mesh.DurationMs, mesh.FullAnimationDurationMs);
                         }
 
                         meshes.Add(mesh);
@@ -164,7 +166,7 @@ namespace Tiled2Unity
                 if (mesh.DurationMs != 0)
                 {
                     // Decorate the name a bit with some animation details for the frame
-                    mesh.ObjectName += string.Format("[{0}-{1}]", timeMs, timeMs + mesh.DurationMs);
+                    mesh.ObjectName += string.Format("[{0}-{1}][{2}]", timeMs, timeMs + mesh.DurationMs, mesh.FullAnimationDurationMs);
                 }
 
                 // Advance time
@@ -177,7 +179,7 @@ namespace Tiled2Unity
             return meshes;
         }
 
-        private bool CanAddFrame(TmxTile tile, int startMs, int durationMs)
+        private bool CanAddFrame(TmxTile tile, int startMs, int durationMs, int totalTimeMs)
         {
             if (IsMeshFull())
                 return false;
@@ -189,6 +191,9 @@ namespace Tiled2Unity
                 return false;
 
             if (this.DurationMs != durationMs)
+                return false;
+
+            if (this.FullAnimationDurationMs != totalTimeMs)
                 return false;
 
             return true;

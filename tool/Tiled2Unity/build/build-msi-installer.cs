@@ -99,9 +99,9 @@ class Script
 
                                 new WixSharp.Dir("License",
                                     RenamedFile(PATH_SOURCE + @"\License.rtf", "License.Tiled2Unity.rtf"),
-                                    RenamedFile(PATH_SOURCE + @"\ThirdParty\NDesk\License.txt", "License.NDesk.txt"),                                    
+                                    RenamedFile(PATH_SOURCE + @"\ThirdParty\NDesk\License.txt", "License.NDesk.txt"),
                                     RenamedFile(PATH_LIB_SOURCE + @"\ThirdParty\Clipper\License.txt", "License.Clipper.txt"),
-                                    RenamedFile(PATH_LIB_SOURCE + @"\ThirdParty\Poly2Tri\License.txt", "License.Poly2Tri.txt")
+                                    RenamedFile(PATH_LIB_SOURCE + @"\ThirdParty\LibTessDotNet\LICENSE.txt", "License.LibTessDotNet.txt")
                                     )
                             ));
 

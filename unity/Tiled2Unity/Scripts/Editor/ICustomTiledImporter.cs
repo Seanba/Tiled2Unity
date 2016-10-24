@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Tiled2Unity
 {
-    interface ICustomTiledImporter
+    public interface ICustomTiledImporter
     {
         // A game object within the prefab has some custom properites assigned through Tiled that are not consumed by Tiled2Unity
         // This callback gives customized importers a chance to react to such properites.

@@ -49,6 +49,19 @@ namespace Tiled2Unity
                                   let tile = this.tmxMap.Tiles[tileId]
                                   select tile.TmxImage;
 
+                // Find the images from the frames as well
+                var frameImages = from layer in this.tmxMap.Layers
+                                  where layer.Visible == true
+                                  from rawTileId in layer.TileIds
+                                  where rawTileId != 0
+                                  let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
+                                  let tile = this.tmxMap.Tiles[tileId]
+                                  from rawFrame in tile.Animation.Frames
+                                  let frameId = TmxMath.GetTileIdWithoutFlags(rawFrame.GlobalTileId)
+                                  let frame = this.tmxMap.Tiles[frameId]
+                                  select frame.TmxImage;
+
+
                 // Tile Objects may have images not yet references by a layer
                 var objectImages = from objectGroup in this.tmxMap.ObjectGroups
                                    where objectGroup.Visible == true
@@ -62,6 +75,7 @@ namespace Tiled2Unity
                 // Combine image paths from tile layers and object layers
                 List<TmxImage> images = new List<TmxImage>();
                 images.AddRange(layerImages);
+                images.AddRange(frameImages);
                 images.AddRange(objectImages);
 
                 // Get rid of duplicate images
@@ -79,9 +93,11 @@ namespace Tiled2Unity
                         XElement xmlInternalTexture = new XElement("InternalTexture");
 
                         // The path to the texture will be WRT to the Unity project root
-                        string assetPath = image.AbsolutePath.Remove(0, exportToUnityProjectPath.Length);
-                        assetPath = assetPath.TrimStart('\\');
-                        assetPath = assetPath.TrimStart('/');
+                        string assetsFolder = GetUnityAssetsPath(image.AbsolutePath);
+                        string assetPath = image.AbsolutePath.Remove(0, assetsFolder.Length);
+                        assetPath = "Assets" + assetPath;
+                        assetPath = assetPath.Replace("\\", "/");
+
                         Logger.WriteLine("InternalTexture : {0}", assetPath);
 
                         // Path to texture in the asset directory
@@ -130,6 +146,23 @@ namespace Tiled2Unity
             }
 
             return elements;
+        }
+
+        // Assumes the path passed in is within the "Assets" directory of a Unity project
+        private string GetUnityAssetsPath(string path)
+        {
+            string folderPath = Path.GetDirectoryName(path);
+            while (!String.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
+            {
+                string folderName = Path.GetFileName(folderPath);
+                if (String.Compare(folderName, "Assets", true) == 0)
+                {
+                    return folderPath;
+                }
+                folderPath = Path.GetDirectoryName(folderPath);
+            }
+
+            return Path.GetDirectoryName(path);
         }
 
     } // end class

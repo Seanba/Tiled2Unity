@@ -9,9 +9,11 @@
     <RootNamespace>Tiled2UnityMac</RootNamespace>
     <MonoMacResourcePrefix>Resources</MonoMacResourcePrefix>
     <AssemblyName>Tiled2UnityMac</AssemblyName>
-    <UseXamMacFullFramework>true</UseXamMacFullFramework>
     <ReleaseVersion>1.0.0.0</ReleaseVersion>
     <Description>Tiled2Unity Utility (Mac OSX version)</Description>
+    <ApplicationIcon>..\..\src\t2u-icon-bw.ico</ApplicationIcon>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <UseXamMacFullFramework>true</UseXamMacFullFramework>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -26,12 +28,12 @@
     <UseRefCounting>true</UseRefCounting>
     <UseSGen>true</UseSGen>
     <IncludeMonoRuntime>false</IncludeMonoRuntime>
-    <CreatePackage>true</CreatePackage>
+    <CreatePackage>false</CreatePackage>
     <CodeSigningKey>Mac Developer</CodeSigningKey>
     <EnableCodeSigning>false</EnableCodeSigning>
     <EnablePackageSigning>false</EnablePackageSigning>
     <XamMacArch>x86_64</XamMacArch>
-    <Commandlineparameters>this is my list of args</Commandlineparameters>
+    <Commandlineparameters></Commandlineparameters>
     <EnvironmentVariables>
       <EnvironmentVariables>
         <Variable name="TILED2UNITY_TMXPATH" value="My tmx path goes here" />
@@ -60,14 +62,14 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
-    <Reference Include="Xamarin.Mac" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="NDesk.Options">
       <HintPath>..\packages\NDesk.Options.0.2.1\lib\NDesk.Options.dll</HintPath>
     </Reference>
+    <Reference Include="Xamarin.Mac" />
     <Reference Include="OpenTK">
-      <HintPath>..\..\..\..\..\..\..\..\Library\Frameworks\Xamarin.Mac.framework\Versions\2.4.2.3\lib\reference\net_4_5\OpenTK.dll</HintPath>
+      <HintPath>..\..\..\..\..\..\..\..\Library\Frameworks\Xamarin.Mac.framework\Versions\2.8.1.4\lib\reference\net_4_5\OpenTK.dll</HintPath>
     </Reference>
     <Reference Include="System.Drawing">
       <HintPath>ThirdParty\System.Drawing.dll</HintPath>
@@ -93,10 +95,10 @@
     <None Include="..\..\Tiled2UnityLib\ThirdParty\Clipper\License.txt">
       <Link>Tiled2UnityLib\ThirdParty\Clipper\License.txt</Link>
     </None>
-    <None Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\License.txt">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\License.txt</Link>
-    </None>
     <None Include="packages.config" />
+    <None Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\LICENSE.txt">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\LICENSE.txt</Link>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Main.cs" />
@@ -114,9 +116,6 @@
     </Compile>
     <Compile Include="..\..\Tiled2UnityLib\ChDir.cs">
       <Link>Tiled2UnityLib\ChDir.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ConvexPolygonSet.cs">
-      <Link>Tiled2UnityLib\ConvexPolygonSet.cs</Link>
     </Compile>
     <Compile Include="..\..\Tiled2UnityLib\HashIndexOf.cs">
       <Link>Tiled2UnityLib\HashIndexOf.cs</Link>
@@ -165,114 +164,6 @@
     </Compile>
     <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Clipper\clipper.cs">
       <Link>Tiled2UnityLib\ThirdParty\Clipper\clipper.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\P2T.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\P2T.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\ITriangulatable.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Orientation.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Orientation.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationAlgorithm.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationConstraint.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationContext.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationDebugContext.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationMode.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\TriangulationPoint.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\DelaunayTriangle.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFront.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\AdvancingFrontNode.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweep.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepBasin.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepConstraint.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepContext.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepDebugContext.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepEdgeEvent.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\DTSweepPointComparator.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Delaunay\Sweep\PointOnEdgeException.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Contour.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\Polygon.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonPoint.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonSet.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Polygon\PolygonUtil.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\ConstrainedPointSet.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Sets\PointSet.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PointGenerator.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\PolygonGenerator.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Triangulation\Util\TriangulationUtil.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedArray3.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedArray3.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\FixedBitArray3.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\MathUtil.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\MathUtil.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2D.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2D.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2DList.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Point2DList.cs</Link>
-    </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Rect2D.cs">
-      <Link>Tiled2UnityLib\ThirdParty\Poly2Tri\Utility\Rect2D.cs</Link>
     </Compile>
     <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxAnimation.cs">
       <Link>Tiled2UnityLib\TmxClasses\TmxAnimation.cs</Link>
@@ -381,6 +272,54 @@
     </Compile>
     <Compile Include="..\..\Tiled2UnityLib\Tiled2UnityLite.Main.cs">
       <Link>Tiled2UnityLib\Tiled2UnityLite.Main.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Dict.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Dict.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Geom.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Geom.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Mesh.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Mesh.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\MeshUtils.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\MeshUtils.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\PriorityHeap.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\PriorityHeap.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\PriorityQueue.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\PriorityQueue.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Sweep.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Sweep.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Tess.cs">
+      <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\Sources\Tess.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Geometry\ComposeConvexPolygons.cs">
+      <Link>Tiled2UnityLib\Geometry\ComposeConvexPolygons.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Geometry\CompositionPolygon.cs">
+      <Link>Tiled2UnityLib\Geometry\CompositionPolygon.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Geometry\Math.cs">
+      <Link>Tiled2UnityLib\Geometry\Math.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Geometry\PolygonEdge.cs">
+      <Link>Tiled2UnityLib\Geometry\PolygonEdge.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Geometry\PolygonEdgeGroup.cs">
+      <Link>Tiled2UnityLib\Geometry\PolygonEdgeGroup.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\Geometry\TriangulateClipperSolution.cs">
+      <Link>Tiled2UnityLib\Geometry\TriangulateClipperSolution.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\GenericListDatabase.cs">
+      <Link>Tiled2UnityLib\GenericListDatabase.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\IGenericDatabase.cs">
+      <Link>Tiled2UnityLib\IGenericDatabase.cs</Link>
     </Compile>
   </ItemGroup>
   <ItemGroup>

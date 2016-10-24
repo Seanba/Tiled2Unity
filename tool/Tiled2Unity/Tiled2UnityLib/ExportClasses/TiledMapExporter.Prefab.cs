@@ -98,8 +98,7 @@ namespace Tiled2Unity
                     {
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileHeight = this.tmxMap.TileHeight;
-
-                        depth_z = layer.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                        depth_z = CalculateLayerDepth(layer.SortingOrder, tileHeight, mapLogicalHeight);
                     }
 
                     XElement layerElement =
@@ -160,7 +159,7 @@ namespace Tiled2Unity
                         float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
                         float tileHeight = this.tmxMap.TileHeight;
 
-                        depth_z = objGroup.SortingOrder * tileHeight / mapLogicalHeight * -1.0f;
+                        depth_z = CalculateLayerDepth(objGroup.SortingOrder, tileHeight, mapLogicalHeight);
                     }
 
                     gameObject.SetAttributeValue("z", depth_z);
@@ -239,11 +238,7 @@ namespace Tiled2Unity
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
-                    // TileObjects are off by a half-width in Isometric mode
-                    if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
-                    {
-                        xmlObject.SetAttributeValue("x", pos.X - this.tmxMap.TileWidth * 0.5f * Tiled2Unity.Settings.Scale);
-                    }
+                    TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
 
                     // Apply z-cooridnate for use with the depth buffer
                     // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
@@ -253,8 +248,8 @@ namespace Tiled2Unity
                         float tileLogicalHeight = this.tmxMap.TileHeight;
                         float logicalPos_y = (-pos.Y / Tiled2Unity.Settings.Scale) - tileLogicalHeight;
 
-                        float depth_z = logicalPos_y / mapLogicalHeight * -1.0f;
-                        xmlObject.SetAttributeValue("z", depth_z == -0 ? 0 : depth_z);
+                        float depth_z = CalculateFaceDepth(logicalPos_y, mapLogicalHeight);
+                        xmlObject.SetAttributeValue("z", depth_z);
                     }
 
                     AddTileObjectElements(tmxObject as TmxObjectTile, xmlObject);
@@ -518,28 +513,51 @@ namespace Tiled2Unity
 
         private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot)
         {
-            // We combine the properties of the tile that is referenced and add it to our own properties
-            AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
-
             // TileObjects can be scaled (this is separate from vertex scaling)
             SizeF scale = tmxObjectTile.GetTileObjectScale();
+
+            // Flipping is done through negative-scaling on the child object
+            float flip_w = tmxObjectTile.FlippedHorizontal ? -1.0f : 1.0f;
+            float flip_h = tmxObjectTile.FlippedVertical ? -1.0f : 1.0f;
+
+            // Helper values for moving tile about local origin
+            float full_w = tmxObjectTile.Tile.TileSize.Width;
+            float full_h = tmxObjectTile.Tile.TileSize.Height;
+            float half_w = full_w * 0.5f;
+            float half_h = full_h * 0.5f;
+
+            // Scale goes onto root node
             xmlTileObjectRoot.SetAttributeValue("scaleX", scale.Width);
             xmlTileObjectRoot.SetAttributeValue("scaleY", scale.Height);
 
-            // Need another transform to help us with flipping of the tile (and their collisions)
+            // We combine the properties of the tile that is referenced and add it to our own properties
+            AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
+
+            // Add a TileObject component for scripting purposes
+            {
+                XElement xmlTileObjectComponent = new XElement("TileObjectComponent");
+                xmlTileObjectComponent.SetAttributeValue("width", tmxObjectTile.Tile.TileSize.Width * scale.Width * Tiled2Unity.Settings.Scale);
+                xmlTileObjectComponent.SetAttributeValue("height", tmxObjectTile.Tile.TileSize.Height * scale.Height * Tiled2Unity.Settings.Scale);
+                xmlTileObjectRoot.Add(xmlTileObjectComponent);
+            }
+
+            // Child node positions game object to match center of tile so can flip along x and y axes
             XElement xmlTileObject = new XElement("GameObject");
             xmlTileObject.SetAttributeValue("name", "TileObject");
-
-            if (tmxObjectTile.FlippedHorizontal)
+            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
             {
-                xmlTileObject.SetAttributeValue("x", tmxObjectTile.Tile.TileSize.Width * Tiled2Unity.Settings.Scale);
-                xmlTileObject.SetAttributeValue("flipX", true);
+                // In isometric mode the local origin of the tile is at the bottom middle
+                xmlTileObject.SetAttributeValue("x", 0);
+                xmlTileObject.SetAttributeValue("y", half_h);
             }
-            if (tmxObjectTile.FlippedVertical)
+            else
             {
-                xmlTileObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Tiled2Unity.Settings.Scale);
-                xmlTileObject.SetAttributeValue("flipY", true);
+                // For non-isometric maps the local origin of the tile is the bottom left
+                xmlTileObject.SetAttributeValue("x", half_w);
+                xmlTileObject.SetAttributeValue("y", half_h);
             }
+            xmlTileObject.SetAttributeValue("scaleX", flip_w);
+            xmlTileObject.SetAttributeValue("scaleY", flip_h);
 
             // Add any colliders that might be on the tile
             // Note: Colliders on a tile object are always treated as if they are in Orthogonal space
@@ -572,7 +590,7 @@ namespace Tiled2Unity
                     {
                         // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
                         objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Tiled2Unity.Settings.Scale);
-                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Size.Height - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale);
+                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Tile.TileSize.Height - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale);
 
                         xmlTileObject.Add(objElement);
                     }
@@ -580,7 +598,8 @@ namespace Tiled2Unity
             }
             this.tmxMap.Orientation = restoreOrientation;
 
-            // Add a child for each mesh (with animation if needed)
+            // Add a child for each mesh
+            // (The child node is needed due to animation)
             foreach (var mesh in tmxObjectTile.Tile.Meshes)
             {
                 XElement xmlMeshObject = new XElement("GameObject");
@@ -591,9 +610,10 @@ namespace Tiled2Unity
                 xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
                 xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
 
-                // This object, that actually displays the tile, has to be bumped up to account for the bottom-left corner problem with Tile Objects in Tiled
-                xmlMeshObject.SetAttributeValue("x", 0);
-                xmlMeshObject.SetAttributeValue("y", tmxObjectTile.Tile.TileSize.Height * Tiled2Unity.Settings.Scale);
+                // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
+                // Put another way: This translation moves away from center to local origin
+                xmlMeshObject.SetAttributeValue("x", -half_w);
+                xmlMeshObject.SetAttributeValue("y", half_h);
 
                 if (mesh.FullAnimationDurationMs > 0)
                 {

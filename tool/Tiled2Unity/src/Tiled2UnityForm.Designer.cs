@@ -67,6 +67,7 @@
             this.groupBoxReviewExport = new System.Windows.Forms.GroupBox();
             this.tableLayoutPanelReviewExport = new System.Windows.Forms.TableLayoutPanel();
             this.richTextBoxLaunchTip = new System.Windows.Forms.RichTextBox();
+            this.onlineDocumentationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip.SuspendLayout();
             this.groupBoxAdvancedOptions.SuspendLayout();
             this.groupBoxExportOptions.SuspendLayout();
@@ -185,6 +186,7 @@
             // 
             this.helpToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.addUnityPackageToProjectToolStripMenuItem,
+            this.onlineDocumentationToolStripMenuItem,
             this.showHelpToolStripMenuItem,
             this.toolStripSeparator1,
             this.supportTiledMapEditorToolStripMenuItem,
@@ -244,12 +246,12 @@
             // 
             this.labelScale.Anchor = System.Windows.Forms.AnchorStyles.Right;
             this.labelScale.AutoSize = true;
-            this.labelScale.Location = new System.Drawing.Point(87, 9);
+            this.labelScale.Location = new System.Drawing.Point(79, 9);
             this.labelScale.Name = "labelScale";
             this.labelScale.RightToLeft = System.Windows.Forms.RightToLeft.No;
-            this.labelScale.Size = new System.Drawing.Size(70, 13);
+            this.labelScale.Size = new System.Drawing.Size(78, 13);
             this.labelScale.TabIndex = 5;
-            this.labelScale.Text = "Vertex Scale:";
+            this.labelScale.Text = "Pixels Per Unit:";
             this.labelScale.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // textBoxScale
@@ -412,9 +414,9 @@
             this.labelScaleDescription.BackColor = System.Drawing.SystemColors.ControlLight;
             this.labelScaleDescription.Location = new System.Drawing.Point(103, 6);
             this.labelScaleDescription.Name = "labelScaleDescription";
-            this.labelScaleDescription.Size = new System.Drawing.Size(325, 13);
+            this.labelScaleDescription.Size = new System.Drawing.Size(320, 13);
             this.labelScaleDescription.TabIndex = 7;
-            this.labelScaleDescription.Text = "Scale is inverse of Unity\'s \"Pixels Per Unit\" Texture Importer setting.";
+            this.labelScaleDescription.Text = "Set to same \"Pixels Per Unit\" value for Unity sprites in your project.";
             // 
             // tableLayoutPanelObjectTypes
             // 
@@ -507,6 +509,13 @@
             this.richTextBoxLaunchTip.TabStop = false;
             this.richTextBoxLaunchTip.Text = "Load rtf text here";
             // 
+            // onlineDocumentationToolStripMenuItem
+            // 
+            this.onlineDocumentationToolStripMenuItem.Name = "onlineDocumentationToolStripMenuItem";
+            this.onlineDocumentationToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
+            this.onlineDocumentationToolStripMenuItem.Text = "&Online Documentation";
+            this.onlineDocumentationToolStripMenuItem.Click += new System.EventHandler(this.onlineDocumentationToolStripMenuItem_Click);
+            // 
             // Tiled2UnityForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -583,6 +592,7 @@
         private System.Windows.Forms.GroupBox groupBoxReviewExport;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelReviewExport;
         private System.Windows.Forms.RichTextBox richTextBoxLaunchTip;
+        private System.Windows.Forms.ToolStripMenuItem onlineDocumentationToolStripMenuItem;
     }
 }
 
