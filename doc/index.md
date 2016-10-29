@@ -10,5 +10,5 @@
 
 Tiled2Unity (and variants) are availble for download on my [game development blog](http://www.seanba.com/tiled2unity).
 
-## Using Tiled2Unity
+[![Tiled2Unity-MBPreview](img/t2u-preview-mother-brain.png)](http://www.seanba.com/tiled2unity)
 

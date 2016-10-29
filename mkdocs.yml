@@ -1,4 +1,5 @@
 site_name: Tiled2Unity 
+docs_dir: doc
 pages:
 - 'index.md'
 - 'getting-started.md'
