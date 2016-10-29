@@ -2616,9 +2616,13 @@ namespace Tiled2Unity
 
                     if (objElement != null)
                     {
-                        // Objects can be offset (and we need to make up for the bottom-left corner being the origin in a TileObject)
-                        objElement.SetAttributeValue("offsetX", tmxObject.Position.X * Tiled2Unity.Settings.Scale);
-                        objElement.SetAttributeValue("offsetY", (tmxObjectTile.Tile.TileSize.Height - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale);
+                        // This object is currently in the center of the Tile Object we are constructing
+                        // The collision geometry is wrt the top-left corner
+                        // The "Offset" of the collider translation to get to lop-left corner and the collider's position into account
+                        float offset_x = (-half_w + tmxObject.Position.X) * Tiled2Unity.Settings.Scale;
+                        float offset_y = (half_h - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale;
+                        objElement.SetAttributeValue("offsetX", offset_x);
+                        objElement.SetAttributeValue("offsetY", offset_y);
 
                         xmlTileObject.Add(objElement);
                     }
