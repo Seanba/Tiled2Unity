@@ -5,6 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
+#if !UNITY_WEBPLAYER
+using System.Xml.Linq;
+#endif
+
 using UnityEditor;
 using UnityEngine;
 
@@ -17,7 +21,13 @@ namespace Tiled2Unity
         [MenuItem("Tiled2Unity/Export Tiled2Unity Library ...")]
         static void ExportLibrary()
         {
-            string name = String.Format("Tiled2Unity.{0}.unitypackage", ImportTiled2Unity.ThisVersion);
+            // Get the version from our Tiled2Unity.export.txt library data file
+            TextAsset textAsset = AssetDatabase.LoadAssetAtPath("Assets/Tiled2Unity/Tiled2Unity.export.txt", typeof(TextAsset)) as TextAsset;
+            XDocument xml = XDocument.Parse(textAsset.text);
+            string version = xml.Element("Tiled2UnityImporter").Element("Header").Attribute("version").Value;
+
+            // Export the package
+            string name = String.Format("Tiled2Unity.{0}.unitypackage", version);
             var path = EditorUtility.SaveFilePanel("Save Tiled2Unity library as unity package.", "", name, "unitypackage");
             if (path.Length != 0)
             {

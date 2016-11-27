@@ -74,38 +74,28 @@ namespace Tiled2Unity
 
             // Detect which version of Tiled2Unity is in our project
             // ...\Tiled2Unity\Tiled2Unity.export.txt
-            string unityProjectVersionTXT = Path.Combine(exportToTiled2UnityPath, "Tiled2Unity.export.txt");
-            if (!File.Exists(unityProjectVersionTXT))
+            string tiled2unity_export_txt = Path.Combine(exportToTiled2UnityPath, "Tiled2Unity.export.txt");
+            if (!File.Exists(tiled2unity_export_txt))
             {
                 StringBuilder builder = new StringBuilder();
                 builder.AppendFormat("Could not export '{0}'\n", fileToSave);
                 builder.AppendFormat("Tiled2Unity.unitypackage is not properly installed in unity project: {0}\n", exportToTiled2UnityPath);
-                builder.AppendFormat("Missing file: {0}\n", unityProjectVersionTXT);
+                builder.AppendFormat("Missing file: {0}\n", tiled2unity_export_txt);
                 builder.AppendFormat("Select \"Help -> Import Unity Package to Project\" and re-export");
                 Logger.WriteError(builder.ToString());
                 return;
             }
 
             // Open the unity-side script file and check its version number
-            string text = File.ReadAllText(unityProjectVersionTXT);
-            if (!String.IsNullOrEmpty(text))
+            string projectVersion = GetTiled2UnityVersionInProject(tiled2unity_export_txt);
+            if (Tiled2Unity.Info.GetVersion() != projectVersion)
             {
-                string pattern = @"^\[Tiled2Unity Version (?<version>.*)?\]";
-                Regex regex = new Regex(pattern);
-                Match match = regex.Match(text);
-                Group group = match.Groups["version"];
-                if (group.Success)
-                {
-                    if (Tiled2Unity.Info.GetVersion() != group.ToString())
-                    {
-                        StringBuilder builder = new StringBuilder();
-                        builder.AppendFormat("Export/Import Version mismatch\n");
-                        builder.AppendFormat("  Tiled2Unity version   : {0}\n", Tiled2Unity.Info.GetVersion());
-                        builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
-                        builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
-                        Logger.WriteWarning(builder.ToString());
-                    }
-                }
+                StringBuilder builder = new StringBuilder();
+                builder.AppendFormat("Export/Import Version mismatch\n");
+                builder.AppendFormat("  Tiled2Unity version   : {0}\n", Tiled2Unity.Info.GetVersion());
+                builder.AppendFormat("  Unity Project version : {0}\n", projectVersion);
+                builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
+                Logger.WriteWarning(builder.ToString());
             }
 
             // Save the file (which is importing it into Unity)
@@ -116,6 +106,20 @@ namespace Tiled2Unity
                 pathToSave,
                 Tiled2Unity.Settings.Scale,
                 String.IsNullOrEmpty(Tiled2Unity.Settings.ObjectTypeXml) ? "<none>" : Tiled2Unity.Settings.ObjectTypeXml);
+        }
+
+        private static string GetTiled2UnityVersionInProject(string path)
+        {
+            try
+            {
+                XDocument xml = XDocument.Load(path);
+                return xml.Element("Tiled2UnityImporter").Element("Header").Attribute("version").Value;
+            }
+            catch (Exception e)
+            {
+                Logger.WriteWarning("Couldn't get Tiled2Unity version from '{0}'\n{1}", path, e.Message);
+                return "tiled2unity.get.version.fail";
+            }
         }
 
         public static PointF PointFToUnityVector_NoScale(PointF pt)

@@ -115,6 +115,12 @@ namespace Tiled2Unity
                             xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
                         }
 
+                        // Will the material be loaded as a resource?
+                        if (this.tmxMap.IsResource)
+                        {
+                            xmlInternalTexture.SetAttributeValue("isResource", true);
+                        }
+
                         elements.Add(xmlInternalTexture);
                     }
                     else
@@ -135,6 +141,12 @@ namespace Tiled2Unity
                         if (Tiled2Unity.Settings.DepthBufferEnabled)
                         {
                             xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
+                        }
+
+                        // Will the material be loaded as a resource?
+                        if (this.tmxMap.IsResource)
+                        {
+                            xmlImportTexture.SetAttributeValue("isResource", true);
                         }
 
                         // Bake the image file into the xml

@@ -80,6 +80,10 @@ namespace Tiled2Unity
             // Collect our map properties
             this.Properties = TmxProperties.FromXml(map);
 
+            // Check properties for us being a resource
+            this.IsResource = this.Properties.GetPropertyValueAsBoolean("unity:resource", false);
+            this.IsResource = this.IsResource || !String.IsNullOrEmpty(this.Properties.GetPropertyValueAsString("unity:resourcePath", null));
+
             ParseAllTilesets(doc);
             ParseAllLayers(doc);
             ParseAllObjectGroups(doc);

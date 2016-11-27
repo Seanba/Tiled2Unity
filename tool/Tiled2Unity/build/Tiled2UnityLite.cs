@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.8.0
+// version 1.0.9.2
 
 //css_reference System;
 //css_reference System.Core;
@@ -59,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.8.0";
+            return "1.0.9.2";
         }
 
         public static string GetPlatform()
@@ -646,7 +646,6 @@ namespace Tiled2Unity
 
             bool displayVersion = false;
             bool displayHelp = false;
-            bool isAuto = false;
 
             NDesk.Options.OptionSet options = new NDesk.Options.OptionSet()
             {
@@ -655,7 +654,7 @@ namespace Tiled2Unity
                 { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Tiled2Unity.Settings.PreferConvexPolygons = true },
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
-                { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => isAuto = true },
+                { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => Tiled2Unity.Settings.IsAutoExporting = true },
                 { "w|writeable-vertices", "Exported meshes will have writable vertices. This increases the memory used by meshes significantly. Only use if you will mutate the vertices through scripting.", w => Tiled2Unity.Settings.WriteableVertices = true },
                 { "v|version", "Display version information.", v => displayVersion = true },
                 { "h|help", "Display this help message.", h => displayHelp = true },
@@ -678,7 +677,7 @@ namespace Tiled2Unity
                 return false;
             }
 
-            if (isAuto)
+            if (Tiled2Unity.Settings.IsAutoExporting)
             {
                 Logger.WriteLine("Running automatic export.");
             }
@@ -955,7 +954,7 @@ namespace Tiled2Unity
     // Setttings for compiling and export Tiled maps into Unity
     public class Settings
     {
-        static public string ObjectTypeXml = "";
+        public static string ObjectTypeXml = "";
 
         public static float Scale = 1.0f;
         public static bool PreferConvexPolygons = false;
@@ -964,6 +963,9 @@ namespace Tiled2Unity
 
         public static readonly float DefaultTexelBias = 8192.0f;
         public static float TexelBias = DefaultTexelBias;
+
+        // If we're automatically opening, exporting, and closing then there are some code paths we don't want to take
+        public static bool IsAutoExporting = false;
     }
 }
 
@@ -1098,6 +1100,9 @@ namespace Tiled2Unity
             {
                 error = 1;
             };
+
+            // Tiled2UnityLite is always auto-exporting
+            Tiled2Unity.Settings.IsAutoExporting = true;
 
             // Run the session
             Tiled2Unity.Session tmxSession = new Session();
@@ -1422,38 +1427,28 @@ namespace Tiled2Unity
 
             // Detect which version of Tiled2Unity is in our project
             // ...\Tiled2Unity\Tiled2Unity.export.txt
-            string unityProjectVersionTXT = Path.Combine(exportToTiled2UnityPath, "Tiled2Unity.export.txt");
-            if (!File.Exists(unityProjectVersionTXT))
+            string tiled2unity_export_txt = Path.Combine(exportToTiled2UnityPath, "Tiled2Unity.export.txt");
+            if (!File.Exists(tiled2unity_export_txt))
             {
                 StringBuilder builder = new StringBuilder();
                 builder.AppendFormat("Could not export '{0}'\n", fileToSave);
                 builder.AppendFormat("Tiled2Unity.unitypackage is not properly installed in unity project: {0}\n", exportToTiled2UnityPath);
-                builder.AppendFormat("Missing file: {0}\n", unityProjectVersionTXT);
+                builder.AppendFormat("Missing file: {0}\n", tiled2unity_export_txt);
                 builder.AppendFormat("Select \"Help -> Import Unity Package to Project\" and re-export");
                 Logger.WriteError(builder.ToString());
                 return;
             }
 
             // Open the unity-side script file and check its version number
-            string text = File.ReadAllText(unityProjectVersionTXT);
-            if (!String.IsNullOrEmpty(text))
+            string projectVersion = GetTiled2UnityVersionInProject(tiled2unity_export_txt);
+            if (Tiled2Unity.Info.GetVersion() != projectVersion)
             {
-                string pattern = @"^\[Tiled2Unity Version (?<version>.*)?\]";
-                Regex regex = new Regex(pattern);
-                Match match = regex.Match(text);
-                Group group = match.Groups["version"];
-                if (group.Success)
-                {
-                    if (Tiled2Unity.Info.GetVersion() != group.ToString())
-                    {
-                        StringBuilder builder = new StringBuilder();
-                        builder.AppendFormat("Export/Import Version mismatch\n");
-                        builder.AppendFormat("  Tiled2Unity version   : {0}\n", Tiled2Unity.Info.GetVersion());
-                        builder.AppendFormat("  Unity Project version : {0}\n", group.ToString());
-                        builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
-                        Logger.WriteWarning(builder.ToString());
-                    }
-                }
+                StringBuilder builder = new StringBuilder();
+                builder.AppendFormat("Export/Import Version mismatch\n");
+                builder.AppendFormat("  Tiled2Unity version   : {0}\n", Tiled2Unity.Info.GetVersion());
+                builder.AppendFormat("  Unity Project version : {0}\n", projectVersion);
+                builder.AppendFormat("  (Did you forget to update Tiled2Unity scipts in your Unity project?)");
+                Logger.WriteWarning(builder.ToString());
             }
 
             // Save the file (which is importing it into Unity)
@@ -1464,6 +1459,20 @@ namespace Tiled2Unity
                 pathToSave,
                 Tiled2Unity.Settings.Scale,
                 String.IsNullOrEmpty(Tiled2Unity.Settings.ObjectTypeXml) ? "<none>" : Tiled2Unity.Settings.ObjectTypeXml);
+        }
+
+        private static string GetTiled2UnityVersionInProject(string path)
+        {
+            try
+            {
+                XDocument xml = XDocument.Load(path);
+                return xml.Element("Tiled2UnityImporter").Element("Header").Attribute("version").Value;
+            }
+            catch (Exception e)
+            {
+                Logger.WriteWarning("Couldn't get Tiled2Unity version from '{0}'\n{1}", path, e.Message);
+                return "tiled2unity.get.version.fail";
+            }
         }
 
         public static PointF PointFToUnityVector_NoScale(PointF pt)
@@ -1672,6 +1681,12 @@ namespace Tiled2Unity
                             xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
                         }
 
+                        // Will the material be loaded as a resource?
+                        if (this.tmxMap.IsResource)
+                        {
+                            xmlInternalTexture.SetAttributeValue("isResource", true);
+                        }
+
                         elements.Add(xmlInternalTexture);
                     }
                     else
@@ -1692,6 +1707,12 @@ namespace Tiled2Unity
                         if (Tiled2Unity.Settings.DepthBufferEnabled)
                         {
                             xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
+                        }
+
+                        // Will the material be loaded as a resource?
+                        if (this.tmxMap.IsResource)
+                        {
+                            xmlImportTexture.SetAttributeValue("isResource", true);
                         }
 
                         // Bake the image file into the xml
@@ -2576,13 +2597,13 @@ namespace Tiled2Unity
             {
                 // In isometric mode the local origin of the tile is at the bottom middle
                 xmlTileObject.SetAttributeValue("x", 0);
-                xmlTileObject.SetAttributeValue("y", half_h);
+                xmlTileObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
             }
             else
             {
                 // For non-isometric maps the local origin of the tile is the bottom left
-                xmlTileObject.SetAttributeValue("x", half_w);
-                xmlTileObject.SetAttributeValue("y", half_h);
+                xmlTileObject.SetAttributeValue("x", half_w * Tiled2Unity.Settings.Scale);
+                xmlTileObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
             }
             xmlTileObject.SetAttributeValue("scaleX", flip_w);
             xmlTileObject.SetAttributeValue("scaleY", flip_h);
@@ -2644,8 +2665,8 @@ namespace Tiled2Unity
 
                 // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
                 // Put another way: This translation moves away from center to local origin
-                xmlMeshObject.SetAttributeValue("x", -half_w);
-                xmlMeshObject.SetAttributeValue("y", half_h);
+                xmlMeshObject.SetAttributeValue("x", -half_w * Tiled2Unity.Settings.Scale);
+                xmlMeshObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
 
                 if (mesh.FullAnimationDurationMs > 0)
                 {
@@ -12542,43 +12563,49 @@ namespace Tiled2Unity
             TmxImage tmxImage = new TmxImage();
             tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
 
-#if TILED_2_UNITY_LITE
+            // Get default image size in case we are not opening the file
+            {
+                int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+                int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+                tmxImage.Size = new System.Drawing.Size(width, height);
+            }
+
             // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
-            int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-            int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
-            tmxImage.Size = new System.Drawing.Size(width, height);
-#else
-            try
+#if !TILED_2_UNITY_LITE
+            if (!Tiled2Unity.Settings.IsAutoExporting)
             {
-                tmxImage.ImageBitmap = TmxHelper.FromFileBitmap32bpp(tmxImage.AbsolutePath);
-            }
-            catch (FileNotFoundException fnf)
-            {
-                string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
-                throw new TmxException(msg, fnf);
+                try
+                {
+                    tmxImage.ImageBitmap = TmxHelper.FromFileBitmap32bpp(tmxImage.AbsolutePath);
+                }
+                catch (FileNotFoundException fnf)
+                {
+                    string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
+                    throw new TmxException(msg, fnf);
 
-                // Testing for when image files are missing. Just make up an image.
-                //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-                //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
-                //tmxImage.ImageBitmap = new TmxHelper.CreateBitmap32bpp(width, height);
-                //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
-                //{
-                //    int color32 = tmxImage.AbsolutePath.GetHashCode();
-                //    Color color = Color.FromArgb(color32);
-                //    color = Color.FromArgb(255, color);
-                //    using (Brush brush = new SolidBrush(color))
-                //    {
-                //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
-                //    }
-                //}
-            }
+                    // Testing for when image files are missing. Just make up an image.
+                    //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
+                    //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+                    //tmxImage.ImageBitmap = new TmxHelper.CreateBitmap32bpp(width, height);
+                    //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
+                    //{
+                    //    int color32 = tmxImage.AbsolutePath.GetHashCode();
+                    //    Color color = Color.FromArgb(color32);
+                    //    color = Color.FromArgb(255, color);
+                    //    using (Brush brush = new SolidBrush(color))
+                    //    {
+                    //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
+                    //    }
+                    //}
+                }
 
-            tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
+                tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
+            }
 #endif
 
             // Some images use a transparency color key instead of alpha (blerg)
             tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
-            if (!String.IsNullOrEmpty(tmxImage.TransparentColor))
+            if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
 #if !TILED_2_UNITY_LITE
                 System.Drawing.Color transColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
@@ -13069,6 +13096,9 @@ namespace Tiled2Unity
         public Color BackgroundColor { get; private set; }
         public TmxProperties Properties { get; private set; }
 
+        // Is the prefab created by this map going to be loaded as a resource?
+        public bool IsResource { get; private set; }
+
         public IDictionary<uint, TmxTile> Tiles = new Dictionary<uint, TmxTile>();
 
         public IList<TmxLayer> Layers = new List<TmxLayer>();
@@ -13305,6 +13335,10 @@ namespace Tiled2Unity
 
             // Collect our map properties
             this.Properties = TmxProperties.FromXml(map);
+
+            // Check properties for us being a resource
+            this.IsResource = this.Properties.GetPropertyValueAsBoolean("unity:resource", false);
+            this.IsResource = this.IsResource || !String.IsNullOrEmpty(this.Properties.GetPropertyValueAsString("unity:resourcePath", null));
 
             ParseAllTilesets(doc);
             ParseAllLayers(doc);

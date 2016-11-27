@@ -8,7 +8,7 @@ namespace Tiled2Unity
     // Setttings for compiling and export Tiled maps into Unity
     public class Settings
     {
-        static public string ObjectTypeXml = "";
+        public static string ObjectTypeXml = "";
 
         public static float Scale = 1.0f;
         public static bool PreferConvexPolygons = false;
@@ -17,5 +17,8 @@ namespace Tiled2Unity
 
         public static readonly float DefaultTexelBias = 8192.0f;
         public static float TexelBias = DefaultTexelBias;
+
+        // If we're automatically opening, exporting, and closing then there are some code paths we don't want to take
+        public static bool IsAutoExporting = false;
     }
 }

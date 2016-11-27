@@ -46,6 +46,9 @@ namespace Tiled2Unity
         public Color BackgroundColor { get; private set; }
         public TmxProperties Properties { get; private set; }
 
+        // Is the prefab created by this map going to be loaded as a resource?
+        public bool IsResource { get; private set; }
+
         public IDictionary<uint, TmxTile> Tiles = new Dictionary<uint, TmxTile>();
 
         public IList<TmxLayer> Layers = new List<TmxLayer>();

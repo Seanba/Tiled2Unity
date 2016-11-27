@@ -26,6 +26,11 @@ namespace Tiled2Unity
     {
         private static bool UseThisImporter(string assetPath)
         {
+#if UNITY_WEBPLAYER
+            String warning = String.Format("Can not import through Tiled2Unity using the WebPlayer platform. This is depecrated by Unity Technologies and is no longer supported. Go to File -> Build Settings... and switch to another platform. (You can switch back to Web Player after importing.). File: {0}", assetPath);
+            Debug.LogWarning(warning);
+            return false;
+#else
             // Certain file types are ignored by this asset post processor (i.e. scripts)
             // (Note that an empty string as the extension is a folder)
             string[] ignoreThese = { ".cs", ".txt",  ".shader", "", };
@@ -34,36 +39,15 @@ namespace Tiled2Unity
                 return false;
             }
 
-            // Note: This importer can never be used if UNITY_WEBPLAYER is the configuration
-            bool useThisImporter = false;
-
-            // Is this file relative to our Tiled2Unity export marker file?
-            // If so, then we want to use this asset postprocessor
-            string path = assetPath;
-            while (!String.IsNullOrEmpty(path))
+            // *.tiled2unity.xml files are always supported by this processor
+            if (assetPath.EndsWith(".tiled2unity.xml", StringComparison.InvariantCultureIgnoreCase))
             {
-                path = Path.GetDirectoryName(path);
-                string exportMarkerPath = Path.Combine(path, "Tiled2Unity.export.txt");
-                if (File.Exists(exportMarkerPath))
-                {
-                    // This is a file under the Tiled2Unity root.
-                    useThisImporter = true;
-                    break;
-                }
-            }
-
-            if (useThisImporter == true)
-            {
-#if UNITY_WEBPLAYER
-                String warning = String.Format("Can not import through Tiled2Unity using the WebPlayer platform. This is depecrated by Unity Technologies and is no longer supported. Go to File -> Build Settings... and switch to another platform. (You can switch back to Web Player after importing.). File: {0}", assetPath);
-                Debug.LogWarning(warning);
-                return false;
-#else
                 return true;
-#endif
             }
 
-            return false;
+            // All other files can only use this post processor if their import was requested by an ImportBehaviour
+            return ImportBehaviour.IsAssetBeingImportedByTiled2Unity(assetPath);
+#endif
         }
 
         private bool UseThisImporter()
@@ -90,23 +74,27 @@ namespace Tiled2Unity
                     if (t2uImporter.IsTiled2UnityFile())
                     {
                         // Start the import process. This will trigger textures and meshes to be imported as well.
-                        t2uImporter.ImportBegin(imported);
+                        t2uImporter.ImportBegin(imported, t2uImporter);
                     }
                     else if (t2uImporter.IsTiled2UnityTexture())
                     {
-                        // A texture was imported and the material assigned to it may need to be fixed
+                        // A texture was imported. Once all textures are imported then we'll import materials.
                         t2uImporter.TextureImported(imported);
+                    }
+                    else if (t2uImporter.IsTiled2UnityMaterial())
+                    {
+                        // A material was imported. Once all materials are imported then we'll import meshes.
+                        t2uImporter.MaterialImported(imported);
                     }
                     else if (t2uImporter.IsTiled2UnityWavefrontObj())
                     {
-                        // Now that the mesh has been imported we will build the prefab
+                        // A mesh was imported. Once all meshes are imported we'll import the prefabs.
                         t2uImporter.MeshImported(imported);
                     }
                     else if (t2uImporter.IsTiled2UnityPrefab())
                     {
-                        // Now the the prefab is built and imported we are done
-                        t2uImporter.ImportFinished(imported);
-                        Debug.Log(string.Format("Imported prefab from Tiled map editor: {0}", imported));
+                        // A prefab was imported. Once all prefabs are imported then the import is complete.
+                        t2uImporter.PrefabImported(imported);
                     }
                 }
 #endif
@@ -180,19 +168,8 @@ namespace Tiled2Unity
             if (!UseThisImporter())
                 return null;
 
-            // This is the only reliable place to assign materials in the import chain.
-            // It kind of sucks because we have to go about making the mesh/material association in a roundabout way.
-
-            // Note: This seems dangerous, but getting to the name of the base gameObject appears to be take some work.
-            // The root gameObject, at this point, seems to have "_root" appeneded to it.
-            // Once the model if finished being imported it drops this postifx
-            // This is something that could change without our knowledge
-            string rootName = renderer.transform.root.gameObject.name;
-            int rootIndex = rootName.LastIndexOf("_root");
-            if (rootIndex != -1)
-            {
-                rootName = rootName.Remove(rootIndex);
-            }
+            // What is the parent mesh name?
+            string rootName = Path.GetFileNameWithoutExtension(this.assetPath);
 
 #if !UNITY_WEBPLAYER
             ImportTiled2Unity importer = new ImportTiled2Unity(this.assetPath);

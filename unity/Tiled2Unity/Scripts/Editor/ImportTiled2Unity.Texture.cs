@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -13,16 +14,50 @@ namespace Tiled2Unity
     {
         public void TextureImported(string texturePath)
         {
-            // This is a fixup method due to materials and textures, under some conditions, being imported out of order
-            UnityEngine.Texture2D texture2d = AssetDatabase.LoadAssetAtPath(texturePath, typeof(UnityEngine.Texture2D)) as UnityEngine.Texture2D;
-            UnityEngine.Material material = AssetDatabase.LoadAssetAtPath(GetMaterialAssetPath(texturePath), typeof(UnityEngine.Material)) as UnityEngine.Material;
-            if (material == null)
+            // Find the import behaviour that was waiting on this texture to be imported
+            string asset = Path.GetFileName(texturePath);
+            foreach (var importComponent in ImportBehaviour.EnumerateImportBehaviors_ByWaitingTexture(asset))
             {
-                Debug.LogError(String.Format("Error importing texture '{0}'. Could not find material. Try re-importing Tiled2Unity/Imported/[MapName].tiled2unity.xml file", texturePath));
+                // The texture has finished loading. Keep track of that status.
+                if (!importComponent.ImportComplete_Textures.Contains(asset))
+                {
+                    importComponent.ImportComplete_Textures.Add(asset);
+                }
+
+                // Are we done importing all textures? If so then start importing materials.
+                if (importComponent.IsTextureImportingCompleted())
+                {
+                    ImportAllMaterials(importComponent);
+                }
             }
-            else
+        }
+
+        private void ImportAllTextures(Tiled2Unity.ImportBehaviour importComponent)
+        {
+            // Textures need to be imported before we can create or import materials
+            foreach (var xmlImportTexture in importComponent.XmlDocument.Root.Elements("ImportTexture"))
             {
-                material.SetTexture("_MainTex", texture2d);
+                string filename = ImportUtils.GetAttributeAsString(xmlImportTexture, "filename");
+                string data = xmlImportTexture.Value;
+                byte[] bytes = ImportUtils.Base64ToBytes(data);
+
+                // Keep track that we are importing this texture
+                if (!importComponent.ImportWait_Textures.Contains(filename))
+                {
+                    importComponent.ImportWait_Textures.Add(filename);
+                }
+
+                // Start the import process for this texture
+                string pathToSave = GetTextureAssetPath(filename);
+                ImportUtils.ReadyToWrite(pathToSave);
+                File.WriteAllBytes(pathToSave, bytes);
+                importComponent.ImportTiled2UnityAsset(pathToSave);
+            }
+
+            // If we have no textures too import then go to next stage (materials)
+            if (importComponent.ImportWait_Textures.Count() == 0)
+            {
+                ImportAllMaterials(importComponent);
             }
         }
     }

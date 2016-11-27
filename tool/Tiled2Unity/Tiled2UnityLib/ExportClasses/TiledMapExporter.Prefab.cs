@@ -548,13 +548,13 @@ namespace Tiled2Unity
             {
                 // In isometric mode the local origin of the tile is at the bottom middle
                 xmlTileObject.SetAttributeValue("x", 0);
-                xmlTileObject.SetAttributeValue("y", half_h);
+                xmlTileObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
             }
             else
             {
                 // For non-isometric maps the local origin of the tile is the bottom left
-                xmlTileObject.SetAttributeValue("x", half_w);
-                xmlTileObject.SetAttributeValue("y", half_h);
+                xmlTileObject.SetAttributeValue("x", half_w * Tiled2Unity.Settings.Scale);
+                xmlTileObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
             }
             xmlTileObject.SetAttributeValue("scaleX", flip_w);
             xmlTileObject.SetAttributeValue("scaleY", flip_h);
@@ -616,8 +616,8 @@ namespace Tiled2Unity
 
                 // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
                 // Put another way: This translation moves away from center to local origin
-                xmlMeshObject.SetAttributeValue("x", -half_w);
-                xmlMeshObject.SetAttributeValue("y", half_h);
+                xmlMeshObject.SetAttributeValue("x", -half_w * Tiled2Unity.Settings.Scale);
+                xmlMeshObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
 
                 if (mesh.FullAnimationDurationMs > 0)
                 {

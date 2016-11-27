@@ -1,3 +1,9 @@
-[Tiled2Unity Version 1.0.8.0]
-Do not modify or delete this file!
-This file is needed by the Tiled2Unity utility in order to determine export directory.
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- Do not modify this file by hand. -->
+<!-- This file is needed by the Tiled2Unity Utility exporter -->
+<Tiled2UnityImporter>
+	<Header
+		author="Sean Barton"
+		version="1.0.9.2"
+	/>
+</Tiled2UnityImporter>

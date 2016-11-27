@@ -52,6 +52,13 @@ namespace Tiled2Unity
             return startsWith && !endsWithTxt;
         }
 
+        public bool IsTiled2UnityMaterial()
+        {
+            bool startsWith = this.fullPathToFile.Contains("/Tiled2Unity/Materials/");
+            bool endsWith = this.fullPathToFile.EndsWith(".mat");
+            return startsWith && endsWith;
+        }
+
         public bool IsTiled2UnityWavefrontObj()
         {
             bool contains = this.fullPathToFile.Contains("/Tiled2Unity/Meshes/");
@@ -73,11 +80,37 @@ namespace Tiled2Unity
             return meshAsset;
         }
 
-        public string GetMaterialAssetPath(string file)
+        public string MakeMaterialAssetPath(string file, bool isResource)
         {
             string name = Path.GetFileNameWithoutExtension(file);
-            string materialAsset = String.Format("{0}/Materials/{1}.mat", this.assetPathToTiled2UnityRoot, name);
-            return materialAsset;
+            if (isResource)
+            {
+                return String.Format("{0}/Materials/Resources/{1}.mat", this.assetPathToTiled2UnityRoot, name);
+            }
+
+            // If we're here then the material is not a resource to be loaded at runtime
+            return String.Format("{0}/Materials/{1}.mat", this.assetPathToTiled2UnityRoot, name);
+        }
+
+        public string GetExistingMaterialAssetPath(string file)
+        {
+            // The named material may be in a Ressources folder or not so we use the asset database to search
+            string name = Path.GetFileNameWithoutExtension(file);
+            string filter = String.Format("t:material {0}", name);
+            string folder = this.assetPathToTiled2UnityRoot + "/Materials";
+            string[] files = AssetDatabase.FindAssets(filter, new string[] { folder });
+            if (files.Length > 0)
+            {
+                return AssetDatabase.GUIDToAssetPath(files[0]);
+            }
+
+            return "";
+        }
+
+        public TextAsset GetTiled2UnityTextAsset()
+        {
+            string file = this.assetPathToTiled2UnityRoot + "/Tiled2Unity.export.txt";
+            return AssetDatabase.LoadAssetAtPath(file, typeof(TextAsset)) as TextAsset;
         }
 
         public string GetTextureAssetPath(string filename)
@@ -86,15 +119,6 @@ namespace Tiled2Unity
             filename = Path.GetFileName(filename);
             string textureAsset = String.Format("{0}/Textures/{1}", this.assetPathToTiled2UnityRoot, filename);
             return textureAsset;
-        }
-
-        public string GetXmlImportAssetPath(string name)
-        {
-#if !UNITY_WEBPLAYER
-            name = Tiled2Unity.ImportBehaviour.GetFilenameWithoutTiled2UnityExtension(name);
-#endif
-            string xmlAsset = String.Format("{0}/Imported/{1}.tiled2unity.xml", this.assetPathToTiled2UnityRoot, name);
-            return xmlAsset;
         }
 
         public string GetPrefabAssetPath(string name, bool isResource, string extraPath)

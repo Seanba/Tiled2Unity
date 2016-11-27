@@ -19,6 +19,9 @@ namespace Tiled2Unity
                 error = 1;
             };
 
+            // Tiled2UnityLite is always auto-exporting
+            Tiled2Unity.Settings.IsAutoExporting = true;
+
             // Run the session
             Tiled2Unity.Session tmxSession = new Session();
             tmxSession.SetCulture();

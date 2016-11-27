@@ -3,6 +3,7 @@
 // The Unity Webplayer is deprecated. If you *must* use it then make sure Tiled2Unity assets are imported via another build target first.
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -18,18 +19,36 @@ namespace Tiled2Unity
     // Partial class for the importer that deals with Materials
     partial class ImportTiled2Unity
     {
+        public void MaterialImported(string materialPath)
+        {
+            // Find the import behaviour that was waiting on this material to be imported
+            string asset = Path.GetFileName(materialPath);
+            foreach (var importComponent in ImportBehaviour.EnumerateImportBehaviors_ByWaitingMaterial(asset))
+            {
+                // The material has finished loading. Keep track of that status.
+                if (!importComponent.ImportComplete_Materials.Contains(asset))
+                {
+                    importComponent.ImportComplete_Materials.Add(asset);
+                }
+
+                // Are we done importing all materials? If so then start importing meshes.
+                if (importComponent.IsMaterialImportingCompleted())
+                {
+                    ImportAllMeshes(importComponent);
+                }
+            }
+        }
+
         // We need to call this while the renderers on the model is having its material assigned to it
         // This is invoked for every submesh in the .obj wavefront mesh
         public UnityEngine.Material FixMaterialForMeshRenderer(string objName, Renderer renderer)
         {
-            string xmlPath = GetXmlImportAssetPath(objName);
-            ImportBehaviour importBehavior = ImportBehaviour.FindOrCreateImportBehaviour(xmlPath);
+            // Find the import behaviour that is waiting for the mesh to be imported.
+            string assetName = objName + ".obj";
+            ImportBehaviour importBehavior = ImportBehaviour.FindImportBehavior_ByWaitingMesh(assetName);
 
             // The mesh to match
             string meshName = renderer.name;
-
-            // Increment our progress bar
-            importBehavior.IncrementProgressBar(String.Format("Assign material: {0}", meshName));
 
             // Find an assignment that matches the mesh renderer
             var assignMaterials = importBehavior.XmlDocument.Root.Elements("AssignMaterial");
@@ -50,7 +69,7 @@ namespace Tiled2Unity
             }
 
             string materialName = match.Attribute("material").Value + ".mat";
-            string materialPath = GetMaterialAssetPath(materialName);
+            string materialPath = GetExistingMaterialAssetPath(materialName);
 
             // Assign the material
             UnityEngine.Material material = AssetDatabase.LoadAssetAtPath(materialPath, typeof(UnityEngine.Material)) as UnityEngine.Material;
@@ -62,6 +81,68 @@ namespace Tiled2Unity
             return material;
         }
 
+        private void ImportAllMaterials(Tiled2Unity.ImportBehaviour importComponent)
+        {
+            // Create a material for each texture that has been imported
+            foreach (var xmlTexture in importComponent.XmlDocument.Root.Elements("ImportTexture"))
+            {
+                bool isResource = ImportUtils.GetAttributeAsBoolean(xmlTexture, "isResource", false);
+
+                string textureFile = ImportUtils.GetAttributeAsString(xmlTexture, "filename");
+                string materialPath = MakeMaterialAssetPath(textureFile, isResource);
+                string materialFile = Path.GetFileName(materialPath);
+
+                // Keep track that we importing this material
+                importComponent.ImportWait_Materials.Add(materialFile);
+
+                // Create the material
+                UnityEngine.Material material = CreateMaterialFromXml(xmlTexture);
+
+                // Assign the texture to the material
+                {
+                    string textureAsset = GetTextureAssetPath(textureFile);
+                    Texture2D texture2d = AssetDatabase.LoadAssetAtPath(textureAsset, typeof(Texture2D)) as Texture2D;
+                    material.SetTexture("_MainTex", texture2d);
+                }
+
+                ImportUtils.ReadyToWrite(materialPath);
+                ImportUtils.CreateOrReplaceAsset(material, materialPath);
+                importComponent.ImportTiled2UnityAsset(materialPath);
+            }
+
+            // Create a material for each internal texture
+            foreach (var xmlInternal in importComponent.XmlDocument.Root.Elements("InternalTexture"))
+            {
+                bool isResource = ImportUtils.GetAttributeAsBoolean(xmlInternal, "isResource", false);
+
+                string textureAsset = ImportUtils.GetAttributeAsString(xmlInternal, "assetPath");
+                string textureFile = Path.GetFileName(textureAsset);
+                string materialPath = MakeMaterialAssetPath(textureFile, isResource);
+                string materialFile = Path.GetFileName(materialPath);
+
+                // Keep track that we importing this material
+                importComponent.ImportWait_Materials.Add(materialFile);
+
+                // Create the material
+                UnityEngine.Material material = CreateMaterialFromXml(xmlInternal);
+
+                // Assign the texture to the material
+                {
+                    Texture2D texture2d = AssetDatabase.LoadAssetAtPath(textureAsset, typeof(Texture2D)) as Texture2D;
+                    material.SetTexture("_MainTex", texture2d);
+                }
+
+                ImportUtils.ReadyToWrite(materialPath);
+                ImportUtils.CreateOrReplaceAsset(material, materialPath);
+                importComponent.ImportTiled2UnityAsset(materialPath);
+            }
+
+            // If we have no materials to import then go to next stage (meshes)
+            if (importComponent.ImportWait_Materials.Count() == 0)
+            {
+                ImportAllMeshes(importComponent);
+            }
+        }
     }
 }
 #endif
