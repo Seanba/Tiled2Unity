@@ -74,6 +74,7 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("numTilesHigh", this.tmxMap.Height);
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
             prefab.SetAttributeValue("tileHeight", this.tmxMap.TileHeight);
+            prefab.SetAttributeValue("backgroundColor", this.tmxMap.BackgroundColor);
 
             prefab.SetAttributeValue("exportScale", Tiled2Unity.Settings.Scale);
             prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
