@@ -53,7 +53,7 @@ namespace Tiled2Unity
         {
             foreach (string f in Directory.GetFiles(dir))
             {
-                if (extensions.Any(ext => String.Compare(ext, Path.GetExtension(f), true) == 0))
+                if (extensions.Any(ext => String.Compare(ext, System.IO.Path.GetExtension(f), true) == 0))
                 {
                     yield return f;
                 }

@@ -21,7 +21,7 @@ namespace Tiled2Unity
         public void MeshImported(string objPath)
         {
             // Find the import behaviour that was waiting on this mesh to be imported
-            string asset = Path.GetFileName(objPath);
+            string asset = System.IO.Path.GetFileName(objPath);
             ImportBehaviour importComponent = ImportBehaviour.FindImportBehavior_ByWaitingMesh(asset);
             if (importComponent != null)
             {

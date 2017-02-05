@@ -89,6 +89,16 @@
     <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\AppIcon-128.png">
       <DeployService-Deploy>True</DeployService-Deploy>
     </ImageAsset>
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_16x16.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_16x16%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_32x32.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_32x32%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_128x128.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_128x128%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_256x256.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_256x256%402x.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_512x512.png" />
+    <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\icon_512x512%402x.png" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Info.plist" />

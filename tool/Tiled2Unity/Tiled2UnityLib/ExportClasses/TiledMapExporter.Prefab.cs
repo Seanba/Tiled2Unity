@@ -78,6 +78,10 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("exportScale", Tiled2Unity.Settings.Scale);
             prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
+
+            // Background color ignores alpha component
+            prefab.SetAttributeValue("backgroundColor", "#" + this.tmxMap.BackgroundColor.ToArgb().ToString("x").Substring(2));
+
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
             AssignTiledProperties(this.tmxMap, prefab);
 
@@ -107,6 +111,15 @@ namespace Tiled2Unity
                             new XAttribute("x", offset.X),
                             new XAttribute("y", offset.Y),
                             new XAttribute("z", depth_z));
+
+                    // Add a TileLayer component
+                    {
+                        XElement layerComponent =
+                            new XElement("TileLayer",
+                                new XAttribute("offsetX", layer.Offset.X),
+                                new XAttribute("offsetY", layer.Offset.Y));
+                        layerElement.Add(layerComponent);
+                    }
 
                     if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
                     {
@@ -164,6 +177,16 @@ namespace Tiled2Unity
 
                     gameObject.SetAttributeValue("z", depth_z);
 
+                    // Add an ObjectLayer component
+                    {
+                        XElement layerComponent =
+                            new XElement("ObjectLayer",
+                                new XAttribute("offsetX", objGroup.Offset.X),
+                                new XAttribute("offsetY", objGroup.Offset.Y),
+                                new XAttribute("color", "#" + objGroup.Color.ToArgb().ToString("x")));
+                        gameObject.Add(layerComponent);
+                    }
+
                     AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
                     AssignTiledProperties(objGroup, gameObject);
 
@@ -212,7 +235,10 @@ namespace Tiled2Unity
 
                 XElement objElement = null;
 
-                if (tmxObject.GetType() == typeof(TmxObjectRectangle))
+                // Do not create colliders if the are being ignored. (Still want to creat the game object though)
+                bool ignoringCollisions = (objectGroup.Ignore == TmxLayerBase.IgnoreSettings.Collision);
+
+                if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
                     if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
@@ -224,15 +250,15 @@ namespace Tiled2Unity
                         objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                     }
                 }
-                else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
+                else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
                     objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, objectGroup.Name);
                 }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
+                else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
                     objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
                 }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
+                else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolyline))
                 {
                     objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
                 }
@@ -252,7 +278,7 @@ namespace Tiled2Unity
                         xmlObject.SetAttributeValue("z", depth_z);
                     }
 
-                    AddTileObjectElements(tmxObject as TmxObjectTile, xmlObject);
+                    AddTileObjectElements(tmxObjectTile, xmlObject);
                 }
                 else
                 {
@@ -446,7 +472,6 @@ namespace Tiled2Unity
                     continue;
                 }
 
-
                 XElement xmlProp = new XElement("Property", new XAttribute("name", prop.Key), new XAttribute("value", prop.Value.Value));
                 xmlProperties.Add(xmlProp);
             }
@@ -563,6 +588,9 @@ namespace Tiled2Unity
             // Note: Colliders on a tile object are always treated as if they are in Orthogonal space
             TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
             this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
+
+            // Only add colliders if collisions are not being ignored
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Collision)
             {
                 foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
                 {
@@ -604,31 +632,35 @@ namespace Tiled2Unity
 
             // Add a child for each mesh
             // (The child node is needed due to animation)
-            foreach (var mesh in tmxObjectTile.Tile.Meshes)
+            // (Only add meshes if visuals are not being ignored)
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Visual)
             {
-                XElement xmlMeshObject = new XElement("GameObject");
-
-                xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
-                xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
-
-                xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
-                xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
-
-                // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
-                // Put another way: This translation moves away from center to local origin
-                xmlMeshObject.SetAttributeValue("x", -half_w * Tiled2Unity.Settings.Scale);
-                xmlMeshObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
-
-                if (mesh.FullAnimationDurationMs > 0)
+                foreach (var mesh in tmxObjectTile.Tile.Meshes)
                 {
-                    XElement xmlAnimation = new XElement("TileAnimator",
-                        new XAttribute("startTimeMs", mesh.StartTimeMs),
-                        new XAttribute("durationMs", mesh.DurationMs),
-                        new XAttribute("fullTimeMs", mesh.FullAnimationDurationMs));
-                    xmlMeshObject.Add(xmlAnimation);
-                }
+                    XElement xmlMeshObject = new XElement("GameObject");
 
-                xmlTileObject.Add(xmlMeshObject);
+                    xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
+                    xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
+
+                    xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
+                    xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
+
+                    // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
+                    // Put another way: This translation moves away from center to local origin
+                    xmlMeshObject.SetAttributeValue("x", -half_w * Tiled2Unity.Settings.Scale);
+                    xmlMeshObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
+
+                    if (mesh.FullAnimationDurationMs > 0)
+                    {
+                        XElement xmlAnimation = new XElement("TileAnimator",
+                            new XAttribute("startTimeMs", mesh.StartTimeMs),
+                            new XAttribute("durationMs", mesh.DurationMs),
+                            new XAttribute("fullTimeMs", mesh.FullAnimationDurationMs));
+                        xmlMeshObject.Add(xmlAnimation);
+                    }
+
+                    xmlTileObject.Add(xmlMeshObject);
+                }
             }
 
             xmlTileObjectRoot.Add(xmlTileObject);

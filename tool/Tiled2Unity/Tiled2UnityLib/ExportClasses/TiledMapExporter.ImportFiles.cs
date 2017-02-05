@@ -19,7 +19,7 @@ namespace Tiled2Unity
 
             public int GetHashCode(TmxImage tmxImage)
             {
-                return tmxImage.AbsolutePath.GetHashCode();
+                return tmxImage.AbsolutePath.ToLower().GetHashCode();
             }
         }
 

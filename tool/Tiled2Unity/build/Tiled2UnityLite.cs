@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.9.2
+// version 1.0.9.5
 
 //css_reference System;
 //css_reference System.Core;
@@ -59,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.9.2";
+            return "1.0.9.5";
         }
 
         public static string GetPlatform()
@@ -1585,7 +1585,7 @@ namespace Tiled2Unity
 
             public int GetHashCode(TmxImage tmxImage)
             {
-                return tmxImage.AbsolutePath.GetHashCode();
+                return tmxImage.AbsolutePath.ToLower().GetHashCode();
             }
         }
 
@@ -2127,6 +2127,10 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("exportScale", Tiled2Unity.Settings.Scale);
             prefab.SetAttributeValue("mapWidthInPixels", sizeInPixels.Width);
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
+
+            // Background color ignores alpha component
+            prefab.SetAttributeValue("backgroundColor", "#" + this.tmxMap.BackgroundColor.ToArgb().ToString("x").Substring(2));
+
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
             AssignTiledProperties(this.tmxMap, prefab);
 
@@ -2156,6 +2160,15 @@ namespace Tiled2Unity
                             new XAttribute("x", offset.X),
                             new XAttribute("y", offset.Y),
                             new XAttribute("z", depth_z));
+
+                    // Add a TileLayer component
+                    {
+                        XElement layerComponent =
+                            new XElement("TileLayer",
+                                new XAttribute("offsetX", layer.Offset.X),
+                                new XAttribute("offsetY", layer.Offset.Y));
+                        layerElement.Add(layerComponent);
+                    }
 
                     if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
                     {
@@ -2213,6 +2226,16 @@ namespace Tiled2Unity
 
                     gameObject.SetAttributeValue("z", depth_z);
 
+                    // Add an ObjectLayer component
+                    {
+                        XElement layerComponent =
+                            new XElement("ObjectLayer",
+                                new XAttribute("offsetX", objGroup.Offset.X),
+                                new XAttribute("offsetY", objGroup.Offset.Y),
+                                new XAttribute("color", "#" + objGroup.Color.ToArgb().ToString("x")));
+                        gameObject.Add(layerComponent);
+                    }
+
                     AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
                     AssignTiledProperties(objGroup, gameObject);
 
@@ -2261,7 +2284,10 @@ namespace Tiled2Unity
 
                 XElement objElement = null;
 
-                if (tmxObject.GetType() == typeof(TmxObjectRectangle))
+                // Do not create colliders if the are being ignored. (Still want to creat the game object though)
+                bool ignoringCollisions = (objectGroup.Ignore == TmxLayerBase.IgnoreSettings.Collision);
+
+                if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
                     if (this.tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
@@ -2273,15 +2299,15 @@ namespace Tiled2Unity
                         objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                     }
                 }
-                else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
+                else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
                     objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, objectGroup.Name);
                 }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
+                else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
                     objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
                 }
-                else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
+                else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolyline))
                 {
                     objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
                 }
@@ -2301,7 +2327,7 @@ namespace Tiled2Unity
                         xmlObject.SetAttributeValue("z", depth_z);
                     }
 
-                    AddTileObjectElements(tmxObject as TmxObjectTile, xmlObject);
+                    AddTileObjectElements(tmxObjectTile, xmlObject);
                 }
                 else
                 {
@@ -2495,7 +2521,6 @@ namespace Tiled2Unity
                     continue;
                 }
 
-
                 XElement xmlProp = new XElement("Property", new XAttribute("name", prop.Key), new XAttribute("value", prop.Value.Value));
                 xmlProperties.Add(xmlProp);
             }
@@ -2612,6 +2637,9 @@ namespace Tiled2Unity
             // Note: Colliders on a tile object are always treated as if they are in Orthogonal space
             TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
             this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
+
+            // Only add colliders if collisions are not being ignored
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Collision)
             {
                 foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
                 {
@@ -2653,31 +2681,35 @@ namespace Tiled2Unity
 
             // Add a child for each mesh
             // (The child node is needed due to animation)
-            foreach (var mesh in tmxObjectTile.Tile.Meshes)
+            // (Only add meshes if visuals are not being ignored)
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Visual)
             {
-                XElement xmlMeshObject = new XElement("GameObject");
-
-                xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
-                xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
-
-                xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
-                xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
-
-                // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
-                // Put another way: This translation moves away from center to local origin
-                xmlMeshObject.SetAttributeValue("x", -half_w * Tiled2Unity.Settings.Scale);
-                xmlMeshObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
-
-                if (mesh.FullAnimationDurationMs > 0)
+                foreach (var mesh in tmxObjectTile.Tile.Meshes)
                 {
-                    XElement xmlAnimation = new XElement("TileAnimator",
-                        new XAttribute("startTimeMs", mesh.StartTimeMs),
-                        new XAttribute("durationMs", mesh.DurationMs),
-                        new XAttribute("fullTimeMs", mesh.FullAnimationDurationMs));
-                    xmlMeshObject.Add(xmlAnimation);
-                }
+                    XElement xmlMeshObject = new XElement("GameObject");
 
-                xmlTileObject.Add(xmlMeshObject);
+                    xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
+                    xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
+
+                    xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
+                    xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
+
+                    // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
+                    // Put another way: This translation moves away from center to local origin
+                    xmlMeshObject.SetAttributeValue("x", -half_w * Tiled2Unity.Settings.Scale);
+                    xmlMeshObject.SetAttributeValue("y", half_h * Tiled2Unity.Settings.Scale);
+
+                    if (mesh.FullAnimationDurationMs > 0)
+                    {
+                        XElement xmlAnimation = new XElement("TileAnimator",
+                            new XAttribute("startTimeMs", mesh.StartTimeMs),
+                            new XAttribute("durationMs", mesh.DurationMs),
+                            new XAttribute("fullTimeMs", mesh.FullAnimationDurationMs));
+                        xmlMeshObject.Add(xmlAnimation);
+                    }
+
+                    xmlTileObject.Add(xmlMeshObject);
+                }
             }
 
             xmlTileObjectRoot.Add(xmlTileObject);
@@ -3327,6 +3359,7 @@ namespace SD.Tools.Algorithmia.GeneralDataStructures
 
 // NOTE: Clipper library was put into Tiled2Unity namespace to avoid name collision with Mac drawing libraries (which also used Clipper)
 // NOTE: Version 6.4.0 of Clipper is a beta release but fixes bugs with open path clipping
+#pragma warning disable 219
 
 /*******************************************************************************
 *                                                                              *
@@ -8233,6 +8266,8 @@ namespace Tiled2Unity.ClipperLib
 
 } //end ClipperLib namespace
 
+#pragma warning restore 219
+
 // ----------------------------------------------------------------------
 // Dict.cs
 
@@ -12605,13 +12640,14 @@ namespace Tiled2Unity
 
             // Some images use a transparency color key instead of alpha (blerg)
             tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
+
+#if !TILED_2_UNITY_LITE
             if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
-#if !TILED_2_UNITY_LITE
                 System.Drawing.Color transColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
                 tmxImage.ImageBitmap.MakeTransparent(transColor);
-#endif
             }
+#endif
 
             return tmxImage;
         }
@@ -13555,6 +13591,15 @@ namespace Tiled2Unity
             foreach (var g in groups)
             {
                 TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
+
+                // Object gropus may be ignored
+                if (tmxObjectGroup.Ignore == TmxLayer.IgnoreSettings.True)
+                {
+                    // We don't care about this object group.
+                    Logger.WriteLine("Ignoring object group layer due to unity:ignore = True property: {0}", tmxObjectGroup.Name);
+                    continue;
+                }
+
                 this.ObjectGroups.Add(tmxObjectGroup);
             }
         }

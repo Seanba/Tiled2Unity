@@ -24,9 +24,9 @@
 	<string>NSApplication</string>
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.9.5</string>
 	<key>XSAppIconAssets</key>
 	<string>Resources/Images.xcassets/AppIcons.appiconset</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0.8.0</string>
 </dict>
 </plist>

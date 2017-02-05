@@ -15,7 +15,7 @@ namespace Tiled2Unity
         public void TextureImported(string texturePath)
         {
             // Find the import behaviour that was waiting on this texture to be imported
-            string asset = Path.GetFileName(texturePath);
+            string asset = System.IO.Path.GetFileName(texturePath);
             foreach (var importComponent in ImportBehaviour.EnumerateImportBehaviors_ByWaitingTexture(asset))
             {
                 // The texture has finished loading. Keep track of that status.

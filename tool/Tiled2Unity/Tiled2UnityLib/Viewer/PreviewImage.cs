@@ -605,10 +605,34 @@ namespace Tiled2Unity.Viewer
                             objColor = tmxMap.ObjectTypes.TmxObjectTypeMapping[collisionType].Color;
                         }
 
-                        DrawObjectCollider(g, tmxMap, obj, objColor);
+                        if (objGroup.Ignore == TmxLayerBase.IgnoreSettings.Collision)
+                        {
+                            // We're ignoring collisions but the game object is still a part of the map.
+                            DrawObjectMarker(g, tmxMap, obj, objColor);
+                        }
+                        else
+                        {
+                            DrawObjectCollider(g, tmxMap, obj, objColor);
+                        }
                     }
                 }
 
+                g.Restore(state);
+            }
+        }
+
+        private static void DrawObjectMarker(Graphics g, TmxMap tmxMap, TmxObject tmxObject, Color color)
+        {
+            using (Pen pen = new Pen(color))
+            {
+                GraphicsState state = g.Save();
+
+                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(tmxMap, tmxObject.Position);
+                g.TranslateTransform(xfPosition.X, xfPosition.Y);
+                g.RotateTransform(tmxObject.Rotation);
+
+                Rectangle rc = new Rectangle(-2, -2, 4, 4);
+                g.DrawEllipse(pen, rc);
                 g.Restore(state);
             }
         }

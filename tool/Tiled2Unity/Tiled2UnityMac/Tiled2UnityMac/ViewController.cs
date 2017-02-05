@@ -324,6 +324,15 @@ namespace Tiled2UnityMac
 
 		private void AppendTextView(string text, NSColor color)
 		{
+			// Capture output to a log to help with debugging
+			// The log file location is an Apple standard
+			string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Library");
+			logPath = Path.Combine(logPath, "Logs/Tiled2UnityMac/app.log");
+			using (StreamWriter log = File.AppendText(logPath))
+			{
+				log.Write(text);
+			}
+
 			// Append the text
 			var attributed = new NSAttributedString (text);
 			this.TextViewOutput.TextStorage.Append (attributed);

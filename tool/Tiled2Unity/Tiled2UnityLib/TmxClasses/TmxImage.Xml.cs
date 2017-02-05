@@ -58,13 +58,14 @@ namespace Tiled2Unity
 
             // Some images use a transparency color key instead of alpha (blerg)
             tmxImage.TransparentColor = TmxHelper.GetAttributeAsString(elemImage, "trans", "");
+
+#if !TILED_2_UNITY_LITE
             if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
-#if !TILED_2_UNITY_LITE
                 System.Drawing.Color transColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
                 tmxImage.ImageBitmap.MakeTransparent(transColor);
-#endif
             }
+#endif
 
             return tmxImage;
         }

@@ -20,7 +20,7 @@ namespace Tiled2Unity
         public void PrefabImported(string prefabPath)
         {
             // Find the import behaviour that was waiting on this prefab to be imported
-            string asset = Path.GetFileName(prefabPath);
+            string asset = System.IO.Path.GetFileName(prefabPath);
             ImportBehaviour importComponent = ImportBehaviour.FindImportBehavior_ByWaitingPrefab(asset);
             if (importComponent != null)
             {
@@ -33,8 +33,7 @@ namespace Tiled2Unity
                 // Are we done importing all Prefabs? If so then we have completed the import process.
                 if (importComponent.IsPrefabImportingCompleted())
                 {
-                    string msg = String.Format("Succefully imported prefab '{0}' from '{1}'", prefabPath, importComponent.Tiled2UnityXmlPath);
-                    Debug.Log(msg);
+                    importComponent.ReportPrefabImport(prefabPath);
                     importComponent.DestroyImportBehaviour();
                 }
             }
@@ -50,13 +49,13 @@ namespace Tiled2Unity
 
         private void CreatePrefab(XElement xmlPrefab, string objPath, Tiled2Unity.ImportBehaviour importComponent)
         {
-            var customImporters = GetCustomImporterInstances();
+            var customImporters = GetCustomImporterInstances(importComponent);
 
             // Part 1: Create the prefab
             string prefabName = xmlPrefab.Attribute("name").Value;
             float prefabScale = ImportUtils.GetAttributeAsFloat(xmlPrefab, "scale", 1.0f);
             GameObject tempPrefab = new GameObject(prefabName);
-            HandleTiledAttributes(tempPrefab, xmlPrefab);
+            HandleTiledAttributes(tempPrefab, xmlPrefab, importComponent);
             HandleCustomProperties(tempPrefab, xmlPrefab, customImporters);
 
             // Part 2: Build out the prefab
@@ -75,7 +74,7 @@ namespace Tiled2Unity
             string resourcePath = ImportUtils.GetAttributeAsString(xmlPrefab, "resourcePath", "");
             bool isResource = !String.IsNullOrEmpty(resourcePath) || ImportUtils.GetAttributeAsBoolean(xmlPrefab, "resource", false);
             string prefabPath = GetPrefabAssetPath(prefabName, isResource, resourcePath);
-            string prefabFile = Path.GetFileName(prefabPath);
+            string prefabFile = System.IO.Path.GetFileName(prefabPath);
 
             // Keep track of the prefab file being imported
             if (!importComponent.ImportWait_Prefabs.Contains(prefabFile))
@@ -124,7 +123,7 @@ namespace Tiled2Unity
                     string sortingLayer = ImportUtils.GetAttributeAsString(goXml, "sortingLayerName", "");
                     if (!String.IsNullOrEmpty(sortingLayer) && !SortingLayerExposedEditor.GetSortingLayerNames().Contains(sortingLayer))
                     {
-                        Debug.LogError(string.Format("Sorting Layer \"{0}\" does not exist. Check your Project Settings -> Tags and Layers", sortingLayer));
+                        importComponent.RecordError("Sorting Layer \"{0}\" does not exist. Check your Project Settings -> Tags and Layers", sortingLayer);
                         renderer.sortingLayerName = "Default";
                     }
                     else
@@ -154,6 +153,10 @@ namespace Tiled2Unity
                 float z = ImportUtils.GetAttributeAsFloat(goXml, "z", 0);
                 child.transform.localPosition = new Vector3(x, y, z);
 
+                // Add any layer components
+                AddTileLayerComponentsTo(child, goXml);
+                AddObjectLayerComponentsTo(child, goXml);
+
                 // Add any tile objects
                 AddTileObjectComponentsTo(child, goXml);
 
@@ -169,10 +172,10 @@ namespace Tiled2Unity
                 AddGameObjectsTo(child, goXml, isTrigger, objPath, importComponent, customImporters);
 
                 // Does this game object have a tag?
-                AssignTagTo(child, goXml);
+                AssignTagTo(child, goXml, importComponent);
 
                 // Does this game object have a layer?
-                AssignLayerTo(child, goXml);
+                AssignLayerTo(child, goXml, importComponent);
 
                 // Are there any custom properties?
                 HandleCustomProperties(child, goXml, customImporters);
@@ -190,7 +193,7 @@ namespace Tiled2Unity
             }
         }
 
-        private void AssignLayerTo(GameObject gameObject, XElement xml)
+        private void AssignLayerTo(GameObject gameObject, XElement xml, ImportBehaviour importComponent)
         {
             string layerName = ImportUtils.GetAttributeAsString(xml, "layer", "");
             if (String.IsNullOrEmpty(layerName))
@@ -199,10 +202,7 @@ namespace Tiled2Unity
             int layerId = LayerMask.NameToLayer(layerName);
             if (layerId == -1)
             {
-                string msg = String.Format("Layer '{0}' is not defined for '{1}'. Check project settings in Edit->Project Settings->Tags & Layers",
-                    layerName,
-                    GetFullGameObjectName(gameObject.transform));
-                Debug.LogError(msg);
+                importComponent.RecordError("Layer '{0}' is not defined for '{1}'. Check project settings in Edit->Project Settings->Tags & Layers", layerName, GetFullGameObjectName(gameObject.transform));
                 return;
             }
 
@@ -230,7 +230,7 @@ namespace Tiled2Unity
             }
         }
 
-        private void AssignTagTo(GameObject gameObject, XElement xml)
+        private void AssignTagTo(GameObject gameObject, XElement xml, ImportBehaviour importComponent)
         {
             string tag = ImportUtils.GetAttributeAsString(xml, "tag", "");
             if (String.IsNullOrEmpty(tag))
@@ -243,10 +243,7 @@ namespace Tiled2Unity
             }
             catch (UnityException)
             {
-                string msg = String.Format("Tag '{0}' is not defined for '{1}'. Check project settings in Edit->Project Settings->Tags & Layers",
-                    tag,
-                    GetFullGameObjectName(gameObject.transform));
-                Debug.LogError(msg);
+                importComponent.RecordError("Tag '{0}' is not defined for '{1}'. Check project settings in Edit->Project Settings->Tags & Layers", tag, GetFullGameObjectName(gameObject.transform));
             }
         }
 
@@ -407,9 +404,34 @@ namespace Tiled2Unity
             }
 
             // If we're here then there's an error with the mesh name
-            string msg = String.Format("No mesh named '{0}' to copy from.\nXml File: {1}\nObject: {2}", copyFromName, importComponent.Tiled2UnityXmlPath, objPath);
-            Debug.LogError(msg);
+            importComponent.RecordError("No mesh named '{0}' to copy from.\nXml File: {1}\nObject: {2}", copyFromName, importComponent.Tiled2UnityXmlPath, objPath);
             return null;
+        }
+
+        private void AddTileLayerComponentsTo(GameObject gameObject, XElement goXml)
+        {
+            var xml = goXml.Element("TileLayer");
+            if (xml != null)
+            {
+                Tiled2Unity.TileLayer tileLayer = gameObject.AddComponent<Tiled2Unity.TileLayer>();
+                SetLayerComponentProperties(tileLayer, xml);
+            }
+        }
+
+        private void AddObjectLayerComponentsTo(GameObject gameObject, XElement goXml)
+        {
+            var xml = goXml.Element("ObjectLayer");
+            if (xml != null)
+            {
+                Tiled2Unity.ObjectLayer objectLayer = gameObject.AddComponent<Tiled2Unity.ObjectLayer>();
+                objectLayer.Color = ImportUtils.GetAttributeAsColor(xml, "color", Color.black);
+                SetLayerComponentProperties(objectLayer, xml);
+            }
+        }
+
+        private void SetLayerComponentProperties(Tiled2Unity.Layer layer, XElement xml)
+        {
+            layer.Offset = new Vector2 { x = ImportUtils.GetAttributeAsFloat(xml, "offsetX", 0), y = ImportUtils.GetAttributeAsFloat(xml, "offsetY", 0) };
         }
 
         private void AddTileObjectComponentsTo(GameObject gameObject, XElement goXml)
@@ -436,7 +458,7 @@ namespace Tiled2Unity
             }
         }
 
-        private void HandleTiledAttributes(GameObject gameObject, XElement goXml)
+        private void HandleTiledAttributes(GameObject gameObject, XElement goXml, Tiled2Unity.ImportBehaviour importComponent)
         {
             // Add the TiledMap component
             TiledMap map = gameObject.AddComponent<TiledMap>();
@@ -454,10 +476,11 @@ namespace Tiled2Unity
                 map.ExportScale = ImportUtils.GetAttributeAsFloat(goXml, "exportScale");
                 map.MapWidthInPixels = ImportUtils.GetAttributeAsInt(goXml, "mapWidthInPixels");
                 map.MapHeightInPixels = ImportUtils.GetAttributeAsInt(goXml, "mapHeightInPixels");
+                map.BackgroundColor = ImportUtils.GetAttributeAsColor(goXml, "backgroundColor", Color.black);
             }
             catch
             {
-                Debug.LogWarning(String.Format("Error adding TiledMap component. Are you using an old version of Tiled2Unity in your Unity project?"));
+                importComponent.RecordWarning("Couldn't add TiledMap component. Are you using an old version of Tiled2Unity in your Unity project?");
                 GameObject.DestroyImmediate(map);
             }
         }
@@ -485,7 +508,7 @@ namespace Tiled2Unity
             }
         }
 
-        private IList<ICustomTiledImporter> GetCustomImporterInstances()
+        private IList<ICustomTiledImporter> GetCustomImporterInstances(ImportBehaviour importComponent)
         {
             // Report an error for ICustomTiledImporter classes that don't have the CustomTiledImporterAttribute
             var errorTypes = from a in AppDomain.CurrentDomain.GetAssemblies()
@@ -496,7 +519,7 @@ namespace Tiled2Unity
                              select t;
             foreach (var t in errorTypes)
             {
-                Debug.LogError(String.Format("ICustomTiledImporter type '{0}' is missing CustomTiledImporterAttribute", t));
+                importComponent.RecordError("ICustomTiledImporter type '{0}' is missing CustomTiledImporterAttribute", t);
             }
 
             // Find all the types with the CustomTiledImporterAttribute, instantiate them, and give them a chance to customize our prefab

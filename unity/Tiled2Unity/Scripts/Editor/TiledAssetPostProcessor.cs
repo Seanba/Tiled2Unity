@@ -10,6 +10,11 @@
 #undef T2U_USE_LIGHT_PROBES_API
 #endif
 
+#if UNITY_4_0 || UNITY_4_0_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_5 || UNITY_4_6 || UNITY_4_7 || UNITY_5_0 || UNITY_5_1 || UNITY_5_2 || UNITY_5_3 || UNITY_5_4
+#define T2U_USE_5_4_API
+#else
+#endif
+
 using System.Collections;
 using System.IO;
 using System.Linq;
@@ -34,7 +39,7 @@ namespace Tiled2Unity
             // Certain file types are ignored by this asset post processor (i.e. scripts)
             // (Note that an empty string as the extension is a folder)
             string[] ignoreThese = { ".cs", ".txt",  ".shader", "", };
-            if (ignoreThese.Any(ext => String.Compare(ext, Path.GetExtension(assetPath), true) == 0))
+            if (ignoreThese.Any(ext => String.Compare(ext, System.IO.Path.GetExtension(assetPath), true) == 0))
             {
                 return false;
             }
@@ -169,7 +174,7 @@ namespace Tiled2Unity
                 return null;
 
             // What is the parent mesh name?
-            string rootName = Path.GetFileNameWithoutExtension(this.assetPath);
+            string rootName = System.IO.Path.GetFileNameWithoutExtension(this.assetPath);
 
 #if !UNITY_WEBPLAYER
             ImportTiled2Unity importer = new ImportTiled2Unity(this.assetPath);
@@ -195,19 +200,26 @@ namespace Tiled2Unity
             this.assetImporter.userData = "tiled2unity";
 
             TextureImporter textureImporter = this.assetImporter as TextureImporter;
-            textureImporter.textureType = TextureImporterType.Advanced;
             textureImporter.npotScale = TextureImporterNPOTScale.None;
             textureImporter.convertToNormalmap = false;
-            textureImporter.lightmap = false;
             textureImporter.alphaIsTransparency = true;
-            textureImporter.grayscaleToAlpha = false;
-            textureImporter.linearTexture = false;
             textureImporter.spriteImportMode = SpriteImportMode.None;
             textureImporter.mipmapEnabled = false;
-            textureImporter.generateCubemap = TextureImporterGenerateCubemap.None;
             textureImporter.filterMode = FilterMode.Point;
             textureImporter.wrapMode = TextureWrapMode.Clamp;
+#if T2U_USE_5_4_API
+            textureImporter.lightmap = false;
+            textureImporter.grayscaleToAlpha = false;
+            textureImporter.linearTexture = false;
+            textureImporter.generateCubemap = TextureImporterGenerateCubemap.None;
             textureImporter.textureFormat = TextureImporterFormat.AutomaticTruecolor;
+#else
+            textureImporter.textureType = TextureImporterType.Default;
+            textureImporter.alphaSource = TextureImporterAlphaSource.FromInput;
+            textureImporter.sRGBTexture = false;
+            textureImporter.textureShape = TextureImporterShape.Texture2D;
+            textureImporter.textureCompression = TextureImporterCompression.Uncompressed;
+#endif
         }
 
     }

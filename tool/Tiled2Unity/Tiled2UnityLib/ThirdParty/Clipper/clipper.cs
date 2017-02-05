@@ -1,5 +1,6 @@
 ﻿// NOTE: Clipper library was put into Tiled2Unity namespace to avoid name collision with Mac drawing libraries (which also used Clipper)
 // NOTE: Version 6.4.0 of Clipper is a beta release but fixes bugs with open path clipping
+#pragma warning disable 219
 
 /*******************************************************************************
 *                                                                              *
@@ -4905,3 +4906,5 @@ namespace Tiled2Unity.ClipperLib
   //------------------------------------------------------------------------------
 
 } //end ClipperLib namespace
+
+#pragma warning restore 219

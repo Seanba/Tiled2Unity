@@ -41,10 +41,13 @@ namespace Tiled2Unity
         public int TileHeight = 0;
         public float ExportScale = 1.0f;
 
-        // Note: Because maps can be isometric and staggered we simply can't multply tile width (or height) by number of tiles wide (or high) to get width (or height)
+        // Note: Because maps can be isometric and staggered we simply can't multiply tile width (or height) by number of tiles wide (or high) to get width (or height)
         // We rely on the exporter to calculate the width and height of the map
         public int MapWidthInPixels = 0;
         public int MapHeightInPixels = 0;
+
+        // Background color could be used to set the camera clear color to get the same effect as in Tiled
+        public Color BackgroundColor = Color.black;
 
         public float GetMapWidthInPixelsScaled()
         {

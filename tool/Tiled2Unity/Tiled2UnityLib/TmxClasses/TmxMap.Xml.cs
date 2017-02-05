@@ -299,6 +299,15 @@ namespace Tiled2Unity
             foreach (var g in groups)
             {
                 TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
+
+                // Object gropus may be ignored
+                if (tmxObjectGroup.Ignore == TmxLayer.IgnoreSettings.True)
+                {
+                    // We don't care about this object group.
+                    Logger.WriteLine("Ignoring object group layer due to unity:ignore = True property: {0}", tmxObjectGroup.Name);
+                    continue;
+                }
+
                 this.ObjectGroups.Add(tmxObjectGroup);
             }
         }

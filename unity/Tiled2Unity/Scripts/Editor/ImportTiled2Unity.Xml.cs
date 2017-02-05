@@ -73,20 +73,19 @@ namespace Tiled2Unity
 
                 if (importComponent.ExporterTiled2UnityVersion != importerTiled2UnityVersion)
                 {
-                    Debug.LogWarning(string.Format("Imported Tiled2Unity file '{0}' was exported with version {1}. We are expecting version {2}", importComponent.Tiled2UnityXmlPath, importComponent.ExporterTiled2UnityVersion, importerTiled2UnityVersion));
+                    importComponent.RecordWarning("Imported Tiled2Unity file '{0}' was exported with version {1}. We are expecting version {2}", importComponent.Tiled2UnityXmlPath, importComponent.ExporterTiled2UnityVersion, importerTiled2UnityVersion);
                 }
             }
             catch (Exception e)
             {
-                string warning = String.Format("Failed to read Tiled2Unity import version from '{0}': {1}", importComponent.Tiled2UnityXmlPath, e.Message);
-                Debug.LogWarning(warning);
+                importComponent.RecordError("Failed to read Tiled2Unity import version from '{0}': {1}", importComponent.Tiled2UnityXmlPath, e.Message);
             }
         }
 
-        private UnityEngine.Material CreateMaterialFromXml(XElement xml)
+        private UnityEngine.Material CreateMaterialFromXml(XElement xml, Tiled2Unity.ImportBehaviour importComponent)
         {
             // Does this material support alpha color key?
-            string htmlColor = ImportUtils.GetAttributeAsString(xml, "alphaColorKey", "");
+            bool useColorKey = xml.Attribute("alphaColorKey") != null;
             bool usesDepthShader = ImportUtils.GetAttributeAsBoolean(xml, "usesDepthShaders", false);
 
             // Determine which shader we sould be using
@@ -103,28 +102,33 @@ namespace Tiled2Unity
             }
 
             // Are we using color key shaders?
-            Color? keyColor = null;
-            if (!String.IsNullOrEmpty(htmlColor))
+            Color keyColor = Color.black;
+            if (useColorKey)
             {
+                keyColor = ImportUtils.GetAttributeAsColor(xml, "alphaColorKey");
                 shaderName += " Color Key";
-
-                // Sometimes Tiled saves out color without the leading # but we expect it to be there
-                if (!htmlColor.StartsWith("#"))
-                {
-                    htmlColor = "#" + htmlColor;
-                }
-
-                byte r = byte.Parse(htmlColor.Substring(1, 2), System.Globalization.NumberStyles.HexNumber);
-                byte g = byte.Parse(htmlColor.Substring(3, 2), System.Globalization.NumberStyles.HexNumber);
-                byte b = byte.Parse(htmlColor.Substring(5, 2), System.Globalization.NumberStyles.HexNumber);
-                keyColor = new Color32(r, g, b, 255);
             }
 
-            UnityEngine.Material material = new UnityEngine.Material(UnityEngine.Shader.Find(shaderName));
-
-            if (keyColor.HasValue)
+            // Try creating the material with the right shader. Fall back to the built-in Sprites/Default shader if there's a problem.
+            UnityEngine.Material material = null;
+            try
             {
-                material.SetColor("_AlphaColorKey", keyColor.Value);
+                material = new UnityEngine.Material(UnityEngine.Shader.Find(shaderName));
+            }
+            catch (Exception e)
+            {
+                importComponent.RecordError("Error creating material with shader '{0}'. {1}", shaderName, e.Message);
+            }
+
+            if (material == null)
+            {
+                importComponent.RecordWarning("Using default sprite shader for material");
+                material = new UnityEngine.Material(UnityEngine.Shader.Find("Sprites/Default"));
+            }
+
+            if (useColorKey)
+            {
+                material.SetColor("_AlphaColorKey", keyColor);
             }
 
             return material;

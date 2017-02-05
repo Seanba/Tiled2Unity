@@ -41,6 +41,7 @@
             this.clearOutputWindowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.helpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.addUnityPackageToProjectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.onlineDocumentationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showHelpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.supportTiledMapEditorToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -67,7 +68,6 @@
             this.groupBoxReviewExport = new System.Windows.Forms.GroupBox();
             this.tableLayoutPanelReviewExport = new System.Windows.Forms.TableLayoutPanel();
             this.richTextBoxLaunchTip = new System.Windows.Forms.RichTextBox();
-            this.onlineDocumentationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip.SuspendLayout();
             this.groupBoxAdvancedOptions.SuspendLayout();
             this.groupBoxExportOptions.SuspendLayout();
@@ -203,6 +203,13 @@
             this.addUnityPackageToProjectToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
             this.addUnityPackageToProjectToolStripMenuItem.Text = "Import &Unity Package to Project";
             this.addUnityPackageToProjectToolStripMenuItem.Click += new System.EventHandler(this.addUnityPackageToProjectToolStripMenuItem_Click);
+            // 
+            // onlineDocumentationToolStripMenuItem
+            // 
+            this.onlineDocumentationToolStripMenuItem.Name = "onlineDocumentationToolStripMenuItem";
+            this.onlineDocumentationToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
+            this.onlineDocumentationToolStripMenuItem.Text = "&Online Documentation";
+            this.onlineDocumentationToolStripMenuItem.Click += new System.EventHandler(this.onlineDocumentationToolStripMenuItem_Click);
             // 
             // showHelpToolStripMenuItem
             // 
@@ -508,13 +515,6 @@
             this.richTextBoxLaunchTip.TabIndex = 17;
             this.richTextBoxLaunchTip.TabStop = false;
             this.richTextBoxLaunchTip.Text = "Load rtf text here";
-            // 
-            // onlineDocumentationToolStripMenuItem
-            // 
-            this.onlineDocumentationToolStripMenuItem.Name = "onlineDocumentationToolStripMenuItem";
-            this.onlineDocumentationToolStripMenuItem.Size = new System.Drawing.Size(242, 22);
-            this.onlineDocumentationToolStripMenuItem.Text = "&Online Documentation";
-            this.onlineDocumentationToolStripMenuItem.Click += new System.EventHandler(this.onlineDocumentationToolStripMenuItem_Click);
             // 
             // Tiled2UnityForm
             // 
