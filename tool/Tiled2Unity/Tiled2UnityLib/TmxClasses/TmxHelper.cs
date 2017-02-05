@@ -147,6 +147,10 @@ namespace Tiled2Unity
             {
                 TmxObject tmxObject = hasProperties as TmxObject;
                 objectTypeName = tmxObject.Type;
+            } else if (hasProperties is TmxLayer)
+            {
+                TmxLayer tmxLayer = hasProperties as TmxLayer;
+                objectTypeName = tmxLayer.Name;
             }
 
             // If an object type has been found then copy over all the default values for properties
