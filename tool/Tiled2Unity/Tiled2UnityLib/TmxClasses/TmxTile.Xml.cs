@@ -21,7 +21,7 @@ namespace Tiled2Unity
             XElement elemObjectGroup = elem.Element("objectgroup");
             if (elemObjectGroup != null)
             {
-                this.ObjectGroup = TmxObjectGroup.FromXml(elemObjectGroup, tmxMap);
+                this.ObjectGroup = TmxObjectGroup.FromXml(elemObjectGroup, null, tmxMap);
                 FixTileColliderObjects(tmxMap);
             }
 

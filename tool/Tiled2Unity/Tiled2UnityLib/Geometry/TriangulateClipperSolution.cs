@@ -52,7 +52,7 @@ namespace Tiled2Unity.Geometry
                     new PointF(v2.X, v2.Y),
                 };
 
-                // Assre each triangle needs to be CCW
+                // Assume each triangle needs to be CCW
                 float cross = Geometry.Math.Cross(triangle[0], triangle[1], triangle[2]);
                 if (cross > 0)
                 {

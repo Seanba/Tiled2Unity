@@ -63,12 +63,10 @@ namespace Tiled2Unity
                 vertexDatabase = new GenericListDatabase<Vertex3>();
             }
 
-            float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-
             // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
             int groupCount = 0;
             StringBuilder faceBuilder = new StringBuilder();
-            foreach (var layer in this.tmxMap.Layers)
+            foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible != true)
                     continue;
@@ -109,7 +107,7 @@ namespace Tiled2Unity
                             float depth_z = 0.0f;
                             if (Tiled2Unity.Settings.DepthBufferEnabled)
                             {
-                                depth_z = CalculateFaceDepth(position.Y, mapLogicalHeight);
+                                depth_z = CalculateFaceDepth(position.Y + tmxMap.TileHeight, tmxMap.MapSizeInPixels.Height);
                             }
 
                             FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
@@ -255,38 +253,39 @@ namespace Tiled2Unity
             points[2] = PointF.Add(imageLocation, tileSize);
             points[3] = PointF.Add(imageLocation, new Size(0, tileSize.Height));
 
-            // "Tuck in" the points a tiny bit to help avoid seams
-            // This can be turned off by setting Texel Bias to zero
-            // Note that selecting a texel bias that is too small or a texture that is too big may affect pixel-perfect rendering (pixel snapping in shader will help)
-            if (Tiled2Unity.Settings.TexelBias > 0)
-            {
-                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
-                float bias_w = bias * tileSize.Width;
-                float bias_h = bias * tileSize.Height;
-
-                points[0].X += bias_w;
-                points[0].Y += bias_h;
-
-                points[1].X -= bias_w;
-                points[1].Y += bias_h;
-
-                points[2].X -= bias_w;
-                points[2].Y -= bias_h;
-
-                points[3].X += bias_w;
-                points[3].Y -= bias_h;
-            }
-
+            // Transform the points with our flip flags
             PointF center = new PointF(tileSize.Width * 0.5f, tileSize.Height * 0.5f);
             center.X += imageLocation.X;
             center.Y += imageLocation.Y;
             TmxMath.TransformPoints_DiagFirst(points, center, flipDiagonal, flipHorizontal, flipVertical);
 
+            // "Tuck in" the points a tiny bit to help avoid seams
+            // This can be turned off by setting Texel Bias to zero
+            // Note that selecting a texel bias that is too small or a texture that is too big may affect pixel-perfect rendering (pixel snapping in shader will help)
+            float bias = 0.0f;
+            PointF[] tucks = new PointF[4];
+            if (Tiled2Unity.Settings.TexelBias > 0)
+            {
+                bias = 1.0f / Tiled2Unity.Settings.TexelBias;
+                tucks[0].X += 1.0f;
+                tucks[0].Y += 1.0f;
+
+                tucks[1].X -= 1.0f;
+                tucks[1].Y += 1.0f;
+
+                tucks[2].X -= 1.0f;
+                tucks[2].Y -= 1.0f;
+
+                tucks[3].X += 1.0f;
+                tucks[3].Y -= 1.0f;
+            }
+            TmxMath.TransformPoints_DiagFirst(tucks, PointF.Empty, flipDiagonal, flipHorizontal, flipVertical);
+
             PointF[] coordinates = new PointF[4];
-            coordinates[3] = PointToTextureCoordinate(points[0], imageSize);
-            coordinates[2] = PointToTextureCoordinate(points[1], imageSize);
-            coordinates[1] = PointToTextureCoordinate(points[2], imageSize);
-            coordinates[0] = PointToTextureCoordinate(points[3], imageSize);
+            coordinates[3] = TmxMath.AddPoints(PointToTextureCoordinate(points[0], imageSize), TmxMath.ScalePoint(tucks[0].X, -tucks[0].Y, bias));
+            coordinates[2] = TmxMath.AddPoints(PointToTextureCoordinate(points[1], imageSize), TmxMath.ScalePoint(tucks[1].X, -tucks[1].Y, bias));
+            coordinates[1] = TmxMath.AddPoints(PointToTextureCoordinate(points[2], imageSize), TmxMath.ScalePoint(tucks[2].X, -tucks[2].Y, bias));
+            coordinates[0] = TmxMath.AddPoints(PointToTextureCoordinate(points[3], imageSize), TmxMath.ScalePoint(tucks[3].X, -tucks[3].Y, bias));
 
             return coordinates;
         }

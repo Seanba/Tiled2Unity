@@ -13,7 +13,7 @@ namespace Tiled2Unity
         {
             // Each mesh in each viewable layer needs to have its material assigned to it
             List<XElement> elements = new List<XElement>();
-            foreach (var layer in this.tmxMap.Layers)
+            foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible == false)
                     continue;

@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Tiled2Unity
 {
-    public partial class TmxLayer : TmxLayerBase
+    public partial class TmxLayer : TmxLayerNode
     {
         public int Width { get; private set; }
         public int Height { get; private set; }
@@ -15,7 +15,7 @@ namespace Tiled2Unity
         public List<TmxMesh> Meshes { get; private set; }
         public List<TmxLayer> CollisionLayers { get; private set; }
 
-        public TmxLayer(TmxMap map) : base(map)
+        public TmxLayer(TmxLayerNode parent, TmxMap map) : base(parent, map)
         {
             this.Visible = true;
             this.Opacity = 1.0f;
@@ -57,6 +57,11 @@ namespace Tiled2Unity
 
             // Use the program setting last
             return Tiled2Unity.Settings.PreferConvexPolygons;
+        }
+
+        public override void Visit(ITmxVisitor visitor)
+        {
+            visitor.VisitTileLayer(this);
         }
 
     }

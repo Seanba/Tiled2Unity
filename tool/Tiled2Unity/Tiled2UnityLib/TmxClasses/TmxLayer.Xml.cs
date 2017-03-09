@@ -13,30 +13,10 @@ namespace Tiled2Unity
     // Partial class methods for building layer data from xml strings or files
     partial class TmxLayer
     {
-        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap)
+        public static TmxLayer FromXml(XElement elem, TmxLayerNode parent, TmxMap tmxMap)
         {
-            TmxLayer tmxLayer = new TmxLayer(tmxMap);
-
-            // Order within Xml file is import for layer types
-            tmxLayer.XmlElementIndex = elem.NodesBeforeSelf().Count();
-
-            // Have to decorate layer names in order to force them into being unique
-            // Also, can't have whitespace in the name because Unity will add underscores
-            tmxLayer.Name = TmxHelper.GetAttributeAsString(elem, "name");
-
-            tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
-            tmxLayer.Opacity = TmxHelper.GetAttributeAsFloat(elem, "opacity", 1);
-
-            PointF offset = new PointF(0, 0);
-            offset.X = TmxHelper.GetAttributeAsFloat(elem, "offsetx", 0);
-            offset.Y = TmxHelper.GetAttributeAsFloat(elem, "offsety", 0);
-            tmxLayer.Offset = offset;
-
-            // Set our properties
-            tmxLayer.Properties = TmxProperties.FromXml(elem);
-
-            // Set the "ignore" setting on this layer
-            tmxLayer.Ignore = tmxLayer.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
+            TmxLayer tmxLayer = new TmxLayer(parent, tmxMap);
+            tmxLayer.FromXmlInternal(elem);
 
             // We can build a layer from a "tile layer" (default) or an "image layer"
             if (elem.Name == "layer")
@@ -100,8 +80,7 @@ namespace Tiled2Unity
             // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
             tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
 
-            // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
-            tmxLayer.UnityLayerOverrideName = tmxLayer.Properties.GetPropertyValueAsString("unity:layer", "");
+           // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
             tmxLayer.BuildCollisionLayers();
 
             return tmxLayer;
@@ -245,22 +224,22 @@ namespace Tiled2Unity
             // Are we using a unity-layer override? If so we have to put everything from this layer into it.
             if (String.IsNullOrEmpty(this.UnityLayerOverrideName))
             {
-                BuildBuildCollisionLayers_ByObjectType();
+                BuildCollisionLayers_ByObjectType();
             }
             else
             {
-                BuildBuildCollisionLayers_Override();
+                BuildCollisionLayers_Override();
             }
         }
 
-        private void BuildBuildCollisionLayers_Override()
+        private void BuildCollisionLayers_Override()
         {
             // Just make the layer the collision layer
             this.CollisionLayers.Clear();
             this.CollisionLayers.Add(this);
         }
 
-        private void BuildBuildCollisionLayers_ByObjectType()
+        private void BuildCollisionLayers_ByObjectType()
         {
             // Find all tiles with collisions on them and put them into a "Collision Layer" of the same type
             for (int t = 0; t < this.TileIds.Length; ++t)
@@ -284,7 +263,7 @@ namespace Tiled2Unity
                     if (collisionLayer == null)
                     {
                         // Create a new Collision Layer
-                        collisionLayer = new TmxLayer(this.TmxMap);
+                        collisionLayer = new TmxLayer(null, this.TmxMap);
                         this.CollisionLayers.Add(collisionLayer);
 
                         // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)

@@ -8,7 +8,7 @@ using System.Text;
 
 namespace Tiled2Unity
 {
-    public partial class TmxMap : TmxHasProperties
+    public partial class TmxMap : TmxHasProperties, ITmxVisit
     {
         public enum MapOrientation
         {
@@ -46,13 +46,15 @@ namespace Tiled2Unity
         public Color BackgroundColor { get; private set; }
         public TmxProperties Properties { get; private set; }
 
+        public Size MapSizeInPixels { get; private set; }
+
         // Is the prefab created by this map going to be loaded as a resource?
         public bool IsResource { get; private set; }
 
         public IDictionary<uint, TmxTile> Tiles = new Dictionary<uint, TmxTile>();
 
-        public IList<TmxLayer> Layers = new List<TmxLayer>();
-        public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
+        // Our list of layer trees
+        public List<TmxLayerNode> LayerNodes { get; private set; }
 
         // The map may load object type data from another file
         public TmxObjectTypes ObjectTypes = new TmxObjectTypes();
@@ -63,6 +65,7 @@ namespace Tiled2Unity
         {
             this.IsLoaded = false;
             this.Properties = new TmxProperties();
+            this.LayerNodes = new List<TmxLayerNode>();
         }
 
         public string GetExportedFilename()
@@ -72,14 +75,12 @@ namespace Tiled2Unity
 
         public override string ToString()
         {
-            return String.Format("{{ \"{6}\" size = {0}x{1}, tile size = {2}x{3}, # tiles = {4}, # layers = {5}, # obj groups = {6} }}",
+            return String.Format("{{ \"{5}\" size = {0}x{1}, tile size = {2}x{3}, # tiles = {4} }}",
                 this.Width,
                 this.Height,
                 this.TileWidth,
                 this.TileHeight,
                 this.Tiles.Count(),
-                this.Layers.Count(),
-                this.ObjectGroups.Count(),
                 this.Name);
         }
 
@@ -114,7 +115,7 @@ namespace Tiled2Unity
             return ++this.nextUniqueId;
         }
 
-        public Size MapSizeInPixels()
+        private Size CalculateMapSizeInPixels()
         {
             // Takes the orientation of the map into account when calculating the size
             if (this.Orientation == MapOrientation.Isometric)
@@ -156,7 +157,7 @@ namespace Tiled2Unity
         // Get a unique list of all the tiles that are used as tile objects
         public List<TmxMesh> GetUniqueListOfVisibleObjectTileMeshes()
         {
-            var tiles = from objectGroup in this.ObjectGroups
+            var tiles = from objectGroup in this.EnumerateObjectLayers()
                         where objectGroup.Visible == true
                         from tmxObject in objectGroup.Objects
                         where tmxObject.Visible == true
@@ -198,5 +199,62 @@ namespace Tiled2Unity
             this.ObjectTypes = new TmxObjectTypes();
         }
 
+        public IEnumerable<TmxLayer> EnumerateTileLayers()
+        {
+            foreach (var recursive in EnumerateLayersByType<TmxLayer>())
+            {
+                yield return recursive;
+            }
+        }
+
+        public IEnumerable<TmxObjectGroup> EnumerateObjectLayers()
+        {
+            foreach (var recursive in EnumerateLayersByType<TmxObjectGroup>())
+            {
+                yield return recursive;
+            }
+        }
+
+        private IEnumerable<T> EnumerateLayersByType<T>() where T : TmxLayerNode
+        {
+            // Map will have a collection of layer nodes which themselves may also have child layer nodes
+            foreach (var node in this.LayerNodes)
+            {
+                foreach (var recursive in RecursiveEnumerate<T>(node))
+                {
+                    yield return recursive;
+                }
+            }
+        }
+
+        private IEnumerable<T> RecursiveEnumerate<T>(TmxLayerNode layerNode) where T : TmxLayerNode
+        {
+            // Is this node the type we're looking for?
+            if (layerNode.GetType() == typeof(T))
+            {
+                yield return (T)layerNode;
+            }
+
+            // Go through all children nodes
+            foreach (var child in layerNode.LayerNodes)
+            {
+                foreach (var recursive in RecursiveEnumerate<T>(child))
+                {
+                    yield return recursive;
+                }
+            }
+        }
+
+        public void Visit(ITmxVisitor visitor)
+        {
+            // Visit the map
+            visitor.VisitMap(this);
+
+            // Visit all the children nodes in order
+            foreach (var node in this.LayerNodes)
+            {
+                node.Visit(visitor);
+            }
+        }
     }
 }

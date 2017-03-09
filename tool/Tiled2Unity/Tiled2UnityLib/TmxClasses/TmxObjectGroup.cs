@@ -6,12 +6,12 @@ using System.Text;
 
 namespace Tiled2Unity
 {
-    public partial class TmxObjectGroup : TmxLayerBase
+    public partial class TmxObjectGroup : TmxLayerNode
     {
         public List<TmxObject> Objects { get; private set; }
         public Color Color { get; private set; }
 
-        public TmxObjectGroup(TmxMap tmxMap) : base(tmxMap)
+        public TmxObjectGroup(TmxLayerNode parent, TmxMap tmxMap) : base(parent, tmxMap)
         {
             this.Objects = new List<TmxObject>();
         }
@@ -36,6 +36,18 @@ namespace Tiled2Unity
         public override string ToString()
         {
             return String.Format("{{ ObjectGroup name={0}, numObjects={1} }}", this.Name, this.Objects.Count());
+        }
+
+        public override void Visit(ITmxVisitor visitor)
+        {
+            // Visit ourselves
+            visitor.VisitObjectLayer(this);
+
+            // Visit all our objects
+            foreach (var obj in this.Objects)
+            {
+                visitor.VisitObject(obj);
+            }
         }
 
     }

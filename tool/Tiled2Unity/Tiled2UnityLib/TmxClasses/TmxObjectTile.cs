@@ -12,12 +12,17 @@ namespace Tiled2Unity
         public bool FlippedHorizontal { get; private set; }
         public bool FlippedVertical { get; private set; }
 
-        public string SortingLayerName { get; private set; }
-        public int? SortingOrder { get; private set; }
+        public int DrawOrderIndex { get; set; }
+        public int DepthIndex { get; set; }
+
+        private string ExplicitSortingLayerName { get; set; }
+        private int? ExplicitSortingOrder { get; set; }
 
         public TmxObjectTile()
         {
-            this.SortingLayerName = null;
+            this.DrawOrderIndex = -1;
+            this.DepthIndex = -1;
+            this.ExplicitSortingLayerName = "";
         }
 
         public override System.Drawing.RectangleF GetWorldBounds()
@@ -45,6 +50,27 @@ namespace Tiled2Unity
             return new SizeF(scaleX, scaleY);
         }
 
+        public string GetSortingLayerName()
+        {
+            // Do we have our own sorting layer name?
+            if (!String.IsNullOrEmpty(this.ExplicitSortingLayerName))
+                return this.ExplicitSortingLayerName;
+
+            return this.ParentObjectGroup.GetSortingLayerName();
+        }
+
+        public int GetSortingOrder()
+        {
+            // Do we have our own explicit ordering?
+            if (this.ExplicitSortingOrder.HasValue)
+            {
+                return this.ExplicitSortingOrder.Value;
+            }
+
+            // Use our draw order index
+            return this.DrawOrderIndex;
+        }
+
         protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
         {
             // Get the tile
@@ -63,13 +89,10 @@ namespace Tiled2Unity
             }
 
             // Check properties for layer placement
-            if (this.Properties.PropertyMap.ContainsKey("unity:sortingLayerName"))
-            {
-                this.SortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName");
-            }
+            this.ExplicitSortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
             if (this.Properties.PropertyMap.ContainsKey("unity:sortingOrder"))
             {
-                this.SortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
+                this.ExplicitSortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
             }
         }
 

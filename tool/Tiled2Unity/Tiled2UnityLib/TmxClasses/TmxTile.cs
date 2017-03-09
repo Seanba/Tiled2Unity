@@ -30,7 +30,7 @@ namespace Tiled2Unity
             this.LocalId = localId;
             this.TmxImage = tmxImage;
             this.Properties = new TmxProperties();
-            this.ObjectGroup = new TmxObjectGroup(this.TmxMap);
+            this.ObjectGroup = new TmxObjectGroup(null, this.TmxMap);
             this.Animation = TmxAnimation.FromTileId(globalId);
             this.Meshes = new List<TmxMesh>();
         }

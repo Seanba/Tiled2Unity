@@ -5,8 +5,8 @@
 /*******************************************************************************
 *                                                                              *
 * Author    :  Angus Johnson                                                   *
-* Version   :  6.4.0                                                           *
-* Date      :  2 July 2015                                                     *
+* Version   :  6.4.1                                                           *
+* Date      :  5 December 2016                                                 *
 * Website   :  http://www.angusj.com                                           *
 * Copyright :  Angus Johnson 2010-2015                                         *
 *                                                                              *
@@ -3908,7 +3908,7 @@ namespace Tiled2Unity.ClipperLib
         foreach (OutRec outRec in m_PolyOuts)
         {
           OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-          if (outRec.Pts != null && outRec.FirstLeft == OldOutRec) 
+          if (outRec.Pts != null && firstLeft == OldOutRec) 
             outRec.FirstLeft = NewOutRec;
         }
       }

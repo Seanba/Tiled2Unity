@@ -57,9 +57,9 @@ namespace Tiled2Unity.Viewer
                 g.TranslateTransform(-bounds.X, -bounds.Y);
                 DrawBackground(g, tmxMap);
                 DrawGrid(g, tmxMap, scale);
-                DrawTiles(g, tmxMap);
-                DrawColliders(g, tmxMap, scale);
-                DrawObjectColliders(g, tmxMap);
+
+                DrawAllTilesInLayerNodes(g, tmxMap, tmxMap.LayerNodes);
+                DrawAllCollidersInLayerNodes(g, tmxMap, tmxMap.LayerNodes, scale);
             }
 
             report.Report();
@@ -68,16 +68,21 @@ namespace Tiled2Unity.Viewer
 
         private static RectangleF CalculateBoundary(TmxMap tmxMap)
         {
-            RectangleF rcMap = new RectangleF(Point.Empty, tmxMap.MapSizeInPixels());
+            RectangleF rcMap = new RectangleF(Point.Empty, tmxMap.MapSizeInPixels);
+
+            // Any tile layers in the map can be offset
+            var tileLayerBounds = from layer in tmxMap.EnumerateTileLayers()
+                                  where layer.Visible == true
+                                  select new RectangleF(layer.GetCombinedOffset(), rcMap.Size);
 
             // Take boundaries from object groups
-            var objBounds = from g in tmxMap.ObjectGroups
+            var objBounds = from g in tmxMap.EnumerateObjectLayers()
                             from o in g.Objects
                             where o.Visible == true
-                            select o.GetWorldBounds();
+                            select o.GetOffsetWorldBounds();
 
             // Take boundaries from objects embedded in tiles
-            var tileBounds = from layer in tmxMap.Layers
+            var tileBounds = from layer in tmxMap.EnumerateTileLayers()
                              where layer.Visible == true
                              from y in Enumerable.Range(0, layer.Height)
                              from x in Enumerable.Range(0, layer.Width)
@@ -85,11 +90,11 @@ namespace Tiled2Unity.Viewer
                              where tileId != 0
                              let tile = tmxMap.Tiles[tileId]
                              from o in tile.ObjectGroup.Objects
-                             let bound = o.GetWorldBounds()
+                             let bound = o.GetOffsetWorldBounds()
                              let point = TmxMath.TileCornerInScreenCoordinates(tmxMap, x, y)
                              select new RectangleF(bound.X + point.X, bound.Y + point.Y, bound.Width, bound.Height);
 
-            var allBounds = objBounds.Concat(tileBounds);
+            var allBounds = tileLayerBounds.Concat(objBounds).Concat(tileBounds);
             var union = allBounds.Aggregate(rcMap, RectangleF.Union);
 
             // Inflate a tile size to make room for the grid
@@ -104,7 +109,7 @@ namespace Tiled2Unity.Viewer
         {
             // Draw the background for the map
             // A full white background is preferred because of the colliders we draw on the top of the layers
-            Size size = tmxMap.MapSizeInPixels();
+            Size size = tmxMap.MapSizeInPixels;
             Rectangle rect = new Rectangle(Point.Empty, size);
             g.FillRectangle(Brushes.White, rect);
         }
@@ -346,35 +351,31 @@ namespace Tiled2Unity.Viewer
             }
         }
 
-        private static void DrawTiles(Graphics g, TmxMap tmxMap)
+        private static void DrawAllTilesInLayerNodes(Graphics g, TmxMap tmxMap, List<TmxLayerNode> layerNodes)
         {
-            // Draw all layer tiles and tile objects in object groups in order
-            var layers = new List<TmxLayerBase>();
-            layers.AddRange(tmxMap.Layers);
-            layers.AddRange(tmxMap.ObjectGroups);
-
-            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
-            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
-
-            foreach (var layer in layers)
+            foreach (var node in layerNodes)
             {
-                if (layer.Visible == false)
+                if (node.Visible == false)
                     continue;
 
-                if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
+                if (node.Ignore == TmxLayer.IgnoreSettings.Visual)
                     continue;
 
                 // Translate by the offset
                 GraphicsState state = g.Save();
-                g.TranslateTransform(layer.Offset.X, layer.Offset.Y);
+                g.TranslateTransform(node.Offset.X, node.Offset.Y);
 
-                if (layer.GetType() == typeof(TmxLayer))
+                if (node.GetType() == typeof(TmxLayer))
                 {
-                    DrawTilesInTileLayer(g, tmxMap, layer as TmxLayer);
+                    DrawTilesInTileLayer(g, tmxMap, node as TmxLayer);
                 }
-                else if (layer.GetType() == typeof(TmxObjectGroup))
+                else if (node.GetType() == typeof(TmxObjectGroup))
                 {
-                    DrawTilesInObjectGroup(g, tmxMap, layer as TmxObjectGroup);
+                    DrawTilesInObjectGroup(g, tmxMap, node as TmxObjectGroup);
+                }
+                else if (node.GetType() == typeof(TmxGroupLayer))
+                {
+                    DrawAllTilesInLayerNodes(g, tmxMap, node.LayerNodes);
                 }
 
                 g.Restore(state);
@@ -510,27 +511,54 @@ namespace Tiled2Unity.Viewer
             }
         }
 
-        private static void DrawColliders(Graphics g, TmxMap tmxMap, float scale)
+        private static void DrawAllCollidersInLayerNodes(Graphics g, TmxMap tmxMap, List<TmxLayerNode> layerNodes, float scale)
         {
-            for (int l = 0; l < tmxMap.Layers.Count; ++l)
+            foreach (var node in layerNodes)
             {
-                TmxLayer layer = tmxMap.Layers[l];
+                if (node.Visible == false)
+                    continue;
 
-                if (layer.Visible == true && layer.Ignore != TmxLayer.IgnoreSettings.Collision)
+                if (node.Ignore == TmxLayerNode.IgnoreSettings.True)
+                    continue;
+
+                // Set the offset
+                GraphicsState state = g.Save();
+                g.TranslateTransform(node.Offset.X, node.Offset.Y);
                 {
-                    foreach (TmxLayer collisionLayer in layer.CollisionLayers)
+                    if (node is TmxLayer)
                     {
-                        TmxObjectType type = tmxMap.ObjectTypes.GetValueOrDefault(collisionLayer.Name);
-
-                        Color lineColor = type.Color;
-                        Color polyColor = Color.FromArgb(128, lineColor);
-                        DrawLayerColliders(g, collisionLayer, polyColor, lineColor, scale);
+                        DrawTileLayerColliders(g, tmxMap, node as TmxLayer, scale);
+                    }
+                    else if (node is TmxObjectGroup)
+                    {
+                        DrawObjectLayerColliders(g, tmxMap, node as TmxObjectGroup);
+                    }
+                    else if (node is TmxLayerNode)
+                    {
+                        DrawAllCollidersInLayerNodes(g, tmxMap, node.LayerNodes, scale);
                     }
                 }
+                g.Restore(state);
             }
         }
 
-        private static void DrawLayerColliders(Graphics g, TmxLayer tmxLayer, Color polyColor, Color lineColor, float scale)
+        private static void DrawTileLayerColliders(Graphics g, TmxMap tmxMap, TmxLayer tileLayer, float scale)
+        {
+            // Bail if this layer is ignoring collision
+            if (tileLayer.Ignore == TmxLayerNode.IgnoreSettings.Collision)
+                return;
+
+            foreach (TmxLayer collisionLayer in tileLayer.CollisionLayers)
+            {
+                TmxObjectType type = tmxMap.ObjectTypes.GetValueOrDefault(collisionLayer.Name);
+
+                Color lineColor = type.Color;
+                Color polyColor = Color.FromArgb(128, lineColor);
+                DrawCollisionLayer(g, collisionLayer, polyColor, lineColor, scale);
+            }
+        }
+
+        private static void DrawCollisionLayer(Graphics g, TmxLayer tmxLayer, Color polyColor, Color lineColor, float scale)
         {
             LayerClipper.TransformPointFunc xfFunc = (x, y) => new ClipperLib.IntPoint(x, y);
             LayerClipper.ProgressFunc progFunc = (prog) => { }; // do nothing
@@ -576,48 +604,36 @@ namespace Tiled2Unity.Viewer
             }
         }
 
-        private static void DrawObjectColliders(Graphics g, TmxMap tmxMap)
+        private static void DrawObjectLayerColliders(Graphics g, TmxMap tmxMap, TmxObjectGroup objectLayer)
         {
-            var collidersObjectGroup = from item in tmxMap.ObjectGroups
-                                       where item.Visible == true
-                                       select item;
-
-            foreach (var objGroup in collidersObjectGroup)
+            foreach (var obj in objectLayer.Objects)
             {
-                GraphicsState state = g.Save();
-                g.TranslateTransform(objGroup.Offset.X, objGroup.Offset.Y);
+                if (!obj.Visible)
+                    continue;
 
-                foreach (var obj in objGroup.Objects)
+                // Either type color or object color or unity:layer color
+                Color objColor = objectLayer.Color;
+                string collisionType = objectLayer.UnityLayerOverrideName;
+
+                if (String.IsNullOrEmpty(collisionType))
                 {
-                    if (obj.Visible)
-                    {
-                        // Either type color or object color or unity:layer color
-                        Color objColor = objGroup.Color;
-                        string collisionType = objGroup.UnityLayerOverrideName;
-
-                        if (String.IsNullOrEmpty(collisionType))
-                        {
-                            collisionType = obj.Type;
-                        }
-
-                        if (tmxMap.ObjectTypes.TmxObjectTypeMapping.ContainsKey(collisionType))
-                        {
-                            objColor = tmxMap.ObjectTypes.TmxObjectTypeMapping[collisionType].Color;
-                        }
-
-                        if (objGroup.Ignore == TmxLayerBase.IgnoreSettings.Collision)
-                        {
-                            // We're ignoring collisions but the game object is still a part of the map.
-                            DrawObjectMarker(g, tmxMap, obj, objColor);
-                        }
-                        else
-                        {
-                            DrawObjectCollider(g, tmxMap, obj, objColor);
-                        }
-                    }
+                    collisionType = obj.Type;
                 }
 
-                g.Restore(state);
+                if (tmxMap.ObjectTypes.TmxObjectTypeMapping.ContainsKey(collisionType))
+                {
+                    objColor = tmxMap.ObjectTypes.TmxObjectTypeMapping[collisionType].Color;
+                }
+
+                if (objectLayer.Ignore == TmxLayerNode.IgnoreSettings.Collision)
+                {
+                    // We're ignoring collisions but the game object is still a part of the map.
+                    DrawObjectMarker(g, tmxMap, obj, objColor);
+                }
+                else
+                {
+                    DrawObjectCollider(g, tmxMap, obj, objColor);
+                }
             }
         }
 

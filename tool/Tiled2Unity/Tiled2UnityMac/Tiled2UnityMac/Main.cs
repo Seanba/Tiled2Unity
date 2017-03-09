@@ -27,7 +27,7 @@ namespace Tiled2UnityMac
 				string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Library");
 				logPath = Path.Combine(logPath, "Logs/Tiled2UnityMac/auto-export.log");
 
-				// Create the directory if it doesn't exis
+				// Create the directory if it doesn't exist
 				var pathInfo = new FileInfo(logPath);
 				pathInfo.Directory.Create();
 

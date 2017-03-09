@@ -52,6 +52,7 @@ namespace Tiled2Unity
             }
 
             // Data found on every object type
+            tmxObject.Id = TmxHelper.GetAttributeAsInt(xml, "id", 0);
             tmxObject.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
             tmxObject.Type = TmxHelper.GetAttributeAsString(xml, "type", "");
             tmxObject.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;

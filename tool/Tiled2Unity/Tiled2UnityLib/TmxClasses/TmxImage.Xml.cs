@@ -18,8 +18,8 @@ namespace Tiled2Unity
 
             // Get default image size in case we are not opening the file
             {
-                int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-                int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+                int width = TmxHelper.GetAttributeAsInt(elemImage, "width", 0);
+                int height = TmxHelper.GetAttributeAsInt(elemImage, "height", 0);
                 tmxImage.Size = new System.Drawing.Size(width, height);
             }
 

@@ -85,11 +85,16 @@ namespace Tiled2Unity
             this.IsResource = this.IsResource || !String.IsNullOrEmpty(this.Properties.GetPropertyValueAsString("unity:resourcePath", null));
 
             ParseAllTilesets(doc);
-            ParseAllLayers(doc);
-            ParseAllObjectGroups(doc);
 
-            // Once everything is loaded, take a moment to do additional plumbing
-            ParseCompleted();
+            // Get all our child layer nodes
+            this.LayerNodes = TmxLayerNode.ListFromXml(map, null, this);
+
+            // Calcuate the size of the map. Isometric and hex maps make this more complicated than a simple width and height thing.
+            this.MapSizeInPixels = CalculateMapSizeInPixels();
+
+            // Visit each node in the map to assign display order
+            TmxDisplayOrderVisitor visitor = new TmxDisplayOrderVisitor();
+            this.Visit(visitor);
         }
 
         private void ParseAllTilesets(XDocument doc)
@@ -264,71 +269,5 @@ namespace Tiled2Unity
             tile.SetLocationOnSource(0, 0);
             this.Tiles[tile.GlobalId] = tile;
         }
-
-        private void ParseAllLayers(XDocument doc)
-        {
-            Logger.WriteLine("Parsing layer elements ...");
-
-            // Parse "layer"s and "imagelayer"s
-            var layers = (from item in doc.Descendants()
-                          where (item.Name == "layer" || item.Name == "imagelayer")
-                          select item).ToList();
-
-            foreach (var lay in layers)
-            {
-                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this);
-
-                // Layers may be ignored
-                if (tmxLayer.Ignore == TmxLayer.IgnoreSettings.True)
-                {
-                    // We don't care about this layer
-                    Logger.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.Name);
-                    continue;
-                }
-
-                this.Layers.Add(tmxLayer);
-            }
-        }
-
-        private void ParseAllObjectGroups(XDocument doc)
-        {
-            Logger.WriteLine("Parsing objectgroup elements ...");
-            var groups = from item in doc.Root.Elements("objectgroup")
-                         select item;
-
-            foreach (var g in groups)
-            {
-                TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
-
-                // Object gropus may be ignored
-                if (tmxObjectGroup.Ignore == TmxLayer.IgnoreSettings.True)
-                {
-                    // We don't care about this object group.
-                    Logger.WriteLine("Ignoring object group layer due to unity:ignore = True property: {0}", tmxObjectGroup.Name);
-                    continue;
-                }
-
-                this.ObjectGroups.Add(tmxObjectGroup);
-            }
-        }
-
-        private void ParseCompleted()
-        {
-            // Every "layer type" instance needs its sort ordering figured out
-            var layers = new List<TmxLayerBase>();
-            layers.AddRange(this.Layers);
-            layers.AddRange(this.ObjectGroups);
-
-            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
-            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
-
-            for (int i = 0; i < layers.Count(); ++i)
-            {
-                TmxLayerBase layer = layers[i];
-                layer.SortingLayerName = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
-                layer.SortingOrder = layer.Properties.GetPropertyValueAsInt("unity:sortingOrder", i);
-            }
-        }
-
     }
 }

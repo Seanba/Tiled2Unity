@@ -12,13 +12,15 @@ namespace Tiled2Unity.Geometry
     // This allows us to merge polygons along edges
     public class CompositionPolygon
     {
+        public int InitialId { get; private set; }
         public List<PointF> Points { get; private set; }
         public List<PolygonEdge> Edges { get; private set; }
 
         // A polygon starts off as a triangle with one edge
         // Other points and edges are added to the polygon during merge
-        public CompositionPolygon(IEnumerable<PointF> points)
+        public CompositionPolygon(IEnumerable<PointF> points, int initialId)
         {
+            this.InitialId = initialId;
             this.Points = new List<PointF>();
             this.Edges = new List<PolygonEdge>();
 
@@ -75,6 +77,15 @@ namespace Tiled2Unity.Geometry
             }
 
             this.Points.InsertRange(q, pointsToInsert);
+
+            // Absorb the edges from our minor polygon too so that future absoptions carry through
+            foreach (var minorEdge in minor.Edges)
+            {
+                if (!this.Edges.Contains(minorEdge))
+                {
+                    this.Edges.Add(minorEdge);
+                }
+            }
         }
 
         public void ReplaceEdgesWithPolygon(CompositionPolygon replacement, PolygonEdge ignoreEdge)

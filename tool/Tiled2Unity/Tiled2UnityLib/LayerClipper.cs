@@ -1,10 +1,10 @@
-﻿using System;
+﻿//#define T2U_TRIANGLES
+
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Text;
-
-//#define T2U_TRIANGLES
 
 // Given a TmxMap and TmxLayer, crank out a Clipper polytree solution
 namespace Tiled2Unity

@@ -9,6 +9,7 @@ namespace Tiled2Unity
 {
     public abstract partial class TmxObject : TmxHasProperties
     {
+        public int Id { get; private set; }
         public string Name { get; private set; }
         public string Type { get; private set; }
         public bool Visible { get; private set; }
@@ -48,6 +49,7 @@ namespace Tiled2Unity
 
         static protected void CopyBaseProperties(TmxObject from, TmxObject to)
         {
+            to.Id = from.Id;
             to.Name = from.Name;
             to.Type = from.Type;
             to.Visible = from.Visible;
@@ -56,6 +58,15 @@ namespace Tiled2Unity
             to.Rotation = from.Rotation;
             to.Properties = from.Properties;
             to.ParentObjectGroup = from.ParentObjectGroup;
+        }
+
+        // Get the world boundary taking into account that the parent object group (and/or one of its ancestors) is offset
+        public RectangleF GetOffsetWorldBounds()
+        {
+            RectangleF bounds = GetWorldBounds();
+            PointF combinedOffset = this.ParentObjectGroup.GetCombinedOffset();
+            bounds.Offset(combinedOffset);
+            return bounds;
         }
 
         public abstract RectangleF GetWorldBounds();

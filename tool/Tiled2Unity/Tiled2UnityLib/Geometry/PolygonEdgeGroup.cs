@@ -19,10 +19,11 @@ namespace Tiled2Unity.Geometry
         {
             this.PolygonEdges = new List<PolygonEdge>();
 
+            int polygonId = 0;
             foreach (var polygon in polygons)
             {
                 // Our polygon will be added to each edge
-                CompositionPolygon compPolygon = new CompositionPolygon(polygon);
+                CompositionPolygon compPolygon = new CompositionPolygon(polygon, polygonId++);
 
                 // Process all edges of the polygon
                 for (int p = polygon.Length - 1, q = 0; q < polygon.Length; p = q++)

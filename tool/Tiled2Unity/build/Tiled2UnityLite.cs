@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.9.5
+// version 1.0.10.1
 
 //css_reference System;
 //css_reference System.Core;
@@ -59,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.9.5";
+            return "1.0.10.1";
         }
 
         public static string GetPlatform()
@@ -215,13 +215,13 @@ namespace Tiled2Unity
 // ----------------------------------------------------------------------
 // LayerClipper.cs
 
+//#define T2U_TRIANGLES
+
 // using System;
 // using System.Collections.Generic;
 // using System.Drawing;
 // using System.Linq;
 // using System.Text;
-
-//#define T2U_TRIANGLES
 
 // Given a TmxMap and TmxLayer, crank out a Clipper polytree solution
 namespace Tiled2Unity
@@ -1146,7 +1146,7 @@ namespace Tiled2Unity
         {
             // Each mesh in each viewable layer needs to have its material assigned to it
             List<XElement> elements = new List<XElement>();
-            foreach (var layer in this.tmxMap.Layers)
+            foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible == false)
                     continue;
@@ -1524,11 +1524,18 @@ namespace Tiled2Unity
             return (z == -0.0f) ? 0 : z;
         }
 
-        public static float CalculateLayerDepth(int layerOrder, float tileHeight, float mapHeight)
+        public static float CalculateLayerDepth(TmxLayerNode layer)
         {
-            // Note: I don't think a layer depth of this complexity is helpful and seems to be leading to z-fighting anyhow
-            //float z = layerOrder * tileHeight / mapHeight * -1.0f;
-            float z = layerOrder * -1.0f;
+            if (!Tiled2Unity.Settings.DepthBufferEnabled)
+                return 0.0f;
+
+            float depthOfOneTile = layer.TmxMap.TileHeight / (float)layer.TmxMap.MapSizeInPixels.Height;
+            float z = layer.DepthBufferIndex * depthOfOneTile * -1.0f;
+
+            // How much is our layer offset as a function of tiles?
+            float offsetRatio = layer.Offset.Y / layer.TmxMap.TileHeight;
+            z -= offsetRatio * depthOfOneTile;
+
             return (z == -0.0f) ? 0 : z;
         }
 
@@ -1607,7 +1614,7 @@ namespace Tiled2Unity
 
             {
                 // Add all image files as compressed base64 strings
-                var layerImages = from layer in this.tmxMap.Layers
+                var layerImages = from layer in this.tmxMap.EnumerateTileLayers()
                                   where layer.Visible == true
                                   from rawTileId in layer.TileIds
                                   where rawTileId != 0
@@ -1616,7 +1623,7 @@ namespace Tiled2Unity
                                   select tile.TmxImage;
 
                 // Find the images from the frames as well
-                var frameImages = from layer in this.tmxMap.Layers
+                var frameImages = from layer in this.tmxMap.EnumerateTileLayers()
                                   where layer.Visible == true
                                   from rawTileId in layer.TileIds
                                   where rawTileId != 0
@@ -1629,7 +1636,7 @@ namespace Tiled2Unity
 
 
                 // Tile Objects may have images not yet references by a layer
-                var objectImages = from objectGroup in this.tmxMap.ObjectGroups
+                var objectImages = from objectGroup in this.tmxMap.EnumerateObjectLayers()
                                    where objectGroup.Visible == true
                                    from tmxObject in objectGroup.Objects
                                    where tmxObject.Visible == true
@@ -1814,12 +1821,10 @@ namespace Tiled2Unity
                 vertexDatabase = new GenericListDatabase<Vertex3>();
             }
 
-            float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-
             // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
             int groupCount = 0;
             StringBuilder faceBuilder = new StringBuilder();
-            foreach (var layer in this.tmxMap.Layers)
+            foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible != true)
                     continue;
@@ -1860,7 +1865,7 @@ namespace Tiled2Unity
                             float depth_z = 0.0f;
                             if (Tiled2Unity.Settings.DepthBufferEnabled)
                             {
-                                depth_z = CalculateFaceDepth(position.Y, mapLogicalHeight);
+                                depth_z = CalculateFaceDepth(position.Y + tmxMap.TileHeight, tmxMap.MapSizeInPixels.Height);
                             }
 
                             FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
@@ -2006,38 +2011,39 @@ namespace Tiled2Unity
             points[2] = PointF.Add(imageLocation, tileSize);
             points[3] = PointF.Add(imageLocation, new Size(0, tileSize.Height));
 
-            // "Tuck in" the points a tiny bit to help avoid seams
-            // This can be turned off by setting Texel Bias to zero
-            // Note that selecting a texel bias that is too small or a texture that is too big may affect pixel-perfect rendering (pixel snapping in shader will help)
-            if (Tiled2Unity.Settings.TexelBias > 0)
-            {
-                float bias = 1.0f / Tiled2Unity.Settings.TexelBias;
-                float bias_w = bias * tileSize.Width;
-                float bias_h = bias * tileSize.Height;
-
-                points[0].X += bias_w;
-                points[0].Y += bias_h;
-
-                points[1].X -= bias_w;
-                points[1].Y += bias_h;
-
-                points[2].X -= bias_w;
-                points[2].Y -= bias_h;
-
-                points[3].X += bias_w;
-                points[3].Y -= bias_h;
-            }
-
+            // Transform the points with our flip flags
             PointF center = new PointF(tileSize.Width * 0.5f, tileSize.Height * 0.5f);
             center.X += imageLocation.X;
             center.Y += imageLocation.Y;
             TmxMath.TransformPoints_DiagFirst(points, center, flipDiagonal, flipHorizontal, flipVertical);
 
+            // "Tuck in" the points a tiny bit to help avoid seams
+            // This can be turned off by setting Texel Bias to zero
+            // Note that selecting a texel bias that is too small or a texture that is too big may affect pixel-perfect rendering (pixel snapping in shader will help)
+            float bias = 0.0f;
+            PointF[] tucks = new PointF[4];
+            if (Tiled2Unity.Settings.TexelBias > 0)
+            {
+                bias = 1.0f / Tiled2Unity.Settings.TexelBias;
+                tucks[0].X += 1.0f;
+                tucks[0].Y += 1.0f;
+
+                tucks[1].X -= 1.0f;
+                tucks[1].Y += 1.0f;
+
+                tucks[2].X -= 1.0f;
+                tucks[2].Y -= 1.0f;
+
+                tucks[3].X += 1.0f;
+                tucks[3].Y -= 1.0f;
+            }
+            TmxMath.TransformPoints_DiagFirst(tucks, PointF.Empty, flipDiagonal, flipHorizontal, flipVertical);
+
             PointF[] coordinates = new PointF[4];
-            coordinates[3] = PointToTextureCoordinate(points[0], imageSize);
-            coordinates[2] = PointToTextureCoordinate(points[1], imageSize);
-            coordinates[1] = PointToTextureCoordinate(points[2], imageSize);
-            coordinates[0] = PointToTextureCoordinate(points[3], imageSize);
+            coordinates[3] = TmxMath.AddPoints(PointToTextureCoordinate(points[0], imageSize), TmxMath.ScalePoint(tucks[0].X, -tucks[0].Y, bias));
+            coordinates[2] = TmxMath.AddPoints(PointToTextureCoordinate(points[1], imageSize), TmxMath.ScalePoint(tucks[1].X, -tucks[1].Y, bias));
+            coordinates[1] = TmxMath.AddPoints(PointToTextureCoordinate(points[2], imageSize), TmxMath.ScalePoint(tucks[2].X, -tucks[2].Y, bias));
+            coordinates[0] = TmxMath.AddPoints(PointToTextureCoordinate(points[3], imageSize), TmxMath.ScalePoint(tucks[3].X, -tucks[3].Y, bias));
 
             return coordinates;
         }
@@ -2074,41 +2080,8 @@ namespace Tiled2Unity
 
         private XElement CreatePrefabElement()
         {
-            // And example of the kind of xml element we're building
-            // Note that "layer" is overloaded. There is the concept of layers in both Tiled and Unity
-            //  <Prefab name="NameOfTmxFile">
-            //
-            //    <GameObject name="FirstLayerName tag="OptionalTagName" layer="OptionalUnityLayerName">
-            //      <GameObject Copy="[mesh_name]" />
-            //      <GameObject Copy="[another_mesh_name]" />
-            //      <GameOject name="Collision">
-            //        <PolygonCollider2D>
-            //          <Path>data for first path</Path>
-            //          <Path>data for second path</Path>
-            //        </PolygonCollider2D>
-            //      </GameOject name="Collision">
-            //    </GameObject>
-            //
-            //    <GameObject name="SecondLayerName">
-            //      <GameObject Copy="[yet_another_mesh_name]" />
-            //    </GameObject>
-            //
-            //    <GameObject name="Colliders">
-            //      <PolygonCollider2D> ...
-            //      <CircleCollider2D> ...
-            //      <BoxCollider2D>...
-            //    </GameObject>
-            //
-            //    <GameObject name="ObjectGroupName">
-            //      <GameObject name="ObjectName">
-            //          <Property name="PropertyName"> ... some custom data ...
-            //          <Property name="PropertyName"> ... some custom data ...
-            //      </GameObject>
-            //    </GameObject>
-            //
-            //  </Prefab>
-
-            Size sizeInPixels = this.tmxMap.MapSizeInPixels();
+            // Create the Xml layout for the prefab. This is imported by the Tiled2Unity scripts to build the in-game prefab.
+            Size sizeInPixels = this.tmxMap.MapSizeInPixels;
 
             XElement prefab = new XElement("Prefab");
             prefab.SetAttributeValue("name", this.tmxMap.Name);
@@ -2118,7 +2091,7 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("staggerIndex", this.tmxMap.StaggerIndex.ToString());
             prefab.SetAttributeValue("hexSideLength", this.tmxMap.HexSideLength);
 
-            prefab.SetAttributeValue("numLayers", this.tmxMap.Layers.Count);
+            prefab.SetAttributeValue("numLayers", this.tmxMap.EnumerateTileLayers().Count());
             prefab.SetAttributeValue("numTilesWide", this.tmxMap.Width);
             prefab.SetAttributeValue("numTilesHigh", this.tmxMap.Height);
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
@@ -2129,132 +2102,157 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
 
             // Background color ignores alpha component
-            prefab.SetAttributeValue("backgroundColor", "#" + this.tmxMap.BackgroundColor.ToArgb().ToString("x").Substring(2));
+            prefab.SetAttributeValue("backgroundColor", "#" + this.tmxMap.BackgroundColor.ToArgb().ToString("x8").Substring(2));
 
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
             AssignTiledProperties(this.tmxMap, prefab);
 
-            // We create an element for each tiled layer and add that to the prefab
+            // Add all layers (tiles, objects, groups) to the prefab
+            foreach (var node in this.tmxMap.LayerNodes)
             {
-                List<XElement> layerElements = new List<XElement>();
-                foreach (var layer in this.tmxMap.Layers)
-                {
-                    if (layer.Visible == false)
-                        continue;
-
-                    PointF offset = PointFToUnityVector(layer.Offset);
-
-                    // Is we're using depth shaders for our materials then each layer needs depth assigned to it
-                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
-                    float depth_z = 0;
-                    if (Tiled2Unity.Settings.DepthBufferEnabled && layer.SortingOrder != 0)
-                    {
-                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-                        float tileHeight = this.tmxMap.TileHeight;
-                        depth_z = CalculateLayerDepth(layer.SortingOrder, tileHeight, mapLogicalHeight);
-                    }
-
-                    XElement layerElement =
-                        new XElement("GameObject",
-                            new XAttribute("name", layer.Name),
-                            new XAttribute("x", offset.X),
-                            new XAttribute("y", offset.Y),
-                            new XAttribute("z", depth_z));
-
-                    // Add a TileLayer component
-                    {
-                        XElement layerComponent =
-                            new XElement("TileLayer",
-                                new XAttribute("offsetX", layer.Offset.X),
-                                new XAttribute("offsetY", layer.Offset.Y));
-                        layerElement.Add(layerComponent);
-                    }
-
-                    if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
-                    {
-                        // Submeshes for the layer (layer+material)
-                        var meshElements = CreateMeshElementsForLayer(layer);
-                        layerElement.Add(meshElements);
-                    }
-
-                    // Collision data for the layer
-                    if (layer.Ignore != TmxLayer.IgnoreSettings.Collision)
-                    {
-                        foreach (var collisionLayer in layer.CollisionLayers)
-                        {
-                            var collisionElements = CreateCollisionElementForLayer(collisionLayer);
-                            layerElement.Add(collisionElements);
-                        }
-                    }
-
-                    AssignUnityProperties(layer, layerElement, PrefabContext.TiledLayer);
-                    AssignTiledProperties(layer, layerElement);
-
-                    // Add the element to our list of layers
-                    layerElements.Add(layerElement);
-                }
-
-                prefab.Add(layerElements);
-            }
-
-            // Add all our object groups (may contain colliders)
-            {
-                var collidersObjectGroup = from item in this.tmxMap.ObjectGroups
-                                           where item.Visible == true
-                                           select item;
-
-                List<XElement> objectGroupElements = new List<XElement>();
-                foreach (var objGroup in collidersObjectGroup)
-                {
-                    XElement gameObject = new XElement("GameObject", new XAttribute("name", objGroup.Name));
-
-                    // Offset the object group
-                    PointF offset = PointFToUnityVector(objGroup.Offset);
-                    gameObject.SetAttributeValue("x", offset.X);
-                    gameObject.SetAttributeValue("y", offset.Y);
-
-                    // Is we're using depth shaders for our materials then each object group needs depth assigned to it
-                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
-                    float depth_z = 0;
-                    if (Tiled2Unity.Settings.DepthBufferEnabled && objGroup.SortingOrder != 0)
-                    {
-                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-                        float tileHeight = this.tmxMap.TileHeight;
-
-                        depth_z = CalculateLayerDepth(objGroup.SortingOrder, tileHeight, mapLogicalHeight);
-                    }
-
-                    gameObject.SetAttributeValue("z", depth_z);
-
-                    // Add an ObjectLayer component
-                    {
-                        XElement layerComponent =
-                            new XElement("ObjectLayer",
-                                new XAttribute("offsetX", objGroup.Offset.X),
-                                new XAttribute("offsetY", objGroup.Offset.Y),
-                                new XAttribute("color", "#" + objGroup.Color.ToArgb().ToString("x")));
-                        gameObject.Add(layerComponent);
-                    }
-
-                    AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
-                    AssignTiledProperties(objGroup, gameObject);
-
-                    List<XElement> colliders = CreateObjectElementList(objGroup);
-                    if (colliders.Count() > 0)
-                    {
-                        gameObject.Add(colliders);
-                    }
-
-                    objectGroupElements.Add(gameObject);
-                }
-
-                if (objectGroupElements.Count() > 0)
-                {
-                    prefab.Add(objectGroupElements);
-                }
+                AddLayerNodeToElement(node, prefab);
             }
 
             return prefab;
+        }
+
+        private void AddLayerNodeToElement(TmxLayerNode node, XElement xml)
+        {
+            // Bail if the node is invisible
+            if (node.Visible == false)
+                return;
+
+            // What type of node are we dealing with?
+            if (node is TmxGroupLayer)
+            {
+                AddGroupLayerToElement(node as TmxGroupLayer, xml);
+            }
+            else if (node is TmxLayer)
+            {
+                AddTileLayerToElement(node as TmxLayer, xml);
+            }
+            else if (node is TmxObjectGroup)
+            {
+                AddObjectLayerToElement(node as TmxObjectGroup, xml);
+            }
+        }
+
+        private void AddGroupLayerToElement(TmxGroupLayer groupLayer, XElement xmlRoot)
+        {
+            // Add a game object for this grouping
+            XElement xmlGroup = new XElement("GameObject");
+            xmlGroup.SetAttributeValue("name", groupLayer.Name);
+
+            PointF offset = PointFToUnityVector(groupLayer.Offset);
+            float depth_z = CalculateLayerDepth(groupLayer);
+
+            xmlGroup.SetAttributeValue("x", offset.X);
+            xmlGroup.SetAttributeValue("y", offset.Y);
+            xmlGroup.SetAttributeValue("z", depth_z);
+
+            // Add the group layer data component
+            {
+                XElement component = new XElement("GroupLayer",
+                                        new XAttribute("opacity", groupLayer.Opacity),
+                                        new XAttribute("offset-x", groupLayer.Offset.X),
+                                        new XAttribute("offset-y", groupLayer.Offset.Y));
+                xmlGroup.Add(component);
+            }
+
+            // Add all children
+            foreach (var child in groupLayer.LayerNodes)
+            {
+                AddLayerNodeToElement(child, xmlGroup);
+            }
+
+            // Finally, add the node to the root
+            xmlRoot.Add(xmlGroup);
+        }
+
+        private void AddTileLayerToElement(TmxLayer tileLayer, XElement xmlRoot)
+        {
+            XElement xmlLayer = new XElement("GameObject");
+            xmlLayer.SetAttributeValue("name", tileLayer.Name);
+
+            // Figure out the offset for this layer
+            PointF offset = PointFToUnityVector(tileLayer.Offset);
+            float depth_z = CalculateLayerDepth(tileLayer);
+
+            xmlLayer.SetAttributeValue("x", offset.X);
+            xmlLayer.SetAttributeValue("y", offset.Y);
+            xmlLayer.SetAttributeValue("z", depth_z);
+
+            // Add a TileLayer component
+            {
+                XElement layerComponent = new XElement("TileLayer",
+                                            new XAttribute("opacity", tileLayer.Opacity),
+                                            new XAttribute("offsetX", tileLayer.Offset.X),
+                                            new XAttribute("offsetY", tileLayer.Offset.Y));
+
+                xmlLayer.Add(layerComponent);
+            }
+
+            if (tileLayer.Ignore != TmxLayer.IgnoreSettings.Visual)
+            {
+                // Submeshes for the layer (layer+material)
+                var meshElements = CreateMeshElementsForLayer(tileLayer);
+                xmlLayer.Add(meshElements);
+            }
+
+            // Collision data for the layer
+            if (tileLayer.Ignore != TmxLayer.IgnoreSettings.Collision)
+            {
+                foreach (var collisionLayer in tileLayer.CollisionLayers)
+                {
+                    var collisionElements = CreateCollisionElementForLayer(collisionLayer);
+                    xmlLayer.Add(collisionElements);
+                }
+            }
+
+            // Assign and special properties
+            AssignUnityProperties(tileLayer, xmlLayer, PrefabContext.TiledLayer);
+            AssignTiledProperties(tileLayer, xmlLayer);
+
+            // Finally, add the layer to our root
+            xmlRoot.Add(xmlLayer);
+        }
+
+        private void AddObjectLayerToElement(TmxObjectGroup objectLayer, XElement xmlRoot)
+        {
+            XElement gameObject = new XElement("GameObject");
+            gameObject.SetAttributeValue("name", objectLayer.Name);
+
+
+            // Offset the object layer
+            PointF offset = PointFToUnityVector(objectLayer.Offset);
+            float depth_z = CalculateLayerDepth(objectLayer);
+
+            gameObject.SetAttributeValue("x", offset.X);
+            gameObject.SetAttributeValue("y", offset.Y);
+            gameObject.SetAttributeValue("z", depth_z);
+
+            // Add an ObjectLayer component
+            {
+                XElement layerComponent = new XElement("ObjectLayer",
+                                            new XAttribute("offsetX", objectLayer.Offset.X),
+                                            new XAttribute("offsetY", objectLayer.Offset.Y),
+                                            new XAttribute("color", "#" + objectLayer.Color.ToArgb().ToString("x8")));
+
+                gameObject.Add(layerComponent);
+            }
+
+            // Assign special properties
+            AssignUnityProperties(objectLayer, gameObject, PrefabContext.ObjectLayer);
+            AssignTiledProperties(objectLayer, gameObject);
+
+            List<XElement> colliders = CreateObjectElementList(objectLayer);
+            if (colliders.Count() > 0)
+            {
+                gameObject.Add(colliders);
+            }
+
+            // Add to our root
+            xmlRoot.Add(gameObject);
         }
 
         private List<XElement> CreateObjectElementList(TmxObjectGroup objectGroup)
@@ -2283,9 +2281,18 @@ namespace Tiled2Unity
                 }
 
                 XElement objElement = null;
+                XElement objComponent = new XElement("TmxObjectComponent",
+                                            new XAttribute("tmx-object-id", tmxObject.Id),
+                                            new XAttribute("tmx-object-name", tmxObject.Name),
+                                            new XAttribute("tmx-object-type", tmxObject.Type),
+                                            new XAttribute("tmx-object-x", tmxObject.Position.X),
+                                            new XAttribute("tmx-object-y", tmxObject.Position.Y),
+                                            new XAttribute("tmx-object-width", tmxObject.Size.Width),
+                                            new XAttribute("tmx-object-height", tmxObject.Size.Height),
+                                            new XAttribute("tmx-object-rotation", tmxObject.Rotation));
 
                 // Do not create colliders if the are being ignored. (Still want to creat the game object though)
-                bool ignoringCollisions = (objectGroup.Ignore == TmxLayerBase.IgnoreSettings.Collision);
+                bool ignoringCollisions = (objectGroup.Ignore == TmxLayerNode.IgnoreSettings.Collision);
 
                 if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
@@ -2298,36 +2305,43 @@ namespace Tiled2Unity
                     {
                         objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                     }
+
+                    // Set object component type
+                    objComponent.Name = "RectangleObjectComponent";
                 }
                 else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
                     objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, objectGroup.Name);
+
+                    // Set the component type
+                    objComponent.Name = "CircleObjectComponent";
                 }
                 else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
                     objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
+
+                    // Set the component type
+                    objComponent.Name = "PolygonObjectComponent";
                 }
                 else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolyline))
                 {
                     objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
+
+                    // Set the component type
+                    objComponent.Name = "PolylineObjectComponent";
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
                     TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
 
                     // Apply z-cooridnate for use with the depth buffer
-                    // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
                     if (Tiled2Unity.Settings.DepthBufferEnabled)
                     {
-                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-                        float tileLogicalHeight = this.tmxMap.TileHeight;
-                        float logicalPos_y = (-pos.Y / Tiled2Unity.Settings.Scale) - tileLogicalHeight;
-
-                        float depth_z = CalculateFaceDepth(logicalPos_y, mapLogicalHeight);
+                        float depth_z = CalculateFaceDepth(tmxObjectTile.Position.Y, tmxMap.MapSizeInPixels.Height);
                         xmlObject.SetAttributeValue("z", depth_z);
                     }
 
-                    AddTileObjectElements(tmxObjectTile, xmlObject);
+                    AddTileObjectElements(tmxObjectTile, xmlObject, objComponent);
                 }
                 else
                 {
@@ -2336,6 +2350,7 @@ namespace Tiled2Unity
 
                 if (objElement != null)
                 {
+                    xmlObject.Add(objComponent);
                     xmlObject.Add(objElement);
                 }
 
@@ -2354,8 +2369,8 @@ namespace Tiled2Unity
                 XElement xmlMesh = new XElement("GameObject",
                     new XAttribute("name", mesh.ObjectName),
                     new XAttribute("copy", mesh.UniqueMeshName),
-                    new XAttribute("sortingLayerName", layer.SortingLayerName),
-                    new XAttribute("sortingOrder", layer.SortingOrder),
+                    new XAttribute("sortingLayerName", layer.GetSortingLayerName()),
+                    new XAttribute("sortingOrder", layer.GetSortingOrder()),
                     new XAttribute("opacity", layer.Opacity));
                 xmlMeshes.Add(xmlMesh);
 
@@ -2585,7 +2600,7 @@ namespace Tiled2Unity
             return edgeCollider;
         }
 
-        private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot)
+        private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot, XElement objComponent)
         {
             // TileObjects can be scaled (this is separate from vertex scaling)
             SizeF scale = tmxObjectTile.GetTileObjectScale();
@@ -2607,12 +2622,14 @@ namespace Tiled2Unity
             // We combine the properties of the tile that is referenced and add it to our own properties
             AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
 
-            // Add a TileObject component for scripting purposes
+            // Treat ObjectComponent as a TileObjectComponent scripting purposes
             {
-                XElement xmlTileObjectComponent = new XElement("TileObjectComponent");
-                xmlTileObjectComponent.SetAttributeValue("width", tmxObjectTile.Tile.TileSize.Width * scale.Width * Tiled2Unity.Settings.Scale);
-                xmlTileObjectComponent.SetAttributeValue("height", tmxObjectTile.Tile.TileSize.Height * scale.Height * Tiled2Unity.Settings.Scale);
-                xmlTileObjectRoot.Add(xmlTileObjectComponent);
+                objComponent.Name = "TileObjectComponent";
+                objComponent.SetAttributeValue("tmx-tile-flip-horizontal", tmxObjectTile.FlippedHorizontal);
+                objComponent.SetAttributeValue("tmx-tile-flip-vertical", tmxObjectTile.FlippedVertical);
+                objComponent.SetAttributeValue("width", tmxObjectTile.Tile.TileSize.Width * scale.Width * Tiled2Unity.Settings.Scale);
+                objComponent.SetAttributeValue("height", tmxObjectTile.Tile.TileSize.Height * scale.Height * Tiled2Unity.Settings.Scale);
+                xmlTileObjectRoot.Add(objComponent);
             }
 
             // Child node positions game object to match center of tile so can flip along x and y axes
@@ -2639,7 +2656,7 @@ namespace Tiled2Unity
             this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
 
             // Only add colliders if collisions are not being ignored
-            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Collision)
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerNode.IgnoreSettings.Collision)
             {
                 foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
                 {
@@ -2682,7 +2699,7 @@ namespace Tiled2Unity
             // Add a child for each mesh
             // (The child node is needed due to animation)
             // (Only add meshes if visuals are not being ignored)
-            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Visual)
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerNode.IgnoreSettings.Visual)
             {
                 foreach (var mesh in tmxObjectTile.Tile.Meshes)
                 {
@@ -2691,8 +2708,8 @@ namespace Tiled2Unity
                     xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
                     xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
 
-                    xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
-                    xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
+                    xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.GetSortingLayerName());
+                    xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.GetSortingOrder());
 
                     // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
                     // Put another way: This translation moves away from center to local origin
@@ -2812,13 +2829,15 @@ namespace Tiled2Unity.Geometry
     // This allows us to merge polygons along edges
     public class CompositionPolygon
     {
+        public int InitialId { get; private set; }
         public List<PointF> Points { get; private set; }
         public List<PolygonEdge> Edges { get; private set; }
 
         // A polygon starts off as a triangle with one edge
         // Other points and edges are added to the polygon during merge
-        public CompositionPolygon(IEnumerable<PointF> points)
+        public CompositionPolygon(IEnumerable<PointF> points, int initialId)
         {
+            this.InitialId = initialId;
             this.Points = new List<PointF>();
             this.Edges = new List<PolygonEdge>();
 
@@ -2875,6 +2894,15 @@ namespace Tiled2Unity.Geometry
             }
 
             this.Points.InsertRange(q, pointsToInsert);
+
+            // Absorb the edges from our minor polygon too so that future absoptions carry through
+            foreach (var minorEdge in minor.Edges)
+            {
+                if (!this.Edges.Contains(minorEdge))
+                {
+                    this.Edges.Add(minorEdge);
+                }
+            }
         }
 
         public void ReplaceEdgesWithPolygon(CompositionPolygon replacement, PolygonEdge ignoreEdge)
@@ -3110,10 +3138,11 @@ namespace Tiled2Unity.Geometry
         {
             this.PolygonEdges = new List<PolygonEdge>();
 
+            int polygonId = 0;
             foreach (var polygon in polygons)
             {
                 // Our polygon will be added to each edge
-                CompositionPolygon compPolygon = new CompositionPolygon(polygon);
+                CompositionPolygon compPolygon = new CompositionPolygon(polygon, polygonId++);
 
                 // Process all edges of the polygon
                 for (int p = polygon.Length - 1, q = 0; q < polygon.Length; p = q++)
@@ -3201,7 +3230,7 @@ namespace Tiled2Unity.Geometry
                     new PointF(v2.X, v2.Y),
                 };
 
-                // Assre each triangle needs to be CCW
+                // Assume each triangle needs to be CCW
                 float cross = Geometry.Math.Cross(triangle[0], triangle[1], triangle[2]);
                 if (cross > 0)
                 {
@@ -3364,8 +3393,8 @@ namespace SD.Tools.Algorithmia.GeneralDataStructures
 /*******************************************************************************
 *                                                                              *
 * Author    :  Angus Johnson                                                   *
-* Version   :  6.4.0                                                           *
-* Date      :  2 July 2015                                                     *
+* Version   :  6.4.1                                                           *
+* Date      :  5 December 2016                                                 *
 * Website   :  http://www.angusj.com                                           *
 * Copyright :  Angus Johnson 2010-2015                                         *
 *                                                                              *
@@ -7267,7 +7296,7 @@ namespace Tiled2Unity.ClipperLib
         foreach (OutRec outRec in m_PolyOuts)
         {
           OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-          if (outRec.Pts != null && outRec.FirstLeft == OldOutRec) 
+          if (outRec.Pts != null && firstLeft == OldOutRec) 
             outRec.FirstLeft = NewOutRec;
         }
       }
@@ -12136,6 +12165,34 @@ namespace LibTessDotNet
 }
 
 // ----------------------------------------------------------------------
+// ITmxVisitor.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+
+namespace Tiled2Unity
+{
+    // The object that does the visiting implements this interface
+    public interface ITmxVisitor
+    {
+        void VisitMap(TmxMap map);
+        void VisitGroupLayer(TmxGroupLayer groupLayer);
+        void VisitTileLayer(TmxLayer tileLayer);
+        void VisitObjectLayer(TmxObjectGroup groupLayer);
+        void VisitObject(TmxObject obj);
+    }
+
+    // An object that is visited implements this interface
+    public interface ITmxVisit
+    {
+        void Visit(ITmxVisitor visitor);
+    }
+}
+
+// ----------------------------------------------------------------------
 // TmxAnimation.cs
 
 // using System;
@@ -12180,6 +12237,68 @@ namespace Tiled2Unity
             tmxAnimation.Frames.Add(tmxFrame);
 
             return tmxAnimation;
+        }
+
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxDisplayOrderVisitor.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+
+namespace Tiled2Unity
+{
+    // Visits the tmx map and gathers information used for sorting, depth and draw order
+    class TmxDisplayOrderVisitor : ITmxVisitor
+    {
+        private int drawOrderIndex = 0;
+        private int depthBufferIndex = 0;
+
+        public void VisitMap(TmxMap map)
+        {
+        }
+
+        public void VisitGroupLayer(TmxGroupLayer groupLayer)
+        {
+            // Group layer does not advance draw index
+            groupLayer.DrawOrderIndex = this.drawOrderIndex;
+
+            // But does advance buffer index
+            groupLayer.DepthBufferIndex = this.depthBufferIndex++;
+        }
+
+
+        public void VisitObject(TmxObject obj)
+        {
+            // Objects only increase draw order if they are tiles
+            if (obj is TmxObjectTile)
+            {
+                TmxObjectTile tile = obj as TmxObjectTile;
+                tile.DrawOrderIndex = this.drawOrderIndex++;
+            }
+        }
+
+        public void VisitObjectLayer(TmxObjectGroup objectLayer)
+        {
+            // Object layer does not advance draw index
+            objectLayer.DrawOrderIndex = this.drawOrderIndex;
+
+            // Either inherit depth buffer index of parent or advance
+            objectLayer.DepthBufferIndex = (objectLayer.ParentNode != null) ? objectLayer.ParentNode.DepthBufferIndex : this.depthBufferIndex++;
+        }
+
+        public void VisitTileLayer(TmxLayer tileLayer)
+        {
+            // Tile layer does render something and therefore increases draw order index
+            tileLayer.DrawOrderIndex = this.drawOrderIndex++;
+
+            // Either inherit depth buffer index of parent or advance
+            tileLayer.DepthBufferIndex = (tileLayer.ParentNode != null) ? tileLayer.ParentNode.DepthBufferIndex : this.depthBufferIndex++;
         }
 
     }
@@ -12260,6 +12379,50 @@ namespace Tiled2Unity
             tmxFrame.DurationMs = TmxHelper.GetAttributeAsInt(xml, "duration", 100);
 
             return tmxFrame;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxGroupLayer.cs
+
+// using System;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Drawing;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    // A group layer is a composite of other layer types (i.e. tiled, object, other groups)
+    public class TmxGroupLayer : TmxLayerNode
+    {
+        public TmxGroupLayer(TmxLayerNode parent, TmxMap tmxMap) : base(parent, tmxMap)
+        {
+        }
+
+        public override void Visit(ITmxVisitor visitor)
+        {
+            // Visit ourselves
+            visitor.VisitGroupLayer(this);
+
+            // Visit our children
+            foreach (var node in this.LayerNodes)
+            {
+                node.Visit(visitor);
+            }
+        }
+
+        public static TmxGroupLayer FromXml(XElement xml, TmxLayerNode parent, TmxMap tmxMap)
+        {
+            Debug.Assert(xml.Name == "group");
+
+            TmxGroupLayer tmxGroupLayer = new TmxGroupLayer(parent, tmxMap);
+            tmxGroupLayer.FromXmlInternal(xml);
+            return tmxGroupLayer;
         }
     }
 }
@@ -12600,8 +12763,8 @@ namespace Tiled2Unity
 
             // Get default image size in case we are not opening the file
             {
-                int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-                int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
+                int width = TmxHelper.GetAttributeAsInt(elemImage, "width", 0);
+                int height = TmxHelper.GetAttributeAsInt(elemImage, "height", 0);
                 tmxImage.Size = new System.Drawing.Size(width, height);
             }
 
@@ -12666,7 +12829,7 @@ namespace Tiled2Unity
 
 namespace Tiled2Unity
 {
-    public partial class TmxLayer : TmxLayerBase
+    public partial class TmxLayer : TmxLayerNode
     {
         public int Width { get; private set; }
         public int Height { get; private set; }
@@ -12674,7 +12837,7 @@ namespace Tiled2Unity
         public List<TmxMesh> Meshes { get; private set; }
         public List<TmxLayer> CollisionLayers { get; private set; }
 
-        public TmxLayer(TmxMap map) : base(map)
+        public TmxLayer(TmxLayerNode parent, TmxMap map) : base(parent, map)
         {
             this.Visible = true;
             this.Opacity = 1.0f;
@@ -12718,6 +12881,11 @@ namespace Tiled2Unity
             return Tiled2Unity.Settings.PreferConvexPolygons;
         }
 
+        public override void Visit(ITmxVisitor visitor)
+        {
+            visitor.VisitTileLayer(this);
+        }
+
     }
 }
 
@@ -12739,30 +12907,10 @@ namespace Tiled2Unity
     // Partial class methods for building layer data from xml strings or files
     partial class TmxLayer
     {
-        public static TmxLayer FromXml(XElement elem, TmxMap tmxMap)
+        public static TmxLayer FromXml(XElement elem, TmxLayerNode parent, TmxMap tmxMap)
         {
-            TmxLayer tmxLayer = new TmxLayer(tmxMap);
-
-            // Order within Xml file is import for layer types
-            tmxLayer.XmlElementIndex = elem.NodesBeforeSelf().Count();
-
-            // Have to decorate layer names in order to force them into being unique
-            // Also, can't have whitespace in the name because Unity will add underscores
-            tmxLayer.Name = TmxHelper.GetAttributeAsString(elem, "name");
-
-            tmxLayer.Visible = TmxHelper.GetAttributeAsInt(elem, "visible", 1) == 1;
-            tmxLayer.Opacity = TmxHelper.GetAttributeAsFloat(elem, "opacity", 1);
-
-            PointF offset = new PointF(0, 0);
-            offset.X = TmxHelper.GetAttributeAsFloat(elem, "offsetx", 0);
-            offset.Y = TmxHelper.GetAttributeAsFloat(elem, "offsety", 0);
-            tmxLayer.Offset = offset;
-
-            // Set our properties
-            tmxLayer.Properties = TmxProperties.FromXml(elem);
-
-            // Set the "ignore" setting on this layer
-            tmxLayer.Ignore = tmxLayer.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
+            TmxLayer tmxLayer = new TmxLayer(parent, tmxMap);
+            tmxLayer.FromXmlInternal(elem);
 
             // We can build a layer from a "tile layer" (default) or an "image layer"
             if (elem.Name == "layer")
@@ -12826,8 +12974,7 @@ namespace Tiled2Unity
             // Each layer will be broken down into "meshes" which are collections of tiles matching the same texture or animation
             tmxLayer.Meshes = TmxMesh.ListFromTmxLayer(tmxLayer);
 
-            // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
-            tmxLayer.UnityLayerOverrideName = tmxLayer.Properties.GetPropertyValueAsString("unity:layer", "");
+           // Each layer may contain different collision types which are themselves put into "Collison Layers" to be processed later
             tmxLayer.BuildCollisionLayers();
 
             return tmxLayer;
@@ -12971,22 +13118,22 @@ namespace Tiled2Unity
             // Are we using a unity-layer override? If so we have to put everything from this layer into it.
             if (String.IsNullOrEmpty(this.UnityLayerOverrideName))
             {
-                BuildBuildCollisionLayers_ByObjectType();
+                BuildCollisionLayers_ByObjectType();
             }
             else
             {
-                BuildBuildCollisionLayers_Override();
+                BuildCollisionLayers_Override();
             }
         }
 
-        private void BuildBuildCollisionLayers_Override()
+        private void BuildCollisionLayers_Override()
         {
             // Just make the layer the collision layer
             this.CollisionLayers.Clear();
             this.CollisionLayers.Add(this);
         }
 
-        private void BuildBuildCollisionLayers_ByObjectType()
+        private void BuildCollisionLayers_ByObjectType()
         {
             // Find all tiles with collisions on them and put them into a "Collision Layer" of the same type
             for (int t = 0; t < this.TileIds.Length; ++t)
@@ -13010,7 +13157,7 @@ namespace Tiled2Unity
                     if (collisionLayer == null)
                     {
                         // Create a new Collision Layer
-                        collisionLayer = new TmxLayer(this.TmxMap);
+                        collisionLayer = new TmxLayer(null, this.TmxMap);
                         this.CollisionLayers.Add(collisionLayer);
 
                         // The new Collision Layer has the name of the collider object and empty tiles (they will be filled with tiles that have matching collider objects)
@@ -13035,7 +13182,7 @@ namespace Tiled2Unity
 }
 
 // ----------------------------------------------------------------------
-// TmxLayerBase.cs
+// TmxLayerNode.cs
 
 // using System;
 // using System.Collections.Generic;
@@ -13045,9 +13192,9 @@ namespace Tiled2Unity
 
 namespace Tiled2Unity
 {
-    // There are several different "layer" types in Tiled that share some behaviour (tile layer, object layer, image layer)
+    // There are several different "layer" types in Tiled that share some behaviour (tile layer, object layer, image layer, group layer)
     // (In Tiled2Unity we treat image layers as a special case of tile layer)
-    public class TmxLayerBase : TmxHasProperties
+    public abstract partial class TmxLayerNode : TmxHasProperties
     {
         public enum IgnoreSettings
         {
@@ -13057,6 +13204,7 @@ namespace Tiled2Unity
             Visual,     // Ignore visual on layer
         };
 
+        public TmxLayerNode ParentNode { get; private set; }
         public TmxMap TmxMap { get; private set; }
 
         public string Name { get; protected set; }
@@ -13067,16 +13215,150 @@ namespace Tiled2Unity
 
         public TmxProperties Properties { get; protected set; }
 
-        public int XmlElementIndex { get; protected set; }
+        // Helps with drawing order. User can be explicit through unity:sortingLayerName and unity:sortingOrder properties.
+        public string ExplicitSortingLayerName { get; set; }
+        public int? ExplicitSortingOrder { get; set; }
 
-        public string SortingLayerName { get; set; }
-        public int SortingOrder { get; set; }
+        public int DrawOrderIndex { get; set; }
+        public int DepthBufferIndex { get; set; }
 
         public string UnityLayerOverrideName { get; protected set; }
 
-        public TmxLayerBase(TmxMap tmxMap)
+        // Layer nodes may have a list of other layer nodes
+        public List<TmxLayerNode> LayerNodes { get; protected set; }
+
+        public TmxLayerNode(TmxLayerNode parent, TmxMap tmxMap)
         {
+            this.DrawOrderIndex = -1;
+            this.DepthBufferIndex = -1;
+            this.ParentNode = parent;
             this.TmxMap = tmxMap;
+            this.LayerNodes = new List<TmxLayerNode>();
+        }
+
+        public PointF GetCombinedOffset()
+        {
+            PointF offset = this.Offset;
+            TmxLayerNode parent = this.ParentNode;
+            while (parent != null)
+            {
+                offset = TmxMath.AddPoints(offset, parent.Offset);
+                parent = parent.ParentNode;
+            }
+
+            return offset;
+        }
+
+        public string GetSortingLayerName()
+        {
+            // Do we have our own sorting layer name?
+            if (!String.IsNullOrEmpty(this.ExplicitSortingLayerName))
+                return this.ExplicitSortingLayerName;
+
+            // If not then rely on the parent
+            if (this.ParentNode != null)
+            {
+                return this.ParentNode.GetSortingLayerName();
+            }
+
+            // Default is an empty string
+            return "";
+        }
+
+        public int GetSortingOrder()
+        {
+            // Do we have our own explicit ordering?
+            if (this.ExplicitSortingOrder.HasValue)
+            {
+                return this.ExplicitSortingOrder.Value;
+            }
+
+            // Use our draw order index
+            return this.DrawOrderIndex;
+        }
+
+        // The child class must implement Visit abstraction
+        public abstract void Visit(ITmxVisitor visitor);
+    }
+}
+
+// ----------------------------------------------------------------------
+// TmxLayerNode.Xml.cs
+
+// using System;
+// using System.Drawing;
+// using System.Collections.Generic;
+// using System.Linq;
+// using System.Text;
+// using System.Threading.Tasks;
+// using System.Xml.Linq;
+
+namespace Tiled2Unity
+{
+    partial class TmxLayerNode : ITmxVisit
+    {
+        public static List<TmxLayerNode> ListFromXml(XElement xmlRoot, TmxLayerNode parent, TmxMap tmxMap)
+        {
+            List<TmxLayerNode> nodes = new List<TmxLayerNode>();
+
+            foreach (var xmlNode in xmlRoot.Elements())
+            {
+                TmxLayerNode layerNode = null;
+
+                if (xmlNode.Name == "layer" || xmlNode.Name == "imagelayer")
+                {
+                    layerNode = TmxLayer.FromXml(xmlNode, parent, tmxMap);
+                }
+                else if (xmlNode.Name == "objectgroup")
+                {
+                    layerNode = TmxObjectGroup.FromXml(xmlNode, parent, tmxMap);
+                }
+                else if (xmlNode.Name == "group")
+                {
+                    layerNode = TmxGroupLayer.FromXml(xmlNode, parent, tmxMap);
+                }
+
+                // If the layer is visible then add it to our list
+                if (layerNode != null && layerNode.Visible)
+                {
+                    nodes.Add(layerNode);
+                }
+            }
+
+            return nodes;
+        }
+
+        protected void FromXmlInternal(XElement xml)
+        {
+            // Get common elements amoung layer nodes from xml
+            this.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
+            this.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
+            this.Opacity = TmxHelper.GetAttributeAsFloat(xml, "opacity", 1);
+
+            // Get the offset
+            PointF offset = new PointF(0, 0);
+            offset.X = TmxHelper.GetAttributeAsFloat(xml, "offsetx", 0);
+            offset.Y = TmxHelper.GetAttributeAsFloat(xml, "offsety", 0);
+            this.Offset = offset;
+
+            // Get all the properties
+            this.Properties = TmxProperties.FromXml(xml);
+
+            // Set the "ignore" setting on this object group
+            this.Ignore = this.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
+
+            // Explicit sorting properties
+            this.ExplicitSortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
+            if (this.Properties.PropertyMap.ContainsKey("unity:sortingOrder"))
+            {
+                this.ExplicitSortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
+            }
+
+            // Are we using a unity:layer override?
+            this.UnityLayerOverrideName = this.Properties.GetPropertyValueAsString("unity:layer", "");
+
+            // Add all our children
+            this.LayerNodes = TmxLayerNode.ListFromXml(xml, this, this.TmxMap);
         }
     }
 }
@@ -13094,7 +13376,7 @@ namespace Tiled2Unity
 
 namespace Tiled2Unity
 {
-    public partial class TmxMap : TmxHasProperties
+    public partial class TmxMap : TmxHasProperties, ITmxVisit
     {
         public enum MapOrientation
         {
@@ -13132,13 +13414,15 @@ namespace Tiled2Unity
         public Color BackgroundColor { get; private set; }
         public TmxProperties Properties { get; private set; }
 
+        public Size MapSizeInPixels { get; private set; }
+
         // Is the prefab created by this map going to be loaded as a resource?
         public bool IsResource { get; private set; }
 
         public IDictionary<uint, TmxTile> Tiles = new Dictionary<uint, TmxTile>();
 
-        public IList<TmxLayer> Layers = new List<TmxLayer>();
-        public IList<TmxObjectGroup> ObjectGroups = new List<TmxObjectGroup>();
+        // Our list of layer trees
+        public List<TmxLayerNode> LayerNodes { get; private set; }
 
         // The map may load object type data from another file
         public TmxObjectTypes ObjectTypes = new TmxObjectTypes();
@@ -13149,6 +13433,7 @@ namespace Tiled2Unity
         {
             this.IsLoaded = false;
             this.Properties = new TmxProperties();
+            this.LayerNodes = new List<TmxLayerNode>();
         }
 
         public string GetExportedFilename()
@@ -13158,14 +13443,12 @@ namespace Tiled2Unity
 
         public override string ToString()
         {
-            return String.Format("{{ \"{6}\" size = {0}x{1}, tile size = {2}x{3}, # tiles = {4}, # layers = {5}, # obj groups = {6} }}",
+            return String.Format("{{ \"{5}\" size = {0}x{1}, tile size = {2}x{3}, # tiles = {4} }}",
                 this.Width,
                 this.Height,
                 this.TileWidth,
                 this.TileHeight,
                 this.Tiles.Count(),
-                this.Layers.Count(),
-                this.ObjectGroups.Count(),
                 this.Name);
         }
 
@@ -13200,7 +13483,7 @@ namespace Tiled2Unity
             return ++this.nextUniqueId;
         }
 
-        public Size MapSizeInPixels()
+        private Size CalculateMapSizeInPixels()
         {
             // Takes the orientation of the map into account when calculating the size
             if (this.Orientation == MapOrientation.Isometric)
@@ -13242,7 +13525,7 @@ namespace Tiled2Unity
         // Get a unique list of all the tiles that are used as tile objects
         public List<TmxMesh> GetUniqueListOfVisibleObjectTileMeshes()
         {
-            var tiles = from objectGroup in this.ObjectGroups
+            var tiles = from objectGroup in this.EnumerateObjectLayers()
                         where objectGroup.Visible == true
                         from tmxObject in objectGroup.Objects
                         where tmxObject.Visible == true
@@ -13284,6 +13567,63 @@ namespace Tiled2Unity
             this.ObjectTypes = new TmxObjectTypes();
         }
 
+        public IEnumerable<TmxLayer> EnumerateTileLayers()
+        {
+            foreach (var recursive in EnumerateLayersByType<TmxLayer>())
+            {
+                yield return recursive;
+            }
+        }
+
+        public IEnumerable<TmxObjectGroup> EnumerateObjectLayers()
+        {
+            foreach (var recursive in EnumerateLayersByType<TmxObjectGroup>())
+            {
+                yield return recursive;
+            }
+        }
+
+        private IEnumerable<T> EnumerateLayersByType<T>() where T : TmxLayerNode
+        {
+            // Map will have a collection of layer nodes which themselves may also have child layer nodes
+            foreach (var node in this.LayerNodes)
+            {
+                foreach (var recursive in RecursiveEnumerate<T>(node))
+                {
+                    yield return recursive;
+                }
+            }
+        }
+
+        private IEnumerable<T> RecursiveEnumerate<T>(TmxLayerNode layerNode) where T : TmxLayerNode
+        {
+            // Is this node the type we're looking for?
+            if (layerNode.GetType() == typeof(T))
+            {
+                yield return (T)layerNode;
+            }
+
+            // Go through all children nodes
+            foreach (var child in layerNode.LayerNodes)
+            {
+                foreach (var recursive in RecursiveEnumerate<T>(child))
+                {
+                    yield return recursive;
+                }
+            }
+        }
+
+        public void Visit(ITmxVisitor visitor)
+        {
+            // Visit the map
+            visitor.VisitMap(this);
+
+            // Visit all the children nodes in order
+            foreach (var node in this.LayerNodes)
+            {
+                node.Visit(visitor);
+            }
+        }
     }
 }
 
@@ -13377,11 +13717,16 @@ namespace Tiled2Unity
             this.IsResource = this.IsResource || !String.IsNullOrEmpty(this.Properties.GetPropertyValueAsString("unity:resourcePath", null));
 
             ParseAllTilesets(doc);
-            ParseAllLayers(doc);
-            ParseAllObjectGroups(doc);
 
-            // Once everything is loaded, take a moment to do additional plumbing
-            ParseCompleted();
+            // Get all our child layer nodes
+            this.LayerNodes = TmxLayerNode.ListFromXml(map, null, this);
+
+            // Calcuate the size of the map. Isometric and hex maps make this more complicated than a simple width and height thing.
+            this.MapSizeInPixels = CalculateMapSizeInPixels();
+
+            // Visit each node in the map to assign display order
+            TmxDisplayOrderVisitor visitor = new TmxDisplayOrderVisitor();
+            this.Visit(visitor);
         }
 
         private void ParseAllTilesets(XDocument doc)
@@ -13556,72 +13901,6 @@ namespace Tiled2Unity
             tile.SetLocationOnSource(0, 0);
             this.Tiles[tile.GlobalId] = tile;
         }
-
-        private void ParseAllLayers(XDocument doc)
-        {
-            Logger.WriteLine("Parsing layer elements ...");
-
-            // Parse "layer"s and "imagelayer"s
-            var layers = (from item in doc.Descendants()
-                          where (item.Name == "layer" || item.Name == "imagelayer")
-                          select item).ToList();
-
-            foreach (var lay in layers)
-            {
-                TmxLayer tmxLayer = TmxLayer.FromXml(lay, this);
-
-                // Layers may be ignored
-                if (tmxLayer.Ignore == TmxLayer.IgnoreSettings.True)
-                {
-                    // We don't care about this layer
-                    Logger.WriteLine("Ignoring layer due to unity:ignore = True property: {0}", tmxLayer.Name);
-                    continue;
-                }
-
-                this.Layers.Add(tmxLayer);
-            }
-        }
-
-        private void ParseAllObjectGroups(XDocument doc)
-        {
-            Logger.WriteLine("Parsing objectgroup elements ...");
-            var groups = from item in doc.Root.Elements("objectgroup")
-                         select item;
-
-            foreach (var g in groups)
-            {
-                TmxObjectGroup tmxObjectGroup = TmxObjectGroup.FromXml(g, this);
-
-                // Object gropus may be ignored
-                if (tmxObjectGroup.Ignore == TmxLayer.IgnoreSettings.True)
-                {
-                    // We don't care about this object group.
-                    Logger.WriteLine("Ignoring object group layer due to unity:ignore = True property: {0}", tmxObjectGroup.Name);
-                    continue;
-                }
-
-                this.ObjectGroups.Add(tmxObjectGroup);
-            }
-        }
-
-        private void ParseCompleted()
-        {
-            // Every "layer type" instance needs its sort ordering figured out
-            var layers = new List<TmxLayerBase>();
-            layers.AddRange(this.Layers);
-            layers.AddRange(this.ObjectGroups);
-
-            // We sort by the XmlElementIndex because the order in the XML file is the implicity ordering or how tiles and objects are rendered
-            layers = layers.OrderBy(l => l.XmlElementIndex).ToList();
-
-            for (int i = 0; i < layers.Count(); ++i)
-            {
-                TmxLayerBase layer = layers[i];
-                layer.SortingLayerName = layer.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
-                layer.SortingOrder = layer.Properties.GetPropertyValueAsInt("unity:sortingOrder", i);
-            }
-        }
-
     }
 }
 
@@ -13884,6 +14163,16 @@ namespace Tiled2Unity
             return new PointF(p.X * s, p.Y * s);
         }
 
+        public static PointF ScalePoint(float x, float y, float s)
+        {
+            return new PointF(x * s, y * s);
+        }
+
+        public static PointF AddPointsScale(PointF a, PointF b, float scale)
+        {
+            return new PointF(a.X + b.X * scale, a.Y + b.Y * scale);
+        }
+
         public static List<PointF> GetPointsInMapSpace(TmxMap tmxMap, TmxHasPoints objectWithPoints)
         {
             PointF local = TmxMath.ObjectPointFToMapSpace(tmxMap, 0, 0);
@@ -14129,6 +14418,7 @@ namespace Tiled2Unity
 {
     public abstract partial class TmxObject : TmxHasProperties
     {
+        public int Id { get; private set; }
         public string Name { get; private set; }
         public string Type { get; private set; }
         public bool Visible { get; private set; }
@@ -14168,6 +14458,7 @@ namespace Tiled2Unity
 
         static protected void CopyBaseProperties(TmxObject from, TmxObject to)
         {
+            to.Id = from.Id;
             to.Name = from.Name;
             to.Type = from.Type;
             to.Visible = from.Visible;
@@ -14176,6 +14467,15 @@ namespace Tiled2Unity
             to.Rotation = from.Rotation;
             to.Properties = from.Properties;
             to.ParentObjectGroup = from.ParentObjectGroup;
+        }
+
+        // Get the world boundary taking into account that the parent object group (and/or one of its ancestors) is offset
+        public RectangleF GetOffsetWorldBounds()
+        {
+            RectangleF bounds = GetWorldBounds();
+            PointF combinedOffset = this.ParentObjectGroup.GetCombinedOffset();
+            bounds.Offset(combinedOffset);
+            return bounds;
         }
 
         public abstract RectangleF GetWorldBounds();
@@ -14241,6 +14541,7 @@ namespace Tiled2Unity
             }
 
             // Data found on every object type
+            tmxObject.Id = TmxHelper.GetAttributeAsInt(xml, "id", 0);
             tmxObject.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
             tmxObject.Type = TmxHelper.GetAttributeAsString(xml, "type", "");
             tmxObject.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
@@ -14322,12 +14623,12 @@ namespace Tiled2Unity
 
 namespace Tiled2Unity
 {
-    public partial class TmxObjectGroup : TmxLayerBase
+    public partial class TmxObjectGroup : TmxLayerNode
     {
         public List<TmxObject> Objects { get; private set; }
         public Color Color { get; private set; }
 
-        public TmxObjectGroup(TmxMap tmxMap) : base(tmxMap)
+        public TmxObjectGroup(TmxLayerNode parent, TmxMap tmxMap) : base(parent, tmxMap)
         {
             this.Objects = new List<TmxObject>();
         }
@@ -14354,6 +14655,18 @@ namespace Tiled2Unity
             return String.Format("{{ ObjectGroup name={0}, numObjects={1} }}", this.Name, this.Objects.Count());
         }
 
+        public override void Visit(ITmxVisitor visitor)
+        {
+            // Visit ourselves
+            visitor.VisitObjectLayer(this);
+
+            // Visit all our objects
+            foreach (var obj in this.Objects)
+            {
+                visitor.VisitObject(obj);
+            }
+        }
+
     }
 }
 
@@ -14373,28 +14686,15 @@ namespace Tiled2Unity
 {
     public partial class TmxObjectGroup
     {
-        public static TmxObjectGroup FromXml(XElement xml, TmxMap tmxMap)
+        public static TmxObjectGroup FromXml(XElement xml, TmxLayerNode parent, TmxMap tmxMap)
         {
             Debug.Assert(xml.Name == "objectgroup");
 
-            TmxObjectGroup tmxObjectGroup = new TmxObjectGroup(tmxMap);
+            TmxObjectGroup tmxObjectGroup = new TmxObjectGroup(parent, tmxMap);
+            tmxObjectGroup.FromXmlInternal(xml);
 
-            // Order within Xml file is import for layer types
-            tmxObjectGroup.XmlElementIndex = xml.NodesBeforeSelf().Count();
-
-            tmxObjectGroup.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
-            tmxObjectGroup.Visible = TmxHelper.GetAttributeAsInt(xml, "visible", 1) == 1;
-            tmxObjectGroup.Opacity = TmxHelper.GetAttributeAsFloat(xml, "opacity", 1);
+            // Color is specific to object group
             tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
-            tmxObjectGroup.Properties = TmxProperties.FromXml(xml);
-
-            // Set the "ignore" setting on this object group
-            tmxObjectGroup.Ignore = tmxObjectGroup.Properties.GetPropertyValueAsEnum<IgnoreSettings>("unity:ignore", IgnoreSettings.False);
-
-            PointF offset = new PointF(0, 0);
-            offset.X = TmxHelper.GetAttributeAsFloat(xml, "offsetx", 0);
-            offset.Y = TmxHelper.GetAttributeAsFloat(xml, "offsety", 0);
-            tmxObjectGroup.Offset = offset;
 
             // Get all the objects
             Logger.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
@@ -14403,9 +14703,6 @@ namespace Tiled2Unity
 
             // The objects are ordered "visually" by Y position
             tmxObjectGroup.Objects = objects.OrderBy(o => TmxMath.ObjectPointFToMapSpace(tmxMap, o.Position).Y).ToList();
-
-            // Are we using a unity:layer override?
-            tmxObjectGroup.UnityLayerOverrideName = tmxObjectGroup.Properties.GetPropertyValueAsString("unity:layer", "");
 
             return tmxObjectGroup;
         }
@@ -14659,12 +14956,17 @@ namespace Tiled2Unity
         public bool FlippedHorizontal { get; private set; }
         public bool FlippedVertical { get; private set; }
 
-        public string SortingLayerName { get; private set; }
-        public int? SortingOrder { get; private set; }
+        public int DrawOrderIndex { get; set; }
+        public int DepthIndex { get; set; }
+
+        private string ExplicitSortingLayerName { get; set; }
+        private int? ExplicitSortingOrder { get; set; }
 
         public TmxObjectTile()
         {
-            this.SortingLayerName = null;
+            this.DrawOrderIndex = -1;
+            this.DepthIndex = -1;
+            this.ExplicitSortingLayerName = "";
         }
 
         public override System.Drawing.RectangleF GetWorldBounds()
@@ -14692,6 +14994,27 @@ namespace Tiled2Unity
             return new SizeF(scaleX, scaleY);
         }
 
+        public string GetSortingLayerName()
+        {
+            // Do we have our own sorting layer name?
+            if (!String.IsNullOrEmpty(this.ExplicitSortingLayerName))
+                return this.ExplicitSortingLayerName;
+
+            return this.ParentObjectGroup.GetSortingLayerName();
+        }
+
+        public int GetSortingOrder()
+        {
+            // Do we have our own explicit ordering?
+            if (this.ExplicitSortingOrder.HasValue)
+            {
+                return this.ExplicitSortingOrder.Value;
+            }
+
+            // Use our draw order index
+            return this.DrawOrderIndex;
+        }
+
         protected override void InternalFromXml(System.Xml.Linq.XElement xml, TmxMap tmxMap)
         {
             // Get the tile
@@ -14710,13 +15033,10 @@ namespace Tiled2Unity
             }
 
             // Check properties for layer placement
-            if (this.Properties.PropertyMap.ContainsKey("unity:sortingLayerName"))
-            {
-                this.SortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName");
-            }
+            this.ExplicitSortingLayerName = this.Properties.GetPropertyValueAsString("unity:sortingLayerName", "");
             if (this.Properties.PropertyMap.ContainsKey("unity:sortingOrder"))
             {
-                this.SortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
+                this.ExplicitSortingOrder = this.Properties.GetPropertyValueAsInt("unity:sortingOrder");
             }
         }
 
@@ -15148,7 +15468,7 @@ namespace Tiled2Unity
             this.LocalId = localId;
             this.TmxImage = tmxImage;
             this.Properties = new TmxProperties();
-            this.ObjectGroup = new TmxObjectGroup(this.TmxMap);
+            this.ObjectGroup = new TmxObjectGroup(null, this.TmxMap);
             this.Animation = TmxAnimation.FromTileId(globalId);
             this.Meshes = new List<TmxMesh>();
         }
@@ -15205,7 +15525,7 @@ namespace Tiled2Unity
             XElement elemObjectGroup = elem.Element("objectgroup");
             if (elemObjectGroup != null)
             {
-                this.ObjectGroup = TmxObjectGroup.FromXml(elemObjectGroup, tmxMap);
+                this.ObjectGroup = TmxObjectGroup.FromXml(elemObjectGroup, null, tmxMap);
                 FixTileColliderObjects(tmxMap);
             }
 

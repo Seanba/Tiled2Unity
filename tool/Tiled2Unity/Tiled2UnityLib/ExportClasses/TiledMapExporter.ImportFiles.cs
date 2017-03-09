@@ -41,7 +41,7 @@ namespace Tiled2Unity
 
             {
                 // Add all image files as compressed base64 strings
-                var layerImages = from layer in this.tmxMap.Layers
+                var layerImages = from layer in this.tmxMap.EnumerateTileLayers()
                                   where layer.Visible == true
                                   from rawTileId in layer.TileIds
                                   where rawTileId != 0
@@ -50,7 +50,7 @@ namespace Tiled2Unity
                                   select tile.TmxImage;
 
                 // Find the images from the frames as well
-                var frameImages = from layer in this.tmxMap.Layers
+                var frameImages = from layer in this.tmxMap.EnumerateTileLayers()
                                   where layer.Visible == true
                                   from rawTileId in layer.TileIds
                                   where rawTileId != 0
@@ -63,7 +63,7 @@ namespace Tiled2Unity
 
 
                 // Tile Objects may have images not yet references by a layer
-                var objectImages = from objectGroup in this.tmxMap.ObjectGroups
+                var objectImages = from objectGroup in this.tmxMap.EnumerateObjectLayers()
                                    where objectGroup.Visible == true
                                    from tmxObject in objectGroup.Objects
                                    where tmxObject.Visible == true

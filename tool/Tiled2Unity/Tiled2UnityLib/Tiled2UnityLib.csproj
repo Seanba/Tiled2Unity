@@ -172,8 +172,10 @@
     <Compile Include="ThirdParty\LibTessDotNet\Sources\Tess.cs" />
     <Compile Include="Tiled2UnityLite.Main.cs" />
     <Compile Include="TmxClasses\TmxAnimation.cs" />
+    <Compile Include="TmxClasses\TmxDisplayOrderVisitor.cs" />
     <Compile Include="TmxClasses\TmxException.cs" />
     <Compile Include="TmxClasses\TmxFrame.cs" />
+    <Compile Include="TmxClasses\TmxGroupLayer.cs" />
     <Compile Include="TmxClasses\TmxHasPoints.cs" />
     <Compile Include="TmxClasses\TmxHasProperties.cs" />
     <Compile Include="TmxClasses\TmxHelper.cs" />
@@ -181,7 +183,8 @@
     <Compile Include="TmxClasses\TmxImage.Xml.cs" />
     <Compile Include="TmxClasses\TmxLayer.cs" />
     <Compile Include="TmxClasses\TmxLayer.Xml.cs" />
-    <Compile Include="TmxClasses\TmxLayerBase.cs" />
+    <Compile Include="TmxClasses\TmxLayerNode.cs" />
+    <Compile Include="TmxClasses\TmxLayerNode.Xml.cs" />
     <Compile Include="TmxClasses\TmxMap.cs" />
     <Compile Include="TmxClasses\TmxMap.Xml.cs" />
     <Compile Include="TmxClasses\TmxMath.cs" />
@@ -205,6 +208,7 @@
     <Compile Include="TmxClasses\TmxRotationMatrix.cs" />
     <Compile Include="TmxClasses\TmxTile.cs" />
     <Compile Include="TmxClasses\TmxTile.Xml.cs" />
+    <Compile Include="TmxClasses\ITmxVisitor.cs" />
     <Compile Include="Viewer\PreviewImage.cs" />
   </ItemGroup>
   <ItemGroup>

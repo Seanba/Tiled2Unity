@@ -254,6 +254,16 @@ namespace Tiled2Unity
             return new PointF(p.X * s, p.Y * s);
         }
 
+        public static PointF ScalePoint(float x, float y, float s)
+        {
+            return new PointF(x * s, y * s);
+        }
+
+        public static PointF AddPointsScale(PointF a, PointF b, float scale)
+        {
+            return new PointF(a.X + b.X * scale, a.Y + b.Y * scale);
+        }
+
         public static List<PointF> GetPointsInMapSpace(TmxMap tmxMap, TmxHasPoints objectWithPoints)
         {
             PointF local = TmxMath.ObjectPointFToMapSpace(tmxMap, 0, 0);

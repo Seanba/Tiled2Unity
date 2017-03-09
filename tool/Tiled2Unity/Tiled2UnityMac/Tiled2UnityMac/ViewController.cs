@@ -328,6 +328,11 @@ namespace Tiled2UnityMac
 			// The log file location is an Apple standard
 			string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Library");
 			logPath = Path.Combine(logPath, "Logs/Tiled2UnityMac/app.log");
+
+			// Create the directory if it doesn't exist
+			var pathInfo = new FileInfo(logPath);
+			pathInfo.Directory.Create();
+
 			using (StreamWriter log = File.AppendText(logPath))
 			{
 				log.Write(text);

@@ -171,11 +171,18 @@ namespace Tiled2Unity
             return (z == -0.0f) ? 0 : z;
         }
 
-        public static float CalculateLayerDepth(int layerOrder, float tileHeight, float mapHeight)
+        public static float CalculateLayerDepth(TmxLayerNode layer)
         {
-            // Note: I don't think a layer depth of this complexity is helpful and seems to be leading to z-fighting anyhow
-            //float z = layerOrder * tileHeight / mapHeight * -1.0f;
-            float z = layerOrder * -1.0f;
+            if (!Tiled2Unity.Settings.DepthBufferEnabled)
+                return 0.0f;
+
+            float depthOfOneTile = layer.TmxMap.TileHeight / (float)layer.TmxMap.MapSizeInPixels.Height;
+            float z = layer.DepthBufferIndex * depthOfOneTile * -1.0f;
+
+            // How much is our layer offset as a function of tiles?
+            float offsetRatio = layer.Offset.Y / layer.TmxMap.TileHeight;
+            z -= offsetRatio * depthOfOneTile;
+
             return (z == -0.0f) ? 0 : z;
         }
 

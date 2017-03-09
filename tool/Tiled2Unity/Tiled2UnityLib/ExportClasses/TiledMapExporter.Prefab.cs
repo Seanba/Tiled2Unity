@@ -25,41 +25,8 @@ namespace Tiled2Unity
 
         private XElement CreatePrefabElement()
         {
-            // And example of the kind of xml element we're building
-            // Note that "layer" is overloaded. There is the concept of layers in both Tiled and Unity
-            //  <Prefab name="NameOfTmxFile">
-            //
-            //    <GameObject name="FirstLayerName tag="OptionalTagName" layer="OptionalUnityLayerName">
-            //      <GameObject Copy="[mesh_name]" />
-            //      <GameObject Copy="[another_mesh_name]" />
-            //      <GameOject name="Collision">
-            //        <PolygonCollider2D>
-            //          <Path>data for first path</Path>
-            //          <Path>data for second path</Path>
-            //        </PolygonCollider2D>
-            //      </GameOject name="Collision">
-            //    </GameObject>
-            //
-            //    <GameObject name="SecondLayerName">
-            //      <GameObject Copy="[yet_another_mesh_name]" />
-            //    </GameObject>
-            //
-            //    <GameObject name="Colliders">
-            //      <PolygonCollider2D> ...
-            //      <CircleCollider2D> ...
-            //      <BoxCollider2D>...
-            //    </GameObject>
-            //
-            //    <GameObject name="ObjectGroupName">
-            //      <GameObject name="ObjectName">
-            //          <Property name="PropertyName"> ... some custom data ...
-            //          <Property name="PropertyName"> ... some custom data ...
-            //      </GameObject>
-            //    </GameObject>
-            //
-            //  </Prefab>
-
-            Size sizeInPixels = this.tmxMap.MapSizeInPixels();
+            // Create the Xml layout for the prefab. This is imported by the Tiled2Unity scripts to build the in-game prefab.
+            Size sizeInPixels = this.tmxMap.MapSizeInPixels;
 
             XElement prefab = new XElement("Prefab");
             prefab.SetAttributeValue("name", this.tmxMap.Name);
@@ -69,7 +36,7 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("staggerIndex", this.tmxMap.StaggerIndex.ToString());
             prefab.SetAttributeValue("hexSideLength", this.tmxMap.HexSideLength);
 
-            prefab.SetAttributeValue("numLayers", this.tmxMap.Layers.Count);
+            prefab.SetAttributeValue("numLayers", this.tmxMap.EnumerateTileLayers().Count());
             prefab.SetAttributeValue("numTilesWide", this.tmxMap.Width);
             prefab.SetAttributeValue("numTilesHigh", this.tmxMap.Height);
             prefab.SetAttributeValue("tileWidth", this.tmxMap.TileWidth);
@@ -80,132 +47,157 @@ namespace Tiled2Unity
             prefab.SetAttributeValue("mapHeightInPixels", sizeInPixels.Height);
 
             // Background color ignores alpha component
-            prefab.SetAttributeValue("backgroundColor", "#" + this.tmxMap.BackgroundColor.ToArgb().ToString("x").Substring(2));
+            prefab.SetAttributeValue("backgroundColor", "#" + this.tmxMap.BackgroundColor.ToArgb().ToString("x8").Substring(2));
 
             AssignUnityProperties(this.tmxMap, prefab, PrefabContext.Root);
             AssignTiledProperties(this.tmxMap, prefab);
 
-            // We create an element for each tiled layer and add that to the prefab
+            // Add all layers (tiles, objects, groups) to the prefab
+            foreach (var node in this.tmxMap.LayerNodes)
             {
-                List<XElement> layerElements = new List<XElement>();
-                foreach (var layer in this.tmxMap.Layers)
-                {
-                    if (layer.Visible == false)
-                        continue;
-
-                    PointF offset = PointFToUnityVector(layer.Offset);
-
-                    // Is we're using depth shaders for our materials then each layer needs depth assigned to it
-                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
-                    float depth_z = 0;
-                    if (Tiled2Unity.Settings.DepthBufferEnabled && layer.SortingOrder != 0)
-                    {
-                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-                        float tileHeight = this.tmxMap.TileHeight;
-                        depth_z = CalculateLayerDepth(layer.SortingOrder, tileHeight, mapLogicalHeight);
-                    }
-
-                    XElement layerElement =
-                        new XElement("GameObject",
-                            new XAttribute("name", layer.Name),
-                            new XAttribute("x", offset.X),
-                            new XAttribute("y", offset.Y),
-                            new XAttribute("z", depth_z));
-
-                    // Add a TileLayer component
-                    {
-                        XElement layerComponent =
-                            new XElement("TileLayer",
-                                new XAttribute("offsetX", layer.Offset.X),
-                                new XAttribute("offsetY", layer.Offset.Y));
-                        layerElement.Add(layerComponent);
-                    }
-
-                    if (layer.Ignore != TmxLayer.IgnoreSettings.Visual)
-                    {
-                        // Submeshes for the layer (layer+material)
-                        var meshElements = CreateMeshElementsForLayer(layer);
-                        layerElement.Add(meshElements);
-                    }
-
-                    // Collision data for the layer
-                    if (layer.Ignore != TmxLayer.IgnoreSettings.Collision)
-                    {
-                        foreach (var collisionLayer in layer.CollisionLayers)
-                        {
-                            var collisionElements = CreateCollisionElementForLayer(collisionLayer);
-                            layerElement.Add(collisionElements);
-                        }
-                    }
-
-                    AssignUnityProperties(layer, layerElement, PrefabContext.TiledLayer);
-                    AssignTiledProperties(layer, layerElement);
-
-                    // Add the element to our list of layers
-                    layerElements.Add(layerElement);
-                }
-
-                prefab.Add(layerElements);
-            }
-
-            // Add all our object groups (may contain colliders)
-            {
-                var collidersObjectGroup = from item in this.tmxMap.ObjectGroups
-                                           where item.Visible == true
-                                           select item;
-
-                List<XElement> objectGroupElements = new List<XElement>();
-                foreach (var objGroup in collidersObjectGroup)
-                {
-                    XElement gameObject = new XElement("GameObject", new XAttribute("name", objGroup.Name));
-
-                    // Offset the object group
-                    PointF offset = PointFToUnityVector(objGroup.Offset);
-                    gameObject.SetAttributeValue("x", offset.X);
-                    gameObject.SetAttributeValue("y", offset.Y);
-
-                    // Is we're using depth shaders for our materials then each object group needs depth assigned to it
-                    // The "depth" of the layer is negative because the Unity camera is along the negative z axis
-                    float depth_z = 0;
-                    if (Tiled2Unity.Settings.DepthBufferEnabled && objGroup.SortingOrder != 0)
-                    {
-                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-                        float tileHeight = this.tmxMap.TileHeight;
-
-                        depth_z = CalculateLayerDepth(objGroup.SortingOrder, tileHeight, mapLogicalHeight);
-                    }
-
-                    gameObject.SetAttributeValue("z", depth_z);
-
-                    // Add an ObjectLayer component
-                    {
-                        XElement layerComponent =
-                            new XElement("ObjectLayer",
-                                new XAttribute("offsetX", objGroup.Offset.X),
-                                new XAttribute("offsetY", objGroup.Offset.Y),
-                                new XAttribute("color", "#" + objGroup.Color.ToArgb().ToString("x")));
-                        gameObject.Add(layerComponent);
-                    }
-
-                    AssignUnityProperties(objGroup, gameObject, PrefabContext.ObjectLayer);
-                    AssignTiledProperties(objGroup, gameObject);
-
-                    List<XElement> colliders = CreateObjectElementList(objGroup);
-                    if (colliders.Count() > 0)
-                    {
-                        gameObject.Add(colliders);
-                    }
-
-                    objectGroupElements.Add(gameObject);
-                }
-
-                if (objectGroupElements.Count() > 0)
-                {
-                    prefab.Add(objectGroupElements);
-                }
+                AddLayerNodeToElement(node, prefab);
             }
 
             return prefab;
+        }
+
+        private void AddLayerNodeToElement(TmxLayerNode node, XElement xml)
+        {
+            // Bail if the node is invisible
+            if (node.Visible == false)
+                return;
+
+            // What type of node are we dealing with?
+            if (node is TmxGroupLayer)
+            {
+                AddGroupLayerToElement(node as TmxGroupLayer, xml);
+            }
+            else if (node is TmxLayer)
+            {
+                AddTileLayerToElement(node as TmxLayer, xml);
+            }
+            else if (node is TmxObjectGroup)
+            {
+                AddObjectLayerToElement(node as TmxObjectGroup, xml);
+            }
+        }
+
+        private void AddGroupLayerToElement(TmxGroupLayer groupLayer, XElement xmlRoot)
+        {
+            // Add a game object for this grouping
+            XElement xmlGroup = new XElement("GameObject");
+            xmlGroup.SetAttributeValue("name", groupLayer.Name);
+
+            PointF offset = PointFToUnityVector(groupLayer.Offset);
+            float depth_z = CalculateLayerDepth(groupLayer);
+
+            xmlGroup.SetAttributeValue("x", offset.X);
+            xmlGroup.SetAttributeValue("y", offset.Y);
+            xmlGroup.SetAttributeValue("z", depth_z);
+
+            // Add the group layer data component
+            {
+                XElement component = new XElement("GroupLayer",
+                                        new XAttribute("opacity", groupLayer.Opacity),
+                                        new XAttribute("offset-x", groupLayer.Offset.X),
+                                        new XAttribute("offset-y", groupLayer.Offset.Y));
+                xmlGroup.Add(component);
+            }
+
+            // Add all children
+            foreach (var child in groupLayer.LayerNodes)
+            {
+                AddLayerNodeToElement(child, xmlGroup);
+            }
+
+            // Finally, add the node to the root
+            xmlRoot.Add(xmlGroup);
+        }
+
+        private void AddTileLayerToElement(TmxLayer tileLayer, XElement xmlRoot)
+        {
+            XElement xmlLayer = new XElement("GameObject");
+            xmlLayer.SetAttributeValue("name", tileLayer.Name);
+
+            // Figure out the offset for this layer
+            PointF offset = PointFToUnityVector(tileLayer.Offset);
+            float depth_z = CalculateLayerDepth(tileLayer);
+
+            xmlLayer.SetAttributeValue("x", offset.X);
+            xmlLayer.SetAttributeValue("y", offset.Y);
+            xmlLayer.SetAttributeValue("z", depth_z);
+
+            // Add a TileLayer component
+            {
+                XElement layerComponent = new XElement("TileLayer",
+                                            new XAttribute("opacity", tileLayer.Opacity),
+                                            new XAttribute("offsetX", tileLayer.Offset.X),
+                                            new XAttribute("offsetY", tileLayer.Offset.Y));
+
+                xmlLayer.Add(layerComponent);
+            }
+
+            if (tileLayer.Ignore != TmxLayer.IgnoreSettings.Visual)
+            {
+                // Submeshes for the layer (layer+material)
+                var meshElements = CreateMeshElementsForLayer(tileLayer);
+                xmlLayer.Add(meshElements);
+            }
+
+            // Collision data for the layer
+            if (tileLayer.Ignore != TmxLayer.IgnoreSettings.Collision)
+            {
+                foreach (var collisionLayer in tileLayer.CollisionLayers)
+                {
+                    var collisionElements = CreateCollisionElementForLayer(collisionLayer);
+                    xmlLayer.Add(collisionElements);
+                }
+            }
+
+            // Assign and special properties
+            AssignUnityProperties(tileLayer, xmlLayer, PrefabContext.TiledLayer);
+            AssignTiledProperties(tileLayer, xmlLayer);
+
+            // Finally, add the layer to our root
+            xmlRoot.Add(xmlLayer);
+        }
+
+        private void AddObjectLayerToElement(TmxObjectGroup objectLayer, XElement xmlRoot)
+        {
+            XElement gameObject = new XElement("GameObject");
+            gameObject.SetAttributeValue("name", objectLayer.Name);
+
+
+            // Offset the object layer
+            PointF offset = PointFToUnityVector(objectLayer.Offset);
+            float depth_z = CalculateLayerDepth(objectLayer);
+
+            gameObject.SetAttributeValue("x", offset.X);
+            gameObject.SetAttributeValue("y", offset.Y);
+            gameObject.SetAttributeValue("z", depth_z);
+
+            // Add an ObjectLayer component
+            {
+                XElement layerComponent = new XElement("ObjectLayer",
+                                            new XAttribute("offsetX", objectLayer.Offset.X),
+                                            new XAttribute("offsetY", objectLayer.Offset.Y),
+                                            new XAttribute("color", "#" + objectLayer.Color.ToArgb().ToString("x8")));
+
+                gameObject.Add(layerComponent);
+            }
+
+            // Assign special properties
+            AssignUnityProperties(objectLayer, gameObject, PrefabContext.ObjectLayer);
+            AssignTiledProperties(objectLayer, gameObject);
+
+            List<XElement> colliders = CreateObjectElementList(objectLayer);
+            if (colliders.Count() > 0)
+            {
+                gameObject.Add(colliders);
+            }
+
+            // Add to our root
+            xmlRoot.Add(gameObject);
         }
 
         private List<XElement> CreateObjectElementList(TmxObjectGroup objectGroup)
@@ -234,9 +226,18 @@ namespace Tiled2Unity
                 }
 
                 XElement objElement = null;
+                XElement objComponent = new XElement("TmxObjectComponent",
+                                            new XAttribute("tmx-object-id", tmxObject.Id),
+                                            new XAttribute("tmx-object-name", tmxObject.Name),
+                                            new XAttribute("tmx-object-type", tmxObject.Type),
+                                            new XAttribute("tmx-object-x", tmxObject.Position.X),
+                                            new XAttribute("tmx-object-y", tmxObject.Position.Y),
+                                            new XAttribute("tmx-object-width", tmxObject.Size.Width),
+                                            new XAttribute("tmx-object-height", tmxObject.Size.Height),
+                                            new XAttribute("tmx-object-rotation", tmxObject.Rotation));
 
                 // Do not create colliders if the are being ignored. (Still want to creat the game object though)
-                bool ignoringCollisions = (objectGroup.Ignore == TmxLayerBase.IgnoreSettings.Collision);
+                bool ignoringCollisions = (objectGroup.Ignore == TmxLayerNode.IgnoreSettings.Collision);
 
                 if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
@@ -249,36 +250,43 @@ namespace Tiled2Unity
                     {
                         objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                     }
+
+                    // Set object component type
+                    objComponent.Name = "RectangleObjectComponent";
                 }
                 else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
                     objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, objectGroup.Name);
+
+                    // Set the component type
+                    objComponent.Name = "CircleObjectComponent";
                 }
                 else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
                     objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
+
+                    // Set the component type
+                    objComponent.Name = "PolygonObjectComponent";
                 }
                 else if (!ignoringCollisions && tmxObject.GetType() == typeof(TmxObjectPolyline))
                 {
                     objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
+
+                    // Set the component type
+                    objComponent.Name = "PolylineObjectComponent";
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
                     TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
 
                     // Apply z-cooridnate for use with the depth buffer
-                    // (Again, this is complicated by the fact that object tiles position is WRT the bottom edge of a tile)
                     if (Tiled2Unity.Settings.DepthBufferEnabled)
                     {
-                        float mapLogicalHeight = this.tmxMap.MapSizeInPixels().Height;
-                        float tileLogicalHeight = this.tmxMap.TileHeight;
-                        float logicalPos_y = (-pos.Y / Tiled2Unity.Settings.Scale) - tileLogicalHeight;
-
-                        float depth_z = CalculateFaceDepth(logicalPos_y, mapLogicalHeight);
+                        float depth_z = CalculateFaceDepth(tmxObjectTile.Position.Y, tmxMap.MapSizeInPixels.Height);
                         xmlObject.SetAttributeValue("z", depth_z);
                     }
 
-                    AddTileObjectElements(tmxObjectTile, xmlObject);
+                    AddTileObjectElements(tmxObjectTile, xmlObject, objComponent);
                 }
                 else
                 {
@@ -287,6 +295,7 @@ namespace Tiled2Unity
 
                 if (objElement != null)
                 {
+                    xmlObject.Add(objComponent);
                     xmlObject.Add(objElement);
                 }
 
@@ -305,8 +314,8 @@ namespace Tiled2Unity
                 XElement xmlMesh = new XElement("GameObject",
                     new XAttribute("name", mesh.ObjectName),
                     new XAttribute("copy", mesh.UniqueMeshName),
-                    new XAttribute("sortingLayerName", layer.SortingLayerName),
-                    new XAttribute("sortingOrder", layer.SortingOrder),
+                    new XAttribute("sortingLayerName", layer.GetSortingLayerName()),
+                    new XAttribute("sortingOrder", layer.GetSortingOrder()),
                     new XAttribute("opacity", layer.Opacity));
                 xmlMeshes.Add(xmlMesh);
 
@@ -536,7 +545,7 @@ namespace Tiled2Unity
             return edgeCollider;
         }
 
-        private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot)
+        private void AddTileObjectElements(TmxObjectTile tmxObjectTile, XElement xmlTileObjectRoot, XElement objComponent)
         {
             // TileObjects can be scaled (this is separate from vertex scaling)
             SizeF scale = tmxObjectTile.GetTileObjectScale();
@@ -558,12 +567,14 @@ namespace Tiled2Unity
             // We combine the properties of the tile that is referenced and add it to our own properties
             AssignTiledProperties(tmxObjectTile.Tile, xmlTileObjectRoot);
 
-            // Add a TileObject component for scripting purposes
+            // Treat ObjectComponent as a TileObjectComponent scripting purposes
             {
-                XElement xmlTileObjectComponent = new XElement("TileObjectComponent");
-                xmlTileObjectComponent.SetAttributeValue("width", tmxObjectTile.Tile.TileSize.Width * scale.Width * Tiled2Unity.Settings.Scale);
-                xmlTileObjectComponent.SetAttributeValue("height", tmxObjectTile.Tile.TileSize.Height * scale.Height * Tiled2Unity.Settings.Scale);
-                xmlTileObjectRoot.Add(xmlTileObjectComponent);
+                objComponent.Name = "TileObjectComponent";
+                objComponent.SetAttributeValue("tmx-tile-flip-horizontal", tmxObjectTile.FlippedHorizontal);
+                objComponent.SetAttributeValue("tmx-tile-flip-vertical", tmxObjectTile.FlippedVertical);
+                objComponent.SetAttributeValue("width", tmxObjectTile.Tile.TileSize.Width * scale.Width * Tiled2Unity.Settings.Scale);
+                objComponent.SetAttributeValue("height", tmxObjectTile.Tile.TileSize.Height * scale.Height * Tiled2Unity.Settings.Scale);
+                xmlTileObjectRoot.Add(objComponent);
             }
 
             // Child node positions game object to match center of tile so can flip along x and y axes
@@ -590,7 +601,7 @@ namespace Tiled2Unity
             this.tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
 
             // Only add colliders if collisions are not being ignored
-            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Collision)
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerNode.IgnoreSettings.Collision)
             {
                 foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
                 {
@@ -633,7 +644,7 @@ namespace Tiled2Unity
             // Add a child for each mesh
             // (The child node is needed due to animation)
             // (Only add meshes if visuals are not being ignored)
-            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerBase.IgnoreSettings.Visual)
+            if (tmxObjectTile.ParentObjectGroup.Ignore != TmxLayerNode.IgnoreSettings.Visual)
             {
                 foreach (var mesh in tmxObjectTile.Tile.Meshes)
                 {
@@ -642,8 +653,8 @@ namespace Tiled2Unity
                     xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
                     xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
 
-                    xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.SortingLayerName ?? tmxObjectTile.ParentObjectGroup.SortingLayerName);
-                    xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.SortingOrder ?? tmxObjectTile.ParentObjectGroup.SortingOrder);
+                    xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.GetSortingLayerName());
+                    xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.GetSortingOrder());
 
                     // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
                     // Put another way: This translation moves away from center to local origin

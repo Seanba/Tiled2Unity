@@ -26,7 +26,7 @@ namespace Tiled2Unity
             foreach (var importComponent in ImportBehaviour.EnumerateImportBehaviors_ByWaitingMaterial(asset))
             {
                 // The material has finished loading. Keep track of that status.
-                if (!importComponent.ImportComplete_Materials.Contains(asset))
+                if (!importComponent.ImportComplete_Materials.Contains(asset, StringComparer.OrdinalIgnoreCase))
                 {
                     importComponent.ImportComplete_Materials.Add(asset);
                 }
@@ -93,7 +93,7 @@ namespace Tiled2Unity
                 string materialFile = System.IO.Path.GetFileName(materialPath);
 
                 // Keep track that we importing this material
-                if (!importComponent.ImportWait_Materials.Contains(materialFile))
+                if (!importComponent.ImportWait_Materials.Contains(materialFile, StringComparer.OrdinalIgnoreCase))
                 {
                     importComponent.ImportWait_Materials.Add(materialFile);
                 }
@@ -123,7 +123,7 @@ namespace Tiled2Unity
                 string materialFile = System.IO.Path.GetFileName(materialPath);
 
                 // Keep track that we importing this material
-                if (!importComponent.ImportWait_Materials.Contains(materialFile))
+                if (!importComponent.ImportWait_Materials.Contains(materialFile, StringComparer.OrdinalIgnoreCase))
                 {
                     importComponent.ImportWait_Materials.Add(materialFile);
                 }
