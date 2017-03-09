@@ -205,9 +205,6 @@
     <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayer.cs">
       <Link>Tiled2UnityLib\TmxClasses\TmxLayer.cs</Link>
     </Compile>
-    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayerBase.cs">
-      <Link>Tiled2UnityLib\TmxClasses\TmxLayerBase.cs</Link>
-    </Compile>
     <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxMap.Xml.cs">
       <Link>Tiled2UnityLib\TmxClasses\TmxMap.Xml.cs</Link>
     </Compile>
@@ -330,6 +327,21 @@
     </Compile>
     <Compile Include="..\..\Tiled2UnityLib\IGenericDatabase.cs">
       <Link>Tiled2UnityLib\IGenericDatabase.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayerNode.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxLayerNode.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxLayerNode.Xml.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxLayerNode.Xml.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\ITmxVisitor.cs">
+      <Link>Tiled2UnityLib\TmxClasses\ITmxVisitor.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxDisplayOrderVisitor.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxDisplayOrderVisitor.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tiled2UnityLib\TmxClasses\TmxGroupLayer.cs">
+      <Link>Tiled2UnityLib\TmxClasses\TmxGroupLayer.cs</Link>
     </Compile>
   </ItemGroup>
   <ItemGroup>
