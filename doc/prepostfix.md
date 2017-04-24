@@ -2,6 +2,7 @@
 
 **Note:** This feature was added with Tiled2Unity 1.0.11.0
 
+It is always a good idea to give all your resources (textures, map files, etc.) a unique name. This will ensure Tiled2Unity cleanly imports your Tiled Map Editor maps into a funtional prefab when exported.
 
 One common problem occurs when you have *different* textures that share the *same* filename. By default, Tiled2Unity will export those textures over each other leading to some visual bugs.
 
