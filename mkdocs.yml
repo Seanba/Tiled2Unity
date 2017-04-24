@@ -2,5 +2,6 @@ site_name: Tiled2Unity
 docs_dir: doc
 pages:
 - 'index.md'
-- 'getting-started.md'
+- 'Getting Started' : 'getting-started.md'
+- 'Dealing With Texture Name Collisions' : 'prepostfix.md'
 theme: readthedocs
