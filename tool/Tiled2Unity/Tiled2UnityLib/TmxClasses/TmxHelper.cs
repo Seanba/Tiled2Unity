@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -187,66 +186,8 @@ namespace Tiled2Unity
             }
             catch
             {
-                return Color.HotPink;
+                return Color.FromArgb(255, 0, 255);
             }
         }
-
-        // Prefer 32bpp bitmaps as they are at least 2x faster at Graphics.DrawImage functions
-        // Note that 32bppPArgb is not properly supported on Mac builds.
-        public static Bitmap CreateBitmap32bpp(int width, int height)
-        {
-#if TILED2UNITY_MAC
-            return new Bitmap(width, height);
-#else
-            return new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-#endif
-        }
-
-        public static Bitmap FromFileBitmap32bpp(string file)
-        {
-            Bitmap bitmapRaw = (Bitmap)Bitmap.FromFile(file);
-
-#if TILED2UNITY_MAC
-            return bitmapRaw;
-#else
-            // Need to copy the bitmap into our 32bpp surface
-            Bitmap bitmapPArgb = TmxHelper.CreateBitmap32bpp(bitmapRaw.Width, bitmapRaw.Height);
-
-            using (Graphics g = Graphics.FromImage(bitmapPArgb))
-            {
-                g.DrawImage(bitmapRaw, 0, 0, bitmapPArgb.Width, bitmapPArgb.Height);
-            }
-
-            return bitmapPArgb;
-#endif
-        }
-
-#if !TILED_2_UNITY_LITE
-        // Helper function to create Layer collider brush. Note that Mac does not support Hatch brushes.
-        public static Brush CreateLayerColliderBrush(Color color)
-        {
-#if TILED2UNITY_MAC
-            // On Mac we can use a solid brush with some alpha
-            return new SolidBrush(Color.FromArgb(100, color));
-#else
-            return new HatchBrush(HatchStyle.Percent60, color, Color.Transparent);
-#endif
-        }
-#endif
-
-#if !TILED_2_UNITY_LITE
-        // Helper function to create Object collider brush. Note that Mac does not support Hatch brushes.
-        public static Brush CreateObjectColliderBrush(Color color)
-        {
-            Color secondary = Color.FromArgb(100, color);
-#if TILED2UNITY_MAC
-            // On Mac we can use a solid brush with some alpha
-            return new SolidBrush(secondary);
-#else
-            return new HatchBrush(HatchStyle.BackwardDiagonal, color, secondary);
-#endif
-        }
-#endif
-
     }
 }

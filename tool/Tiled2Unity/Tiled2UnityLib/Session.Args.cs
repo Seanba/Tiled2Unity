@@ -161,6 +161,8 @@ namespace Tiled2Unity
             Logger.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
             Logger.WriteLine("  unity:resource (value = [false|true])");
             Logger.WriteLine("  unity:resourcePath");
+            Logger.WriteLine("  unity:namePrefix (Add to tileset properties to prefix material names with this string.");
+            Logger.WriteLine("  unity:namePostfix (Add to tileset properties to postfix material names with this string.");
             Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
             Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");

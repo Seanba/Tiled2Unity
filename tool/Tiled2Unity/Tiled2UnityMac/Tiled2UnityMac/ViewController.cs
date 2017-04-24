@@ -9,6 +9,7 @@ using System.Text;
 
 using AppKit;
 using Foundation;
+using SkiaSharp;
 
 namespace Tiled2UnityMac
 {
@@ -359,10 +360,17 @@ namespace Tiled2UnityMac
 			path += Path.GetRandomFileName();
 			path += ".png";
 
-			using (Bitmap image = Tiled2Unity.Viewer.PreviewImage.CreateBitmap(this.tmxSession.TmxMap, 1.0f))
+			using (SKBitmap bitmap = Tiled2Unity.Viewer.PreviewImage.CreatePreviewBitmap(this.tmxSession.TmxMap))
+			using (var image = SKImage.FromBitmap(bitmap))
+			using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
 			{
-				image.Save(path);	
+				// save the data to a stream
+				using (var stream = File.OpenWrite(path))
+				{
+					data.SaveTo(stream);
+				}
 			}
+
 
 			string args = String.Format("-a Preview \"{0}\"", path);
 			RunConsoleCommand("open", args);

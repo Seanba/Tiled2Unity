@@ -26,24 +26,31 @@ namespace Tiled2UnityLite_Builder
             }
             catch (Exception e)
             {
-                Console.WriteLine("Error writing Tiled2UnityLite: {0}", e.Message);
+                Console.Error.WriteLine("Error writing Tiled2UnityLite!\n{0}", e.Message);
                 return 1;
             }
-            
+
             return 0;
         }
 
         static private void WriteZip(string version)
         {
             Console.WriteLine("Writing zip for Tiled2UnityLite distribution");
+
             string file = String.Format("Tiled2UnityLite-{0}.zip", version);
             string unityPackage = String.Format("Tiled2Unity.{0}.unitypackage", version);
+
+            if (!File.Exists(unityPackage))
+            {
+                string message = String.Format("Cannot find Unity package. Within Unity select 'Tiled2Unity -> Export Tiled2Unity Library...' to export {0} to this directory and try again.", unityPackage);
+                throw new Exception(message);
+            }
 
             if (File.Exists(file))
             {
                 File.Delete(file);
             }
-            
+
             using (ZipArchive zip = ZipFile.Open(file, ZipArchiveMode.Create))
             {
                 zip.CreateEntryFromFile(unityPackage, unityPackage);
@@ -52,9 +59,9 @@ namespace Tiled2UnityLite_Builder
         }
 
         static private void WriteCS(string version)
-        {        
+        {
             Console.WriteLine("Creating Tiled2UnityLite script for use with CS-Script");
-            
+
             // If the filename contains this string in its path then it is ignored and not part of Tiled2UnityLite
             List<string> ignoreFiles = new List<string>();
             ignoreFiles.Add("AssemblyInfo");
@@ -63,6 +70,7 @@ namespace Tiled2UnityLite_Builder
             ignoreFiles.Add("PreviewImage.cs");
 
             List<string> keepers = new List<string>();
+
             foreach (string file in Directory.GetFiles("../Tiled2UnityLib/", "*.cs", SearchOption.AllDirectories))
             {
                 if (!ignoreFiles.Any(i => file.Contains(i)))
@@ -80,11 +88,13 @@ namespace Tiled2UnityLite_Builder
             ignoreReferences.Add("Microsoft.");
             ignoreReferences.Add("System.Deployment");
             ignoreReferences.Add("NDesk.Options");
+            ignoreReferences.Add("SkiaSharp");
 
             // Need to crack open the project file to find all the library refences used
             List<string> references = new List<string>();
             XDocument xmlDoc = XDocument.Load("../Tiled2UnityLib/Tiled2UnityLib.csproj");
             XNamespace ns = xmlDoc.Root.Name.Namespace;
+
             foreach (XElement reference in xmlDoc.Descendants(ns + "Reference"))
             {
                 string library = reference.Attribute("Include").Value;
@@ -101,6 +111,7 @@ namespace Tiled2UnityLite_Builder
             List<string> ignoreUsers = new List<string>();
             ignoreUsers.Add("NDesk.Options");
             ignoreUsers.Add("System.Drawing.Drawing2D");
+            ignoreUsers.Add("SkiaSharp");
             ignoreUsers.Add("Real = ");
 
             // Start collecting lines/data for our generated script file
@@ -197,7 +208,6 @@ using Real = System.Single;
             // Write the body out
             t2uWriter.WriteLine(body.ToString());
 
-            
             // Write out Tiled2UnityLite to file
             Console.WriteLine("Writing Tiled2UnityLite.cs");
             File.WriteAllText("Tiled2UnityLite.cs", t2uWriter.ToString());
@@ -207,7 +217,7 @@ using Real = System.Single;
         {
             // Get the version from the exe
             FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(@"..\src\bin\x64\Release\Tiled2UnityLib.dll");
-            return versionInfo.ProductVersion;            
+            return versionInfo.ProductVersion;
         }
 
         static public void WriteMainProgramFile(StringWriter writer, string version)
@@ -248,4 +258,3 @@ namespace Tiled2Unity
         }
     }
 }
-

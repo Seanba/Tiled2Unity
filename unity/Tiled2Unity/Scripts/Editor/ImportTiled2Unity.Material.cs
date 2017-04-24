@@ -120,9 +120,17 @@ namespace Tiled2Unity
                 string textureAsset = ImportUtils.GetAttributeAsString(xmlInternal, "assetPath");
                 string textureFile = System.IO.Path.GetFileName(textureAsset);
                 string materialPath = MakeMaterialAssetPath(textureFile, isResource);
+
+                // "Internal textures" may have a unique material name that goes with it
+                string uniqueMaterialName = ImportUtils.GetAttributeAsString(xmlInternal, "materialName", "");
+                if (!String.IsNullOrEmpty(uniqueMaterialName))
+                {
+                    materialPath = String.Format("{0}/{1}{2}", Path.GetDirectoryName(materialPath), uniqueMaterialName, Path.GetExtension(materialPath));
+                }
+
                 string materialFile = System.IO.Path.GetFileName(materialPath);
 
-                // Keep track that we importing this material
+                // Keep track that we are importing this material
                 if (!importComponent.ImportWait_Materials.Contains(materialFile, StringComparer.OrdinalIgnoreCase))
                 {
                     importComponent.ImportWait_Materials.Add(materialFile);

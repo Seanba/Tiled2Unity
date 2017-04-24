@@ -70,9 +70,16 @@ namespace Tiled2Unity
                 this.TmxMap = TmxMap.LoadFromFile(this.TmxFilePath);
 
                 // Load the Object Type Xml file if it exists
-                if (File.Exists(Tiled2Unity.Settings.ObjectTypeXml))
+                if (!String.IsNullOrEmpty(Tiled2Unity.Settings.ObjectTypeXml))
                 {
-                    this.TmxMap.LoadObjectTypeXml(Tiled2Unity.Settings.ObjectTypeXml);
+                    if (File.Exists(Tiled2Unity.Settings.ObjectTypeXml))
+                    {
+                        this.TmxMap.LoadObjectTypeXml(Tiled2Unity.Settings.ObjectTypeXml);
+                    }
+                    else
+                    {
+                        Logger.WriteError("Object Type Xml files does not exist: '{0}'", Tiled2Unity.Settings.ObjectTypeXml);
+                    }
                 }
             }
             catch (TmxException tmx)

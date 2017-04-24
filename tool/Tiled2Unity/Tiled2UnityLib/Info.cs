@@ -21,8 +21,8 @@ namespace Tiled2Unity
         public static string GetVersion()
         {
 #if TILED2UNITY_MAC
-			var info = NSBundle.MainBundle.ObjectForInfoDictionary ("CFBundleShortVersionString");
-			return info.ToString();
+            var info = NSBundle.MainBundle.ObjectForInfoDictionary ("CFBundleShortVersionString");
+            return info.ToString();
 #else
             var thisAss = Assembly.GetExecutingAssembly();
             AssemblyName name = new AssemblyName(thisAss.FullName);

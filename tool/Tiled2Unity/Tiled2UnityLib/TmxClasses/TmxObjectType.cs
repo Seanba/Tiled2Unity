@@ -17,7 +17,7 @@ namespace Tiled2Unity
         public TmxObjectType()
         {
             this.Name = "";
-            this.Color = Color.Gray;
+            this.Color = Color.FromArgb(128, 128, 128);
             this.Properties = new Dictionary<string, TmxObjectTypeProperty>();
         }
 
@@ -26,7 +26,7 @@ namespace Tiled2Unity
             TmxObjectType tmxObjectType = new TmxObjectType();
 
             tmxObjectType.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
-            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.Gray);
+            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
             tmxObjectType.Properties = TmxObjectTypeProperty.FromObjectTypeXml(xml);
 
             return tmxObjectType;

@@ -183,9 +183,6 @@ namespace Tiled2Unity
                 // Does this game object have a layer?
                 AssignLayerTo(child, goXml, importComponent);
 
-                // Are there any custom properties?
-                HandleCustomProperties(child, goXml, customImporters);
-
                 // Set scale and rotation *after* children are added otherwise Unity will have child+parent transform cancel each other out
                 float sx = ImportUtils.GetAttributeAsFloat(goXml, "scaleX", 1.0f);
                 float sy = ImportUtils.GetAttributeAsFloat(goXml, "scaleY", 1.0f);
@@ -196,6 +193,9 @@ namespace Tiled2Unity
                 Vector3 localRotation = new Vector3();
                 localRotation.z = -ImportUtils.GetAttributeAsFloat(goXml, "rotation", 0);
                 child.transform.eulerAngles = localRotation;
+
+                // Are there any custom properties? (This comes last - after all transformations have taken place.)
+                HandleCustomProperties(child, goXml, customImporters);
             }
         }
 

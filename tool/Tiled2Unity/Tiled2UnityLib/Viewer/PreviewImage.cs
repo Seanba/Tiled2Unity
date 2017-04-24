@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
-
 using System.Linq;
 using System.Text;
-
+using SkiaSharp;
 
 namespace Tiled2Unity.Viewer
 {
@@ -16,20 +13,54 @@ namespace Tiled2Unity.Viewer
         private static readonly int MaxPreviewTilesWide = 256;
         private static readonly int MaxPreviewTilesHigh = 256;
 
-        public static Bitmap CreateBitmap(TmxMap tmxMap, float scale)
+        private static float Scale { get; set; } = 1.0f;
+
+        private static float InvScale
+        {
+            get
+            {
+                return 1.0f / PreviewImage.Scale;
+            }
+        }
+
+        private static float StrokeWidthThin
+        {
+            get
+            {
+                return PreviewImage.InvScale;
+            }
+        }
+
+        private static float StrokeWidthThick
+        {
+            get
+            {
+                return StrokeWidthThin * 3.0f;
+            }
+        }
+
+        public static SKBitmap CreatePreviewBitmap(TmxMap tmxMap)
+        {
+            return CreatePreviewBitmap(tmxMap, 1.0f);
+        }
+
+        public static SKBitmap CreatePreviewBitmap(TmxMap tmxMap, float scale)
         {
             SummaryReport report = new SummaryReport();
             report.Capture("Previewing");
 
+            // Set our scale to be used throughout the image
+            Scale = scale;
+
             // What is the boundary of the bitmap we are creating?
-            RectangleF bounds = CalculateBoundary(tmxMap);
-            Bitmap bitmap = null;
+            SKRect bounds = CalculateBoundary(tmxMap);
+            SKBitmap bitmap = null;
 
             try
             {
-                int width = (int)Math.Ceiling(bounds.Width * scale) + 1;
-                int height = (int)Math.Ceiling(bounds.Height * scale) + 1;
-                bitmap = TmxHelper.CreateBitmap32bpp(width, height);
+                int width = (int)Math.Ceiling(bounds.Width * scale);
+                int height = (int)Math.Ceiling(bounds.Height * scale);
+                bitmap = new SKBitmap(width, height);
             }
             catch (System.ArgumentException)
             {
@@ -38,48 +69,45 @@ namespace Tiled2Unity.Viewer
                 warning.AppendLine("Image will be constructed on a 1024x1024 canvas. Parts of your map may be cropped.");
                 Logger.WriteWarning(warning.ToString());
 
-                bitmap = TmxHelper.CreateBitmap32bpp(1024, 1024);
+                bitmap = new SKBitmap(1024, 1024);
             }
 
-            using (Pen pen = new Pen(Color.Black, 1.0f))
-            using (Graphics g = Graphics.FromImage(bitmap))
+            using (SKCanvas canvas = new SKCanvas(bitmap))
+            using (SKPaint paint = new SKPaint())
+            using (new SKAutoCanvasRestore(canvas))
             {
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-#if !TILED2UNITY_MAC
-                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-#endif
+                // Apply scale then translate
+                canvas.Clear(SKColors.WhiteSmoke);
+                canvas.Scale(scale, scale);
+                canvas.Translate(-bounds.Left, -bounds.Top);
 
-                g.ScaleTransform(scale, scale);
-
-                g.FillRectangle(Brushes.WhiteSmoke, 0, 0, bounds.Width, bounds.Height);
-                g.DrawRectangle(pen, 1, 1, bounds.Width - 1, bounds.Height - 1);
-
-                g.TranslateTransform(-bounds.X, -bounds.Y);
-                DrawBackground(g, tmxMap);
-                DrawGrid(g, tmxMap, scale);
-
-                DrawAllTilesInLayerNodes(g, tmxMap, tmxMap.LayerNodes);
-                DrawAllCollidersInLayerNodes(g, tmxMap, tmxMap.LayerNodes, scale);
+                // Draw all the elements of the previewer
+                DrawBackground(canvas, bounds);
+                DrawGrid(canvas, tmxMap);
+                DrawAllTilesInLayerNodes(canvas, tmxMap, tmxMap.LayerNodes);
+                DrawAllCollidersInLayerNodes(canvas, tmxMap, tmxMap.LayerNodes);
             }
 
             report.Report();
             return bitmap;
         }
 
-        private static RectangleF CalculateBoundary(TmxMap tmxMap)
+        private static SKRect CalculateBoundary(TmxMap tmxMap)
         {
-            RectangleF rcMap = new RectangleF(Point.Empty, tmxMap.MapSizeInPixels);
+            SKRect rcMap = SKRect.Create(0, 0, tmxMap.MapSizeInPixels.Width, tmxMap.MapSizeInPixels.Height);
 
             // Any tile layers in the map can be offset
             var tileLayerBounds = from layer in tmxMap.EnumerateTileLayers()
                                   where layer.Visible == true
-                                  select new RectangleF(layer.GetCombinedOffset(), rcMap.Size);
+                                  let offset = layer.GetCombinedOffset()
+                                  select SKRect.Create(offset.X, offset.Y, rcMap.Size.Width, rcMap.Size.Height);
 
             // Take boundaries from object groups
             var objBounds = from g in tmxMap.EnumerateObjectLayers()
                             from o in g.Objects
                             where o.Visible == true
-                            select o.GetOffsetWorldBounds();
+                            let b = o.GetOffsetWorldBounds()
+                            select SKRect.Create(b.X, b.Y, b.Width, b.Height);
 
             // Take boundaries from objects embedded in tiles
             var tileBounds = from layer in tmxMap.EnumerateTileLayers()
@@ -92,10 +120,10 @@ namespace Tiled2Unity.Viewer
                              from o in tile.ObjectGroup.Objects
                              let bound = o.GetOffsetWorldBounds()
                              let point = TmxMath.TileCornerInScreenCoordinates(tmxMap, x, y)
-                             select new RectangleF(bound.X + point.X, bound.Y + point.Y, bound.Width, bound.Height);
+                             select SKRect.Create(bound.X + point.X, bound.Y + point.Y, bound.Width, bound.Height);
 
             var allBounds = tileLayerBounds.Concat(objBounds).Concat(tileBounds);
-            var union = allBounds.Aggregate(rcMap, RectangleF.Union);
+            var union = allBounds.Aggregate(rcMap, SKRect.Union);
 
             // Inflate a tile size to make room for the grid
             union.Inflate(tmxMap.TileWidth, tmxMap.TileHeight);
@@ -105,28 +133,36 @@ namespace Tiled2Unity.Viewer
         }
 
 
-        private static void DrawBackground(Graphics g, TmxMap tmxMap)
+        private static void DrawBackground(SKCanvas canvas, SKRect bounds)
         {
             // Draw the background for the map
-            // A full white background is preferred because of the colliders we draw on the top of the layers
-            Size size = tmxMap.MapSizeInPixels;
-            Rectangle rect = new Rectangle(Point.Empty, size);
-            g.FillRectangle(Brushes.White, rect);
+            using (SKPaint paint = new SKPaint())
+            {
+                paint.Color = SKColors.WhiteSmoke;
+                paint.Style = SKPaintStyle.Fill;
+                canvas.DrawRect(bounds, paint);
+
+                paint.Color = SKColors.Black;
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = StrokeWidthThin;
+                paint.IsAntialias = true;
+                canvas.DrawRect(bounds, paint);
+            }
         }
 
-        private static void DrawGrid(Graphics g, TmxMap tmxMap, float scale)
+        private static void DrawGrid(SKCanvas canvas, TmxMap tmxMap)
         {
             if (tmxMap.Orientation == TmxMap.MapOrientation.Hexagonal)
             {
-                DrawGridHex(g, tmxMap);
+                DrawGridHex(canvas, tmxMap);
             }
             else
             {
-                DrawGridQuad(g, tmxMap, scale);
+                DrawGridQuad(canvas, tmxMap);
             }
         }
 
-        private static void DrawGridQuad(Graphics g, TmxMap tmxMap, float scale)
+        private static void DrawGridQuad(SKCanvas canvas, TmxMap tmxMap)
         {
             HashSet<Point> points = new HashSet<Point>();
             for (int x = 0; x < GetMaxTilesWide(tmxMap); ++x)
@@ -181,23 +217,22 @@ namespace Tiled2Unity.Viewer
                 }
             }
 
-            // Can take for granted that background is always white
-            float invScale = 1.0f / scale;
-            List<RectangleF> rectangles = new List<RectangleF>(points.Count);
-            foreach (var p in points)
+            // Can take for granted that background is always white in drawing black rectangles
+            using (SKPaint paint = new SKPaint())
             {
-                RectangleF rc = new RectangleF(p.X, p.Y, PreviewImage.GridSize * invScale, PreviewImage.GridSize * invScale);
-                rc.Offset(-PreviewImage.GridSize * 0.5f * invScale, -PreviewImage.GridSize * 0.5f * invScale);
-                rectangles.Add(rc);
-            }
-
-            using (Pen pen = new Pen(Brushes.Black, invScale))
-            {
-                g.DrawRectangles(pen, rectangles.ToArray());
+                paint.Color = SKColors.Black;
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = StrokeWidthThin;
+                foreach (var p in points)
+                {
+                    SKRect rc = SKRect.Create(p.X, p.Y, PreviewImage.GridSize, PreviewImage.GridSize);
+                    rc.Offset(-PreviewImage.GridSize * 0.5f, -PreviewImage.GridSize * 0.5f);
+                    canvas.DrawRect(rc, paint);
+                }
             }
         }
 
-        private static void DrawGridHex(Graphics g, TmxMap tmxMap)
+        private static void DrawGridHex(SKCanvas canvas, TmxMap tmxMap)
         {
             // Our collection of points to render
             HashSet<Point> points = new HashSet<Point>();
@@ -342,16 +377,22 @@ namespace Tiled2Unity.Viewer
                 }
             }
 
-            foreach (var p in points)
+            using (SKPaint paint = new SKPaint())
             {
-                RectangleF rc = new RectangleF(p.X, p.Y, PreviewImage.GridSize, PreviewImage.GridSize);
-                rc.Offset(-PreviewImage.GridSize * 0.5f, -PreviewImage.GridSize * 0.5f);
+                foreach (var p in points)
+                {
+                    SKRect rc = SKRect.Create(p.X, p.Y, PreviewImage.GridSize, PreviewImage.GridSize);
+                    rc.Offset(-PreviewImage.GridSize * 0.5f, -PreviewImage.GridSize * 0.5f);
 
-                g.DrawRectangle(Pens.Black, rc.X, rc.Y, rc.Width, rc.Height);
+                    paint.Style = SKPaintStyle.Stroke;
+                    paint.StrokeWidth = StrokeWidthThin;
+                    paint.Color = SKColors.Black;
+                    canvas.DrawRect(rc, paint);
+                }
             }
         }
 
-        private static void DrawAllTilesInLayerNodes(Graphics g, TmxMap tmxMap, List<TmxLayerNode> layerNodes)
+        private static void DrawAllTilesInLayerNodes(SKCanvas canvas, TmxMap tmxMap, List<TmxLayerNode> layerNodes)
         {
             foreach (var node in layerNodes)
             {
@@ -362,156 +403,151 @@ namespace Tiled2Unity.Viewer
                     continue;
 
                 // Translate by the offset
-                GraphicsState state = g.Save();
-                g.TranslateTransform(node.Offset.X, node.Offset.Y);
+                using (new SKAutoCanvasRestore(canvas))
+                {
+                    canvas.Translate(node.Offset.X, node.Offset.Y);
 
-                if (node.GetType() == typeof(TmxLayer))
-                {
-                    DrawTilesInTileLayer(g, tmxMap, node as TmxLayer);
+                    if (node.GetType() == typeof(TmxLayer))
+                    {
+                        DrawTilesInTileLayer(canvas, tmxMap, node as TmxLayer);
+                    }
+                    else if (node.GetType() == typeof(TmxObjectGroup))
+                    {
+                        DrawTilesInObjectGroup(canvas, tmxMap, node as TmxObjectGroup);
+                    }
+                    else if (node.GetType() == typeof(TmxGroupLayer))
+                    {
+                        DrawAllTilesInLayerNodes(canvas, tmxMap, node.LayerNodes);
+                    }
                 }
-                else if (node.GetType() == typeof(TmxObjectGroup))
-                {
-                    DrawTilesInObjectGroup(g, tmxMap, node as TmxObjectGroup);
-                }
-                else if (node.GetType() == typeof(TmxGroupLayer))
-                {
-                    DrawAllTilesInLayerNodes(g, tmxMap, node.LayerNodes);
-                }
-
-                g.Restore(state);
             }
         }
 
-        private static void DrawTilesInTileLayer(Graphics g, TmxMap tmxMap, TmxLayer layer)
+        private static void DrawTilesInTileLayer(SKCanvas canvas, TmxMap tmxMap, TmxLayer layer)
         {
-            // Set the opacity for the layer (Not supported on Mac builds)
-#if !TILED2UNITY_MAC
-            ColorMatrix colorMatrix = new ColorMatrix();
-            colorMatrix.Matrix33 = layer.Opacity;
+            using (SKPaint paint = new SKPaint())
+            {
+                // Set the opacity for the layer
+                paint.Color = SKColors.White.WithAlpha((byte)(layer.Opacity * byte.MaxValue));
 
-            ImageAttributes imageAttributes = new ImageAttributes();
-            imageAttributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-#endif
-            // The range of x and y depends on the render order of the tiles
-            // By default we draw right and down but may reverse the tiles we visit
-            var range_x = Enumerable.Range(0, GetMaxTilesWide(layer));
-            var range_y = Enumerable.Range(0, GetMaxTilesHigh(layer));
+                // The range of x and y depends on the render order of the tiles
+                // By default we draw right and down but may reverse the tiles we visit
+                var range_x = Enumerable.Range(0, GetMaxTilesWide(layer));
+                var range_y = Enumerable.Range(0, GetMaxTilesHigh(layer));
 
-            if (tmxMap.DrawOrderHorizontal == -1)
-                range_x = range_x.Reverse();
+                if (tmxMap.DrawOrderHorizontal == -1)
+                    range_x = range_x.Reverse();
 
-            if (tmxMap.DrawOrderVertical == -1)
-                range_y = range_y.Reverse();
+                if (tmxMap.DrawOrderVertical == -1)
+                    range_y = range_y.Reverse();
 
-            // Visit the tiles we are going to draw
-            var tiles = from y in range_y
-                        from x in range_x
-                        let rawTileId = layer.GetRawTileIdAt(x, y)
-                        let tileId = layer.GetTileIdAt(x, y)
-                        where tileId != 0
+                // Visit the tiles we are going to draw
+                var tiles = from y in range_y
+                            from x in range_x
+                            let rawTileId = layer.GetRawTileIdAt(x, y)
+                            let tileId = layer.GetTileIdAt(x, y)
+                            where tileId != 0
 
-                        let tile = tmxMap.Tiles[tileId]
+                            let tile = tmxMap.Tiles[tileId]
 
-                        // Support for animated tiles. Just show the first frame of the animation.
-                        let frame = tmxMap.Tiles[tile.Animation.Frames[0].GlobalTileId]
+                            // Support for animated tiles. Just show the first frame of the animation.
+                            let frame = tmxMap.Tiles[tile.Animation.Frames[0].GlobalTileId]
 
-                        select new
+                            select new
+                            {
+                                Tile = frame,
+                                Position = tmxMap.GetMapPositionAt(x, y, frame),
+                                Bitmap = frame.TmxImage.ImageBitmap,
+                                IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
+                                IsFlippedHorizontally = TmxMath.IsTileFlippedHorizontally(rawTileId),
+                                IsFlippedVertically = TmxMath.IsTileFlippedVertically(rawTileId),
+                            };
+
+                foreach (var t in tiles)
+                {
+                    PointF location = t.Position;
+
+                    // Individual tiles may be larger than the given tile size of the overall map
+                    location.Y = (t.Position.Y - t.Tile.TileSize.Height) + tmxMap.TileHeight;
+
+                    using (new SKAutoCanvasRestore(canvas))
+                    {
+                        bool flip_h = t.IsFlippedHorizontally;
+                        bool flip_v = t.IsFlippedVertically;
+                        bool flip_d = t.IsFlippedDiagnoally;
+
+                        // Move to the center of the tile on location and perform and transforms
+                        SKPoint center = new SKPoint(t.Tile.TileSize.Width * 0.5f, t.Tile.TileSize.Height * 0.5f);
+                        canvas.Translate(center.X, center.Y);
+                        canvas.Translate(location.X, location.Y);
+
+                        // Flip transformations (logic taken from Tiled source: maprenderer.cpp)
                         {
-                            Tile = frame,
-                            Position = TmxMath.TileCornerInScreenCoordinates(tmxMap, x, y),
-                            Bitmap = frame.TmxImage.ImageBitmap,
-                            IsFlippedDiagnoally = TmxMath.IsTileFlippedDiagonally(rawTileId),
-                            IsFlippedHorizontally = TmxMath.IsTileFlippedHorizontally(rawTileId),
-                            IsFlippedVertically = TmxMath.IsTileFlippedVertically(rawTileId),
-                        };
+                            // If we're flipping diagonally then rotate 90 degrees and reverse h/v flip flags
+                            float rotate = 0;
+                            if (flip_d)
+                            {
+                                rotate = 90;
+                                flip_h = t.IsFlippedVertically;
+                                flip_v = !t.IsFlippedHorizontally;
+                            }
 
-            PointF[] destPoints = new PointF[4];
-            PointF[] destPoints3 = new PointF[3];
-            foreach (var t in tiles)
-            {
-                PointF location = t.Position;
+                            // Scale based on flip flags
+                            float scale_x = flip_h ? -1.0f : 1.0f;
+                            float scale_y = flip_v ? -1.0f : 1.0f;
 
-                // Individual tiles may be larger than the given tile size of the overall map
-                location.Y = (t.Position.Y - t.Tile.TileSize.Height) + tmxMap.TileHeight;
+                            canvas.Scale(scale_x, scale_y);
+                            canvas.RotateDegrees(rotate);
+                        }
 
-                // Take tile offset into account
-                location.X += t.Tile.Offset.X;
-                location.Y += t.Tile.Offset.Y;
+                        // Move us back out of the center
+                        canvas.Translate(-center.X, -center.Y);
 
-                // Make up the 'quad' of texture points and transform them
-                PointF center = new PointF(t.Tile.TileSize.Width * 0.5f, t.Tile.TileSize.Height * 0.5f);
-                destPoints[0] = new Point(0, 0);
-                destPoints[1] = new Point(t.Tile.TileSize.Width, 0);
-                destPoints[2] = new Point(t.Tile.TileSize.Width, t.Tile.TileSize.Height);
-                destPoints[3] = new Point(0, t.Tile.TileSize.Height);
-
-                // Transform the points based on our flipped flags
-                TmxMath.TransformPoints(destPoints, center, t.IsFlippedDiagnoally, t.IsFlippedHorizontally, t.IsFlippedVertically);
-
-                // Put the destination points back into world space
-                TmxMath.TranslatePoints(destPoints, location);
-
-                // Stupid DrawImage function only takes 3 destination points otherwise it throws an exception
-                destPoints3[0] = destPoints[0];
-                destPoints3[1] = destPoints[1];
-                destPoints3[2] = destPoints[3];
-
-                // Draw the tile
-                Rectangle source = new Rectangle(t.Tile.LocationOnSource, t.Tile.TileSize);
-#if !TILED2UNITY_MAC
-                g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel, imageAttributes);
-#else
-                g.DrawImage(t.Bitmap, destPoints3, source, GraphicsUnit.Pixel);
-#endif
-            }
-        }
-
-        private static void DrawTilesInObjectGroup(Graphics g, TmxMap tmxMap, TmxObjectGroup objectGroup)
-        {
-            // Get opacity in eventually
-#if !TILED2UNITY_MAC
-            ColorMatrix colorMatrix = new ColorMatrix();
-            colorMatrix.Matrix33 = objectGroup.Opacity;
-
-            ImageAttributes imageAttributes = new ImageAttributes();
-            imageAttributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-#endif
-
-            foreach (var tmxObject in objectGroup.Objects)
-            {
-                if (!tmxObject.Visible)
-                    continue;
-
-                TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
-                if (tmxObjectTile == null)
-                    continue;
-
-                GraphicsState state = g.Save();
-                PointF xfPosition = TmxMath.ObjectPointFToMapSpace(tmxMap, tmxObject.Position);
-                g.TranslateTransform(xfPosition.X, xfPosition.Y);
-                g.RotateTransform(tmxObject.Rotation);
-                {
-                    GraphicsState tileState = g.Save();
-                    PrepareTransformForTileObject(g, tmxMap, tmxObjectTile);
-
-                    // Draw the tile
-                    Rectangle destination = new Rectangle(0, -tmxObjectTile.Tile.TileSize.Height, tmxObjectTile.Tile.TileSize.Width, tmxObjectTile.Tile.TileSize.Height);
-                    Rectangle source = new Rectangle(tmxObjectTile.Tile.LocationOnSource, tmxObjectTile.Tile.TileSize);
-                    //g.DrawRectangle(Pens.Black, destination);
-
-#if !TILED2UNITY_MAC
-                    g.DrawImage(tmxObjectTile.Tile.TmxImage.ImageBitmap, destination, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel, imageAttributes);
-#else
-                    g.DrawImage(tmxObjectTile.Tile.TmxImage.ImageBitmap, destination, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel);
-#endif
-
-                    g.Restore(tileState);
+                        // Draw the tile
+                        SKRect dest = SKRect.Create(0, 0, t.Tile.TileSize.Width, t.Tile.TileSize.Height);
+                        SKRect source = SKRect.Create(t.Tile.LocationOnSource.X, t.Tile.LocationOnSource.Y, t.Tile.TileSize.Width, t.Tile.TileSize.Height);
+                        canvas.DrawBitmap(t.Bitmap, source, dest, paint);
+                    }
                 }
-                g.Restore(state);
             }
         }
 
-        private static void DrawAllCollidersInLayerNodes(Graphics g, TmxMap tmxMap, List<TmxLayerNode> layerNodes, float scale)
+        private static void DrawTilesInObjectGroup(SKCanvas canvas, TmxMap tmxMap, TmxObjectGroup objectGroup)
+        {
+            using (SKPaint paint = new SKPaint())
+            {
+                // Draw with the given opacity
+                paint.Color = SKColors.White.WithAlpha((byte)(objectGroup.Opacity * byte.MaxValue));
+
+                foreach (var tmxObject in objectGroup.Objects)
+                {
+                    if (!tmxObject.Visible)
+                        continue;
+
+                    TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
+                    if (tmxObjectTile == null)
+                        continue;
+
+                    using (new SKAutoCanvasRestore(canvas))
+                    {
+                        PointF xfPosition = TmxMath.ObjectPointFToMapSpace(tmxMap, tmxObject.Position);
+                        canvas.Translate(xfPosition.X, xfPosition.Y);
+                        canvas.RotateDegrees(tmxObject.Rotation);
+                        using (new SKAutoCanvasRestore(canvas))
+                        {
+                            PrepareTransformForTileObject(canvas, tmxMap, tmxObjectTile);
+
+                            // Draw the tile
+                            SKRect destination = new RectangleF(0, -tmxObjectTile.Tile.TileSize.Height, tmxObjectTile.Tile.TileSize.Width, tmxObjectTile.Tile.TileSize.Height).ToSKRect();
+                            SKRect source = new RectangleF(tmxObjectTile.Tile.LocationOnSource, tmxObjectTile.Tile.TileSize).ToSKRect();
+                            canvas.DrawBitmap(tmxObjectTile.Tile.TmxImage.ImageBitmap, source, destination, paint);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void DrawAllCollidersInLayerNodes(SKCanvas canvas, TmxMap tmxMap, List<TmxLayerNode> layerNodes)
         {
             foreach (var node in layerNodes)
             {
@@ -521,28 +557,27 @@ namespace Tiled2Unity.Viewer
                 if (node.Ignore == TmxLayerNode.IgnoreSettings.True)
                     continue;
 
-                // Set the offset
-                GraphicsState state = g.Save();
-                g.TranslateTransform(node.Offset.X, node.Offset.Y);
+                // Set the offset for the node and draw
+                using (new SKAutoCanvasRestore(canvas))
                 {
+                    canvas.Translate(node.Offset.X, node.Offset.Y);
                     if (node is TmxLayer)
                     {
-                        DrawTileLayerColliders(g, tmxMap, node as TmxLayer, scale);
+                        DrawTileLayerColliders(canvas, tmxMap, node as TmxLayer);
                     }
                     else if (node is TmxObjectGroup)
                     {
-                        DrawObjectLayerColliders(g, tmxMap, node as TmxObjectGroup);
+                        DrawObjectLayerColliders(canvas, tmxMap, node as TmxObjectGroup);
                     }
                     else if (node is TmxLayerNode)
                     {
-                        DrawAllCollidersInLayerNodes(g, tmxMap, node.LayerNodes, scale);
+                        DrawAllCollidersInLayerNodes(canvas, tmxMap, node.LayerNodes);
                     }
                 }
-                g.Restore(state);
             }
         }
 
-        private static void DrawTileLayerColliders(Graphics g, TmxMap tmxMap, TmxLayer tileLayer, float scale)
+        private static void DrawTileLayerColliders(SKCanvas canvas, TmxMap tmxMap, TmxLayer tileLayer)
         {
             // Bail if this layer is ignoring collision
             if (tileLayer.Ignore == TmxLayerNode.IgnoreSettings.Collision)
@@ -552,59 +587,67 @@ namespace Tiled2Unity.Viewer
             {
                 TmxObjectType type = tmxMap.ObjectTypes.GetValueOrDefault(collisionLayer.Name);
 
-                Color lineColor = type.Color;
-                Color polyColor = Color.FromArgb(128, lineColor);
-                DrawCollisionLayer(g, collisionLayer, polyColor, lineColor, scale);
+                SKColor lineColor = new SKColor(type.Color.R, type.Color.B, type.Color.B);
+                SKColor polyColor = new SKColor(type.Color.R, type.Color.B, type.Color.B, 128);
+                DrawCollisionLayer(canvas, collisionLayer, polyColor, lineColor);
             }
         }
 
-        private static void DrawCollisionLayer(Graphics g, TmxLayer tmxLayer, Color polyColor, Color lineColor, float scale)
+        private static void DrawCollisionLayer(SKCanvas canvas, TmxLayer tmxLayer, SKColor polyColor, SKColor lineColor)
         {
             LayerClipper.TransformPointFunc xfFunc = (x, y) => new ClipperLib.IntPoint(x, y);
             LayerClipper.ProgressFunc progFunc = (prog) => { }; // do nothing
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(tmxLayer.TmxMap, tmxLayer, xfFunc, progFunc);
 
-            float inverseScale = 1.0f / scale;
-            if (inverseScale > 1)
-                inverseScale = 1;
-
-            using (GraphicsPath path = new GraphicsPath())
-            using (Pen pen = new Pen(lineColor, 2.0f * inverseScale))
-            using (Brush brush = TmxHelper.CreateLayerColliderBrush(polyColor))
+            using (SKPaint paint = new SKPaint())
             {
                 // Draw all closed polygons
                 // First, add them to the path
                 // (But are we using convex polygons are complex polygons?
-                var polygons = tmxLayer.IsExportingConvexPolygons() ? LayerClipper.SolutionPolygons_Simple(solution) : LayerClipper.SolutionPolygons_Complex(solution);
-                foreach (var pointfArray in polygons)
+                using (SKPath path = new SKPath())
                 {
-                    path.AddPolygon(pointfArray);
-                }
+                    var polygons = tmxLayer.IsExportingConvexPolygons() ? LayerClipper.SolutionPolygons_Simple(solution) : LayerClipper.SolutionPolygons_Complex(solution);
+                    foreach (var pointfArray in polygons)
+                    {
+                        var pts = pointfArray.ToSkPointArray();
+                        path.AddPoly(pts, true);
+                    }
 
-                // Then, fill and draw the path full of polygons
-                if (path.PointCount > 0)
-                {
-                    g.FillPath(brush, path);
-                    g.DrawPath(pen, path);
+                    // Then, fill and draw the path full of polygons
+                    if (path.PointCount > 0)
+                    {
+                        paint.Style = SKPaintStyle.Fill;
+                        paint.Color = polyColor;
+                        canvas.DrawPath(path, paint);
+
+                        paint.Style = SKPaintStyle.Stroke;
+                        paint.StrokeWidth = StrokeWidthThick;
+                        paint.Color = lineColor;
+                        canvas.DrawPath(path, paint);
+                    }
                 }
 
                 // Draw all lines (open polygons)
-                path.Reset();
-                foreach (var points in ClipperLib.Clipper.OpenPathsFromPolyTree(solution))
+                using (SKPath path = new SKPath())
                 {
-                    var pointfs = points.Select(pt => new PointF(pt.X, pt.Y));
-                    path.StartFigure();
-                    path.AddLines(pointfs.ToArray());
-                }
-                if (path.PointCount > 0)
-                {
-                    g.DrawPath(pen, path);
+                    foreach (var points in ClipperLib.Clipper.OpenPathsFromPolyTree(solution))
+                    {
+                        var pts = points.Select(pt => new SKPoint(pt.X, pt.Y)).ToArray();
+                        path.AddPoly(pts, false);
+                    }
+                    if (path.PointCount > 0)
+                    {
+                        paint.Style = SKPaintStyle.Stroke;
+                        paint.StrokeWidth = StrokeWidthThick;
+                        paint.Color = lineColor;
+                        canvas.DrawPath(path, paint);
+                    }
                 }
             }
         }
 
-        private static void DrawObjectLayerColliders(Graphics g, TmxMap tmxMap, TmxObjectGroup objectLayer)
+        private static void DrawObjectLayerColliders(SKCanvas canvas, TmxMap tmxMap, TmxObjectGroup objectLayer)
         {
             foreach (var obj in objectLayer.Objects)
             {
@@ -628,174 +671,201 @@ namespace Tiled2Unity.Viewer
                 if (objectLayer.Ignore == TmxLayerNode.IgnoreSettings.Collision)
                 {
                     // We're ignoring collisions but the game object is still a part of the map.
-                    DrawObjectMarker(g, tmxMap, obj, objColor);
+                    if (!(obj is TmxObjectTile))
+                    {
+                        DrawObjectMarker(canvas, tmxMap, obj, objColor.ToSKColor());
+                    }
                 }
                 else
                 {
-                    DrawObjectCollider(g, tmxMap, obj, objColor);
+                    DrawObjectCollider(canvas, tmxMap, obj, objColor.ToSKColor());
                 }
             }
         }
 
-        private static void DrawObjectMarker(Graphics g, TmxMap tmxMap, TmxObject tmxObject, Color color)
+        private static void DrawObjectMarker(SKCanvas canvas, TmxMap tmxMap, TmxObject tmxObject, SKColor color)
         {
-            using (Pen pen = new Pen(color))
+            using (new SKAutoCanvasRestore(canvas))
+            using (SKPaint paint = new SKPaint())
             {
-                GraphicsState state = g.Save();
-
                 PointF xfPosition = TmxMath.ObjectPointFToMapSpace(tmxMap, tmxObject.Position);
-                g.TranslateTransform(xfPosition.X, xfPosition.Y);
-                g.RotateTransform(tmxObject.Rotation);
+                canvas.Translate(xfPosition.X, xfPosition.Y);
 
-                Rectangle rc = new Rectangle(-2, -2, 4, 4);
-                g.DrawEllipse(pen, rc);
-                g.Restore(state);
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = StrokeWidthThick;
+                paint.Color = color;
+                canvas.DrawCircle(0, 0, 2, paint);
             }
         }
 
-        private static void PrepareTransformForTileObject(Graphics g, TmxMap tmxMap, TmxObjectTile tmxObjectTile)
+        private static void PrepareTransformForTileObject(SKCanvas canvas, TmxMap tmxMap, TmxObjectTile tmxObjectTile)
         {
             // Isometric tiles are off by a half-width
             if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
             {
-                g.TranslateTransform(-tmxObjectTile.Tile.TileSize.Width * 0.5f, 0);
+                canvas.Translate(-tmxObjectTile.Tile.TileSize.Width * 0.5f, 0);
             }
 
             // Apply scale
             {
                 // Move to "local origin" of tile and scale
                 float toCenter_x = (tmxMap.Orientation == TmxMap.MapOrientation.Isometric) ? (tmxObjectTile.Tile.TileSize.Width * 0.5f) : 0.0f;
-                g.TranslateTransform(toCenter_x, 0);
+                canvas.Translate(toCenter_x, 0);
                 {
                     SizeF scale = tmxObjectTile.GetTileObjectScale();
-                    g.ScaleTransform(scale.Width, scale.Height);
+                    canvas.Scale(scale.Width, scale.Height);
                 }
 
                 // Move back
-                g.TranslateTransform(-toCenter_x, 0);
+                canvas.Translate(-toCenter_x, 0);
             }
 
             // Apply horizontal flip
             if (tmxObjectTile.FlippedHorizontal)
             {
-                g.TranslateTransform(tmxObjectTile.Tile.TileSize.Width, 0);
-                g.ScaleTransform(-1, 1);
+                canvas.Translate(tmxObjectTile.Tile.TileSize.Width, 0);
+                canvas.Scale(-1, 1);
             }
 
             // Apply vertical flip
             if (tmxObjectTile.FlippedVertical)
             {
-                g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
-                g.ScaleTransform(1, -1);
+                canvas.Translate(0, -tmxObjectTile.Tile.TileSize.Height);
+                canvas.Scale(1, -1);
             }
         }
 
-        private static void DrawObjectCollider(Graphics g, TmxMap tmxMap, TmxObject tmxObject, Color color)
+        private static void DrawObjectCollider(SKCanvas canvas, TmxMap tmxMap, TmxObject tmxObject, SKColor color)
         {
-            using (Brush brush = TmxHelper.CreateObjectColliderBrush(color))
-            using (Pen pen = new Pen(color))
+            using (new SKAutoCanvasRestore(canvas))
+            using (SKPaint paint = new SKPaint())
             {
-                GraphicsState state = g.Save();
-
                 PointF xfPosition = TmxMath.ObjectPointFToMapSpace(tmxMap, tmxObject.Position);
-                g.TranslateTransform(xfPosition.X, xfPosition.Y);
-                g.RotateTransform(tmxObject.Rotation);
+                canvas.Translate(xfPosition.ToSKPoint());
+                canvas.RotateDegrees(tmxObject.Rotation);
 
                 if (tmxObject.GetType() == typeof(TmxObjectPolygon))
                 {
-                    DrawPolygon(g, pen, brush, tmxMap, tmxObject as TmxObjectPolygon);
+                    DrawPolygon(canvas, color, tmxMap, tmxObject as TmxObjectPolygon);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                 {
                     if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
                         TmxObjectPolygon tmxIsometricRectangle = TmxObjectPolygon.FromRectangle(tmxMap, tmxObject as TmxObjectRectangle);
-                        DrawPolygon(g, pen, brush, tmxMap, tmxIsometricRectangle);
+                        DrawPolygon(canvas, color, tmxMap, tmxIsometricRectangle);
                     }
                     else
                     {
                         // Rectangles are polygons
-                        DrawPolygon(g, pen, brush, tmxMap, tmxObject as TmxObjectPolygon);
+                        DrawPolygon(canvas, color, tmxMap, tmxObject as TmxObjectPolygon);
                     }
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                 {
-                    DrawEllipse(g, pen, brush, tmxMap, tmxObject as TmxObjectEllipse);
+                    DrawEllipse(canvas, color, tmxMap, tmxObject as TmxObjectEllipse);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
                 {
-                    DrawPolyline(g, pen, tmxMap, tmxObject as TmxObjectPolyline);
+                    DrawPolyline(canvas, color, tmxMap, tmxObject as TmxObjectPolyline);
                 }
                 else if (tmxObject.GetType() == typeof(TmxObjectTile))
                 {
-                    GraphicsState tileState = g.Save();
-
-                    TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
-                    PrepareTransformForTileObject(g, tmxMap, tmxObjectTile);
-
-                    // Draw the collisions
-                    // Temporarily set orienation to Orthogonal for tile colliders
-                    TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
-                    tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
+                    using (new SKAutoCanvasRestore(canvas))
                     {
-                        // Make up for the fact that the bottom-left corner is the origin
-                        g.TranslateTransform(0, -tmxObjectTile.Tile.TileSize.Height);
-                        foreach (var obj in tmxObjectTile.Tile.ObjectGroup.Objects)
-                        {
-                            DrawObjectCollider(g, tmxMap, obj, Color.Gray);
-                        }
-                    }
-                    tmxMap.Orientation = restoreOrientation;
+                        TmxObjectTile tmxObjectTile = tmxObject as TmxObjectTile;
+                        PrepareTransformForTileObject(canvas, tmxMap, tmxObjectTile);
 
-                    g.Restore(tileState);
+                        // Draw the collisions
+                        // Temporarily set orienation to Orthogonal for tile colliders
+                        TmxMap.MapOrientation restoreOrientation = tmxMap.Orientation;
+                        tmxMap.Orientation = TmxMap.MapOrientation.Orthogonal;
+                        {
+                            // Make up for the fact that the bottom-left corner is the origin
+                            canvas.Translate(0, -tmxObjectTile.Tile.TileSize.Height);
+                            foreach (var obj in tmxObjectTile.Tile.ObjectGroup.Objects)
+                            {
+                                TmxObjectType type = tmxMap.ObjectTypes.GetValueOrDefault(obj.Type);
+                                DrawObjectCollider(canvas, tmxMap, obj, type.Color.ToSKColor());
+                            }
+                        }
+                        tmxMap.Orientation = restoreOrientation;
+                    }
                 }
                 else
                 {
-                    g.Restore(state);
                     Logger.WriteWarning("Unhandled object: {0}", tmxObject.GetNonEmptyName());
                 }
-
-                // Restore our state
-                g.Restore(state);
             }
         }
 
-        private static void DrawPolygon(Graphics g, Pen pen, Brush brush, TmxMap tmxMap, TmxObjectPolygon tmxPolygon)
+        private static void DrawPolygon(SKCanvas canvas, SKColor color, TmxMap tmxMap, TmxObjectPolygon tmxPolygon)
         {
-            var points = TmxMath.GetPointsInMapSpace(tmxMap, tmxPolygon).ToArray();
-            g.FillPolygon(brush, points);
-            g.DrawPolygon(pen, points);
+            using (SKPaint paint = new SKPaint())
+            using (SKPath path = new SKPath())
+            {
+                var points = TmxMath.GetPointsInMapSpace(tmxMap, tmxPolygon).ToSkPointArray();
+                path.AddPoly(points);
+
+                paint.Style = SKPaintStyle.Fill;
+                paint.StrokeWidth = StrokeWidthThick;
+                paint.Color = color.WithAlpha(128);
+                canvas.DrawPath(path, paint);
+
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = StrokeWidthThick;
+                paint.Color = color;
+                canvas.DrawPath(path, paint);
+            }
         }
 
-        private static void DrawPolyline(Graphics g, Pen pen, TmxMap tmxMap, TmxObjectPolyline tmxPolyline)
+        private static void DrawPolyline(SKCanvas canvas, SKColor color, TmxMap tmxMap, TmxObjectPolyline tmxPolyline)
         {
-            var points = TmxMath.GetPointsInMapSpace(tmxMap, tmxPolyline).ToArray();
-            g.DrawLines(pen, points);
+            using (SKPaint paint = new SKPaint())
+            using (SKPath path = new SKPath())
+            {
+                var points = TmxMath.GetPointsInMapSpace(tmxMap, tmxPolyline).ToSkPointArray();
+                path.AddPoly(points, false);
+
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = StrokeWidthThick;
+                paint.Color = color;
+                canvas.DrawPath(path, paint);
+            }
         }
 
-        private static void DrawEllipse(Graphics g, Pen pen, Brush brush, TmxMap tmxMap, TmxObjectEllipse tmxEllipse)
+        private static void DrawEllipse(SKCanvas canvas, SKColor color, TmxMap tmxMap, TmxObjectEllipse tmxEllipse)
         {
-            RectangleF rc = new RectangleF(new PointF(0, 0), tmxEllipse.Size);
-            if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
-            {
-                // Circles and ellipses not supported in Insometric mode
-                g.FillEllipse(Brushes.Red, rc);
-                g.DrawEllipse(Pens.White, rc);
+            SKRect rc = new SKRect(0, 0, tmxEllipse.Size.Width, tmxEllipse.Size.Height);
+            SKColor stroke = color;
+            SKColor fill = color.WithAlpha(128);
 
-                Logger.WriteWarning(" Not supported (isometric): {0}", tmxEllipse.GetNonEmptyName());
-            }
-            else if (!tmxEllipse.IsCircle())
+            using (SKPaint paint = new SKPaint())
+            using (SKPath path = new SKPath())
             {
-                // We don't really support ellipses, especially as colliders
-                g.FillEllipse(Brushes.Red, rc);
-                g.DrawEllipse(Pens.White, rc);
+                if (tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
+                {
+                    // Circles and ellipses not supported in Insometric mode
+                    stroke = SKColors.Black;
+                    fill = SKColors.Red;
+                    Logger.WriteWarning("Circles/Ellipses not supported in isometric mode: {0}", tmxEllipse.GetNonEmptyName());
+                }
+                else if (!tmxEllipse.IsCircle())
+                {
+                    stroke = SKColors.Black;
+                    fill = SKColors.Red;
+                    Logger.WriteWarning("Object is an ellipse and will be ignored (only circles supported): {0}", tmxEllipse.GetNonEmptyName());
+                }
+                path.AddOval(rc);
 
-                Logger.WriteWarning(" Not supported (ellipse): {0}", tmxEllipse.GetNonEmptyName());
-            }
-            else
-            {
-                g.FillEllipse(brush, rc);
-                g.DrawEllipse(pen, rc);
+                paint.Style = SKPaintStyle.Fill;
+                paint.Color = fill;
+                canvas.DrawPath(path, paint);
+
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = StrokeWidthThick;
+                paint.Color = stroke;
+                canvas.DrawPath(path, paint);
             }
         }
 
@@ -817,6 +887,35 @@ namespace Tiled2Unity.Viewer
         private static int GetMaxTilesHigh(TmxLayer layer)
         {
             return Math.Min(layer.Height, MaxPreviewTilesHigh);
+        }
+    }
+
+    // Helper extenstions
+    public static class SkiaSharpExtentions
+    {
+        public static SKPoint ToSKPoint(this System.Drawing.PointF point)
+        {
+            return new SKPoint(point.X, point.Y);
+        }
+
+        public static SKPointI ToSKPoint(this System.Drawing.Point point)
+        {
+            return new SKPointI(point.X, point.Y);
+        }
+
+        public static SKRect ToSKRect(this System.Drawing.RectangleF rect)
+        {
+            return new SKRect(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        }
+
+        public static SKColor ToSKColor(this System.Drawing.Color color)
+        {
+            return (SKColor)(uint)color.ToArgb();
+        }
+
+        public static SKPoint[] ToSkPointArray(this IEnumerable<PointF> points)
+        {
+            return points.Select(p => p.ToSKPoint()).ToArray();
         }
 
     }

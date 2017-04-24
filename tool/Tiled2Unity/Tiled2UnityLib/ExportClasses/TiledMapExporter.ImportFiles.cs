@@ -102,6 +102,7 @@ namespace Tiled2Unity
 
                         // Path to texture in the asset directory
                         xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
+                        xmlInternalTexture.SetAttributeValue("materialName", image.ImageName);
 
                         // Transparent color key?
                         if (!String.IsNullOrEmpty(image.TransparentColor))
@@ -150,7 +151,8 @@ namespace Tiled2Unity
                         }
 
                         // Bake the image file into the xml
-                        xmlImportTexture.Add(new XAttribute("filename", Path.GetFileName(image.AbsolutePath)), FileToBase64String(image.AbsolutePath));
+                        string filename = image.ImageName + Path.GetExtension(image.AbsolutePath);
+                        xmlImportTexture.Add(new XAttribute("filename", filename), FileToBase64String(image.AbsolutePath));
 
                         elements.Add(xmlImportTexture);
                     }

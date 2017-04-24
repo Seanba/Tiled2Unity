@@ -101,6 +101,8 @@ namespace Tiled2Unity
         public Point GetMapPositionAt(int x, int y, TmxTile tile)
         {
             Point point = GetMapPositionAt(x, y);
+            point.X += (int)tile.Offset.X;
+            point.Y += (int)tile.Offset.Y;
 
             // The tile may have different dimensions than the cells of the map so correct for that
             // In this case, the y-position needs to be adjusted
@@ -173,6 +175,12 @@ namespace Tiled2Unity
         // Load an Object Type Xml file for this map's objects to reference
         public void LoadObjectTypeXml(string xmlPath)
         {
+            if (String.IsNullOrEmpty(xmlPath))
+            {
+                Logger.WriteLine("Object Type XML file is not being used.");
+                return;
+            }
+
             Logger.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
 
             try
@@ -187,6 +195,7 @@ namespace Tiled2Unity
             catch (Exception e)
             {
                 Logger.WriteError("Error parsing Object Type Xml file: {0}\n{1}", xmlPath, e.Message);
+                Logger.WriteError("Stack:\n{0}", e.StackTrace);
                 this.ObjectTypes = new TmxObjectTypes();
             }
 

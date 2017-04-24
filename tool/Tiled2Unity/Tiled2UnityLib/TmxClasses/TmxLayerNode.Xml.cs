@@ -32,7 +32,7 @@ namespace Tiled2Unity
                 }
 
                 // If the layer is visible then add it to our list
-                if (layerNode != null && layerNode.Visible)
+                if (layerNode != null && layerNode.Visible && layerNode.Ignore != IgnoreSettings.True)
                 {
                     nodes.Add(layerNode);
                 }

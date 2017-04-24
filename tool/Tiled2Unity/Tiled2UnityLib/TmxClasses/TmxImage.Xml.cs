@@ -6,15 +6,17 @@ using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using SkiaSharp;
 
 namespace Tiled2Unity
 {
     partial class TmxImage
     {
-        public static TmxImage FromXml(XElement elemImage)
+        public static TmxImage FromXml(XElement elemImage, string prefix, string postfix)
         {
             TmxImage tmxImage = new TmxImage();
             tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
+            tmxImage.ImageName = String.Format("{0}{1}{2}", prefix, Path.GetFileNameWithoutExtension(tmxImage.AbsolutePath), postfix);
 
             // Get default image size in case we are not opening the file
             {
@@ -23,33 +25,18 @@ namespace Tiled2Unity
                 tmxImage.Size = new System.Drawing.Size(width, height);
             }
 
-            // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
+            // Do not open the image in Tiled2UnityLite (no SkiaSharp in Tiled2UnityLite)
 #if !TILED_2_UNITY_LITE
             if (!Tiled2Unity.Settings.IsAutoExporting)
             {
                 try
                 {
-                    tmxImage.ImageBitmap = TmxHelper.FromFileBitmap32bpp(tmxImage.AbsolutePath);
+                    tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
                 }
                 catch (FileNotFoundException fnf)
                 {
                     string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
                     throw new TmxException(msg, fnf);
-
-                    // Testing for when image files are missing. Just make up an image.
-                    //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-                    //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
-                    //tmxImage.ImageBitmap = new TmxHelper.CreateBitmap32bpp(width, height);
-                    //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
-                    //{
-                    //    int color32 = tmxImage.AbsolutePath.GetHashCode();
-                    //    Color color = Color.FromArgb(color32);
-                    //    color = Color.FromArgb(255, color);
-                    //    using (Brush brush = new SolidBrush(color))
-                    //    {
-                    //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
-                    //    }
-                    //}
                 }
 
                 tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
@@ -62,8 +49,21 @@ namespace Tiled2Unity
 #if !TILED_2_UNITY_LITE
             if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
-                System.Drawing.Color transColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
-                tmxImage.ImageBitmap.MakeTransparent(transColor);
+                System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
+
+                // Set the transparent pixels if using color-keying
+                SKColor transColor = new SKColor((uint)systemTransColor.ToArgb()).WithAlpha(0);
+                for (int x = 0; x < tmxImage.ImageBitmap.Width; ++x)
+                {
+                    for (int y = 0; y < tmxImage.ImageBitmap.Height; ++y)
+                    {
+                        SKColor pixel = tmxImage.ImageBitmap.GetPixel(x, y);
+                        if (pixel.Red == transColor.Red && pixel.Green == transColor.Green && pixel.Blue == transColor.Blue)
+                        {
+                            tmxImage.ImageBitmap.SetPixel(x, y, transColor);
+                        }
+                    }
+                }
             }
 #endif
 

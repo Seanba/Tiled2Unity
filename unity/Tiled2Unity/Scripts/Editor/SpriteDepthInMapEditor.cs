@@ -9,7 +9,7 @@ using UnityEngine;
 namespace Tiled2Unity
 {
     [CustomEditor(typeof(SpriteDepthInMap))]
-    public class SpriteDepthInMapEditor : Editor
+    public class SpriteDepthInMapEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {

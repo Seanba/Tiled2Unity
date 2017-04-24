@@ -158,10 +158,15 @@ namespace Tiled2Unity
 
             IList<TmxTile> tilesToAdd = new List<TmxTile>();
 
+            // Get proerties on tileset
+            TmxProperties properties = TmxProperties.FromXml(elemTileset);
+            string prefix = properties.GetPropertyValueAsString("unity:namePrefix", "");
+            string postfix = properties.GetPropertyValueAsString("unity:namePostfix", "");
+
             // Tilesets may have an image for all tiles within it, or it may have an image per tile
             if (elemTileset.Element("image") != null)
             {
-                TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"));
+                TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"), prefix, postfix);
 
                 // Create all the tiles
                 // This is a bit complicated because of spacing and margin
@@ -185,7 +190,7 @@ namespace Tiled2Unity
                 // Each tile will have it's own image
                 foreach (var t in elemTileset.Elements("tile"))
                 {
-                    TmxImage tmxImage = TmxImage.FromXml(t.Element("image"));
+                    TmxImage tmxImage = TmxImage.FromXml(t.Element("image"), prefix, postfix);
 
                     uint localId = (uint)tilesToAdd.Count();
 
@@ -252,7 +257,11 @@ namespace Tiled2Unity
                 return;
             }
 
-            TmxImage tmxImage = TmxImage.FromXml(xmlImage);
+            TmxProperties properties = TmxProperties.FromXml(elemImageLayer);
+            string prefix = properties.GetPropertyValueAsString("unity:namePrefix", "");
+            string postfix = properties.GetPropertyValueAsString("unity:namePostfix", "");
+
+            TmxImage tmxImage = TmxImage.FromXml(xmlImage, prefix, postfix);
 
             // The "firstId" is is always one more than all the tiles that we've already parsed (which may be zero)
             uint firstId = 1;

@@ -135,6 +135,10 @@ namespace Tiled2Unity
             // We will create and assign our own materials.
             // This gives us more control over their construction.
             modelImporter.importMaterials = false;
+
+#if UNITY_5_6_OR_NEWER
+            modelImporter.keepQuads = true;
+#endif
         }
 
         private void OnPostprocessModel(GameObject gameObject)

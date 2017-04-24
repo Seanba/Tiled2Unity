@@ -100,8 +100,8 @@ namespace Tiled2Unity
                             TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
                             
                             // What are the vertex and texture coorindates of this face on the mesh?
-                            var position = this.tmxMap.GetMapPositionAt(x, y);
-                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight, tile.Offset);
+                            var position = this.tmxMap.GetMapPositionAt(x, y, tile);
+                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight);
 
                             // If we're using depth shaders then we'll need to set a depth value of this face
                             float depth_z = 0.0f;
@@ -189,7 +189,7 @@ namespace Tiled2Unity
             return objWriter;
         }
 
-        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, PointF offset)
+        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight)
         {
             // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
             mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
@@ -198,13 +198,6 @@ namespace Tiled2Unity
             PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
             PointF pt2 = PointF.Add(mapLocation, tileSize);
             PointF pt3 = PointF.Add(mapLocation, new Size(0, tileSize.Height));
-
-            // Apply the tile offset
-
-            pt0 = TmxMath.AddPoints(pt0, offset);
-            pt1 = TmxMath.AddPoints(pt1, offset);
-            pt2 = TmxMath.AddPoints(pt2, offset);
-            pt3 = TmxMath.AddPoints(pt3, offset);
 
             // We need to use ccw winding for Wavefront objects
             PointF[] vertices  = new PointF[4];

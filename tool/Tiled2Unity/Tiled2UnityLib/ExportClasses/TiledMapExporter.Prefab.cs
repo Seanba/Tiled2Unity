@@ -219,10 +219,13 @@ namespace Tiled2Unity
                 AssignUnityProperties(tmxObject, xmlObject, PrefabContext.Object);
                 AssignTiledProperties(tmxObject, xmlObject);
 
-                // If we're not using a unity:layer override and there is an Object Type to go with this object then use it
-                if (String.IsNullOrEmpty(objectGroup.UnityLayerOverrideName))
+                if (tmxObject.GetType() != typeof(TmxObjectTile))
                 {
-                    xmlObject.SetAttributeValue("layer", tmxObject.Type);
+                    // If we're not using a unity:layer override and there is an Object Type to go with this object then use it
+                    if (String.IsNullOrEmpty(objectGroup.UnityLayerOverrideName))
+                    {
+                        xmlObject.SetAttributeValue("layer", tmxObject.Type);
+                    }
                 }
 
                 XElement objElement = null;
@@ -605,37 +608,50 @@ namespace Tiled2Unity
             {
                 foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
                 {
-                    XElement objElement = null;
+                    XElement objCollider = null;
 
                     if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                     {
                         // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
-                        objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
+                        objCollider = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                     }
                     else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                     {
-                        objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
+                        objCollider = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
                     }
                     else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
                     {
-                        objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
+                        objCollider = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
                     }
                     else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
                     {
-                        objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
+                        objCollider = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
                     }
 
-                    if (objElement != null)
+                    if (objCollider != null)
                     {
                         // This object is currently in the center of the Tile Object we are constructing
                         // The collision geometry is wrt the top-left corner
                         // The "Offset" of the collider translation to get to lop-left corner and the collider's position into account
                         float offset_x = (-half_w + tmxObject.Position.X) * Tiled2Unity.Settings.Scale;
                         float offset_y = (half_h - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale;
-                        objElement.SetAttributeValue("offsetX", offset_x);
-                        objElement.SetAttributeValue("offsetY", offset_y);
+                        objCollider.SetAttributeValue("offsetX", offset_x);
+                        objCollider.SetAttributeValue("offsetY", offset_y);
 
-                        xmlTileObject.Add(objElement);
+                        // Each collision needs to be added as a separate child because of different collision type/layers
+                        {
+                            var type = tmxObjectTile.ParentObjectGroup.TmxMap.ObjectTypes.GetValueOrDefault(tmxObject.Type);
+                            string layerType = String.IsNullOrEmpty(type.Name) ? "Default" : type.Name;
+                            string objectName = "Collision_" + layerType;
+
+                            XElement xmlGameObject = new XElement("GameObject");
+                            xmlGameObject.SetAttributeValue("name", objectName);
+                            xmlGameObject.SetAttributeValue("layer", layerType);
+                            xmlGameObject.Add(objCollider);
+
+
+                            xmlTileObject.Add(xmlGameObject);
+                        }
                     }
                 }
             }

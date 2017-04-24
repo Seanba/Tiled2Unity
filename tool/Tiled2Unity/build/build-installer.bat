@@ -42,16 +42,16 @@ echo -- Successfully built Tiled2Unity x86
 
 rem Use CS-Script to build Tiled2UnityLite
 echo -- Building Tiled2UnityLite.cs
-%CSSCRIPT_DIR%\cscs build-tiled2unitylite.cs
+"%CSSCRIPT_DIR%"\cscs build-tiled2unitylite.cs
 if ERRORLEVEL 1 goto LiteFailed
 echo -- Successfully built Tiled2UnityLite
 
 echo -- Building installer for Tiled2Unity x64
-%CSSCRIPT_DIR%\cscs build-msi-installer.cs x64
+"%CSSCRIPT_DIR%"\cscs build-msi-installer.cs x64
 if ERRORLEVEL 1 goto MSIFailed
 
 echo -- Building installer for Tiled2Unity x86
-%CSSCRIPT_DIR%\cscs build-msi-installer.cs x86
+"%CSSCRIPT_DIR%"\cscs build-msi-installer.cs x86
 if ERRORLEVEL 1 goto MSIFailed
 
 goto :Done

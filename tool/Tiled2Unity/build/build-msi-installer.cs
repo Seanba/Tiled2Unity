@@ -22,7 +22,9 @@ class Script
             Console.WriteLine("No platform argument given (x86|x64)");
             return 1;
         }
+
         string platform = args[0].ToLower();
+
         if (platform == "x86")
         {
             Console.WriteLine("Building Win32 installer for x86 platform.");
@@ -85,12 +87,14 @@ class Script
         string projectName = String.Format("Tiled2Unity ({0})", WIN_PLATFORM);
         var project = new WixSharp.Project(projectName,
                             new WixSharp.Dir(@"%ProgramFiles%\Tiled2Unity",
-                                new WixSharp.File(PATH_BUILD   + @"\ReadMe.txt"),
+                                new WixSharp.File(PATH_BUILD + @"\ReadMe.txt"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2Unity.exe"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2Unity.exe.config"),
                                 new WixSharp.File(PATH_RELEASE + @"\Tiled2UnityLib.dll"),
                                 new WixSharp.File(PATH_RELEASE + @"\NDesk.Options.dll"),
-                                new WixSharp.File(PATH_BUILD   + @"\Tiled2UnityLite.cs"),
+                                new WixSharp.File(PATH_RELEASE + @"\SkiaSharp.dll"),
+                                new WixSharp.File(PATH_RELEASE + @"\libSkiaSharp.dll"),
+                                new WixSharp.File(PATH_BUILD + @"\Tiled2UnityLite.cs"),
                                 RenamedFile(PATH_UNITY_PACKAGE, "Tiled2Unity.unitypackage"),
 
                                 new WixSharp.Dir("Examples",
@@ -112,11 +116,12 @@ class Script
         project.Version = new Version(VERSION);
         project.MajorUpgradeStrategy = MajorUpgradeStrategy.Default;
         project.MajorUpgradeStrategy.RemoveExistingProductAfter = Step.InstallInitialize;
-        
+
         project.Platform = (WIN_PLATFORM == "win32") ? Platform.x86 : Platform.x64;
 
         // Compile the project
         string msiFile = WixSharp.Compiler.BuildMsi(project);
+
         if (msiFile == null)
         {
             Console.WriteLine("Failed to build Tiled2Unity {0} installer.", platform);
@@ -165,5 +170,5 @@ class Script
 
         return file;
     }
-    
+
 }

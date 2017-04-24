@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.10.1
+// version 1.0.11.0
 
 //css_reference System;
 //css_reference System.Core;
@@ -59,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.10.1";
+            return "1.0.11.0";
         }
 
         public static string GetPlatform()
@@ -774,6 +774,8 @@ namespace Tiled2Unity
             Logger.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
             Logger.WriteLine("  unity:resource (value = [false|true])");
             Logger.WriteLine("  unity:resourcePath");
+            Logger.WriteLine("  unity:namePrefix (Add to tileset properties to prefix material names with this string.");
+            Logger.WriteLine("  unity:namePostfix (Add to tileset properties to postfix material names with this string.");
             Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
             Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
             Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
@@ -884,9 +886,16 @@ namespace Tiled2Unity
                 this.TmxMap = TmxMap.LoadFromFile(this.TmxFilePath);
 
                 // Load the Object Type Xml file if it exists
-                if (File.Exists(Tiled2Unity.Settings.ObjectTypeXml))
+                if (!String.IsNullOrEmpty(Tiled2Unity.Settings.ObjectTypeXml))
                 {
-                    this.TmxMap.LoadObjectTypeXml(Tiled2Unity.Settings.ObjectTypeXml);
+                    if (File.Exists(Tiled2Unity.Settings.ObjectTypeXml))
+                    {
+                        this.TmxMap.LoadObjectTypeXml(Tiled2Unity.Settings.ObjectTypeXml);
+                    }
+                    else
+                    {
+                        Logger.WriteError("Object Type Xml files does not exist: '{0}'", Tiled2Unity.Settings.ObjectTypeXml);
+                    }
                 }
             }
             catch (TmxException tmx)
@@ -1158,7 +1167,7 @@ namespace Tiled2Unity
                    XElement assignment =
                         new XElement("AssignMaterial",
                             new XAttribute("mesh", mesh.UniqueMeshName),
-                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
+                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.ImageName)));
 
                     elements.Add(assignment);
                 }
@@ -1675,6 +1684,7 @@ namespace Tiled2Unity
 
                         // Path to texture in the asset directory
                         xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
+                        xmlInternalTexture.SetAttributeValue("materialName", image.ImageName);
 
                         // Transparent color key?
                         if (!String.IsNullOrEmpty(image.TransparentColor))
@@ -1723,7 +1733,8 @@ namespace Tiled2Unity
                         }
 
                         // Bake the image file into the xml
-                        xmlImportTexture.Add(new XAttribute("filename", Path.GetFileName(image.AbsolutePath)), FileToBase64String(image.AbsolutePath));
+                        string filename = image.ImageName + Path.GetExtension(image.AbsolutePath);
+                        xmlImportTexture.Add(new XAttribute("filename", filename), FileToBase64String(image.AbsolutePath));
 
                         elements.Add(xmlImportTexture);
                     }
@@ -1858,8 +1869,8 @@ namespace Tiled2Unity
                             TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
                             
                             // What are the vertex and texture coorindates of this face on the mesh?
-                            var position = this.tmxMap.GetMapPositionAt(x, y);
-                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight, tile.Offset);
+                            var position = this.tmxMap.GetMapPositionAt(x, y, tile);
+                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight);
 
                             // If we're using depth shaders then we'll need to set a depth value of this face
                             float depth_z = 0.0f;
@@ -1947,7 +1958,7 @@ namespace Tiled2Unity
             return objWriter;
         }
 
-        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight, PointF offset)
+        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight)
         {
             // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
             mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
@@ -1956,13 +1967,6 @@ namespace Tiled2Unity
             PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
             PointF pt2 = PointF.Add(mapLocation, tileSize);
             PointF pt3 = PointF.Add(mapLocation, new Size(0, tileSize.Height));
-
-            // Apply the tile offset
-
-            pt0 = TmxMath.AddPoints(pt0, offset);
-            pt1 = TmxMath.AddPoints(pt1, offset);
-            pt2 = TmxMath.AddPoints(pt2, offset);
-            pt3 = TmxMath.AddPoints(pt3, offset);
 
             // We need to use ccw winding for Wavefront objects
             PointF[] vertices  = new PointF[4];
@@ -2274,10 +2278,13 @@ namespace Tiled2Unity
                 AssignUnityProperties(tmxObject, xmlObject, PrefabContext.Object);
                 AssignTiledProperties(tmxObject, xmlObject);
 
-                // If we're not using a unity:layer override and there is an Object Type to go with this object then use it
-                if (String.IsNullOrEmpty(objectGroup.UnityLayerOverrideName))
+                if (tmxObject.GetType() != typeof(TmxObjectTile))
                 {
-                    xmlObject.SetAttributeValue("layer", tmxObject.Type);
+                    // If we're not using a unity:layer override and there is an Object Type to go with this object then use it
+                    if (String.IsNullOrEmpty(objectGroup.UnityLayerOverrideName))
+                    {
+                        xmlObject.SetAttributeValue("layer", tmxObject.Type);
+                    }
                 }
 
                 XElement objElement = null;
@@ -2660,37 +2667,50 @@ namespace Tiled2Unity
             {
                 foreach (TmxObject tmxObject in tmxObjectTile.Tile.ObjectGroup.Objects)
                 {
-                    XElement objElement = null;
+                    XElement objCollider = null;
 
                     if (tmxObject.GetType() == typeof(TmxObjectRectangle))
                     {
                         // Note: Tile objects have orthographic rectangles even in isometric orientations so no need to transform rectangle points
-                        objElement = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
+                        objCollider = CreateBoxColliderElement(tmxObject as TmxObjectRectangle);
                     }
                     else if (tmxObject.GetType() == typeof(TmxObjectEllipse))
                     {
-                        objElement = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
+                        objCollider = CreateCircleColliderElement(tmxObject as TmxObjectEllipse, tmxObjectTile.Tile.ObjectGroup.Name);
                     }
                     else if (tmxObject.GetType() == typeof(TmxObjectPolygon))
                     {
-                        objElement = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
+                        objCollider = CreatePolygonColliderElement(tmxObject as TmxObjectPolygon);
                     }
                     else if (tmxObject.GetType() == typeof(TmxObjectPolyline))
                     {
-                        objElement = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
+                        objCollider = CreateEdgeColliderElement(tmxObject as TmxObjectPolyline);
                     }
 
-                    if (objElement != null)
+                    if (objCollider != null)
                     {
                         // This object is currently in the center of the Tile Object we are constructing
                         // The collision geometry is wrt the top-left corner
                         // The "Offset" of the collider translation to get to lop-left corner and the collider's position into account
                         float offset_x = (-half_w + tmxObject.Position.X) * Tiled2Unity.Settings.Scale;
                         float offset_y = (half_h - tmxObject.Position.Y) * Tiled2Unity.Settings.Scale;
-                        objElement.SetAttributeValue("offsetX", offset_x);
-                        objElement.SetAttributeValue("offsetY", offset_y);
+                        objCollider.SetAttributeValue("offsetX", offset_x);
+                        objCollider.SetAttributeValue("offsetY", offset_y);
 
-                        xmlTileObject.Add(objElement);
+                        // Each collision needs to be added as a separate child because of different collision type/layers
+                        {
+                            var type = tmxObjectTile.ParentObjectGroup.TmxMap.ObjectTypes.GetValueOrDefault(tmxObject.Type);
+                            string layerType = String.IsNullOrEmpty(type.Name) ? "Default" : type.Name;
+                            string objectName = "Collision_" + layerType;
+
+                            XElement xmlGameObject = new XElement("GameObject");
+                            xmlGameObject.SetAttributeValue("name", objectName);
+                            xmlGameObject.SetAttributeValue("layer", layerType);
+                            xmlGameObject.Add(objCollider);
+
+
+                            xmlTileObject.Add(xmlGameObject);
+                        }
                     }
                 }
             }
@@ -12467,7 +12487,6 @@ namespace Tiled2Unity
 // using System;
 // using System.Collections.Generic;
 // using System.Drawing;
-// using System.Drawing.Drawing2D;
 // using System.IO;
 // using System.Linq;
 // using System.Text;
@@ -12653,67 +12672,9 @@ namespace Tiled2Unity
             }
             catch
             {
-                return Color.HotPink;
+                return Color.FromArgb(255, 0, 255);
             }
         }
-
-        // Prefer 32bpp bitmaps as they are at least 2x faster at Graphics.DrawImage functions
-        // Note that 32bppPArgb is not properly supported on Mac builds.
-        public static Bitmap CreateBitmap32bpp(int width, int height)
-        {
-#if TILED2UNITY_MAC
-            return new Bitmap(width, height);
-#else
-            return new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-#endif
-        }
-
-        public static Bitmap FromFileBitmap32bpp(string file)
-        {
-            Bitmap bitmapRaw = (Bitmap)Bitmap.FromFile(file);
-
-#if TILED2UNITY_MAC
-            return bitmapRaw;
-#else
-            // Need to copy the bitmap into our 32bpp surface
-            Bitmap bitmapPArgb = TmxHelper.CreateBitmap32bpp(bitmapRaw.Width, bitmapRaw.Height);
-
-            using (Graphics g = Graphics.FromImage(bitmapPArgb))
-            {
-                g.DrawImage(bitmapRaw, 0, 0, bitmapPArgb.Width, bitmapPArgb.Height);
-            }
-
-            return bitmapPArgb;
-#endif
-        }
-
-#if !TILED_2_UNITY_LITE
-        // Helper function to create Layer collider brush. Note that Mac does not support Hatch brushes.
-        public static Brush CreateLayerColliderBrush(Color color)
-        {
-#if TILED2UNITY_MAC
-            // On Mac we can use a solid brush with some alpha
-            return new SolidBrush(Color.FromArgb(100, color));
-#else
-            return new HatchBrush(HatchStyle.Percent60, color, Color.Transparent);
-#endif
-        }
-#endif
-
-#if !TILED_2_UNITY_LITE
-        // Helper function to create Object collider brush. Note that Mac does not support Hatch brushes.
-        public static Brush CreateObjectColliderBrush(Color color)
-        {
-            Color secondary = Color.FromArgb(100, color);
-#if TILED2UNITY_MAC
-            // On Mac we can use a solid brush with some alpha
-            return new SolidBrush(secondary);
-#else
-            return new HatchBrush(HatchStyle.BackwardDiagonal, color, secondary);
-#endif
-        }
-#endif
-
     }
 }
 
@@ -12725,6 +12686,7 @@ namespace Tiled2Unity
 // using System.Drawing;
 // using System.Linq;
 // using System.Text;
+// using SkiaSharp;
 
 namespace Tiled2Unity
 {
@@ -12733,9 +12695,10 @@ namespace Tiled2Unity
         public string AbsolutePath { get; private set; }
         public Size Size { get; private set; }
         public String TransparentColor { get; set; }
+        public string ImageName { get; private set; }
 
 #if !TILED_2_UNITY_LITE
-        public Bitmap ImageBitmap { get; private set; }
+        public SKBitmap ImageBitmap { get; private set; }
 #endif
     }
 }
@@ -12751,15 +12714,17 @@ namespace Tiled2Unity
 // using System.Text;
 // using System.Xml;
 // using System.Xml.Linq;
+// using SkiaSharp;
 
 namespace Tiled2Unity
 {
     partial class TmxImage
     {
-        public static TmxImage FromXml(XElement elemImage)
+        public static TmxImage FromXml(XElement elemImage, string prefix, string postfix)
         {
             TmxImage tmxImage = new TmxImage();
             tmxImage.AbsolutePath = TmxHelper.GetAttributeAsFullPath(elemImage, "source");
+            tmxImage.ImageName = String.Format("{0}{1}{2}", prefix, Path.GetFileNameWithoutExtension(tmxImage.AbsolutePath), postfix);
 
             // Get default image size in case we are not opening the file
             {
@@ -12768,33 +12733,18 @@ namespace Tiled2Unity
                 tmxImage.Size = new System.Drawing.Size(width, height);
             }
 
-            // Do not open the image in Tiled2UnityLite (due to difficulty with GDI+ in some mono installs)
+            // Do not open the image in Tiled2UnityLite (no SkiaSharp in Tiled2UnityLite)
 #if !TILED_2_UNITY_LITE
             if (!Tiled2Unity.Settings.IsAutoExporting)
             {
                 try
                 {
-                    tmxImage.ImageBitmap = TmxHelper.FromFileBitmap32bpp(tmxImage.AbsolutePath);
+                    tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
                 }
                 catch (FileNotFoundException fnf)
                 {
                     string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
                     throw new TmxException(msg, fnf);
-
-                    // Testing for when image files are missing. Just make up an image.
-                    //int width = TmxHelper.GetAttributeAsInt(elemImage, "width");
-                    //int height = TmxHelper.GetAttributeAsInt(elemImage, "height");
-                    //tmxImage.ImageBitmap = new TmxHelper.CreateBitmap32bpp(width, height);
-                    //using (Graphics g = Graphics.FromImage(tmxImage.ImageBitmap))
-                    //{
-                    //    int color32 = tmxImage.AbsolutePath.GetHashCode();
-                    //    Color color = Color.FromArgb(color32);
-                    //    color = Color.FromArgb(255, color);
-                    //    using (Brush brush = new SolidBrush(color))
-                    //    {
-                    //        g.FillRectangle(brush, new Rectangle(Point.Empty, tmxImage.ImageBitmap.Size));
-                    //    }
-                    //}
                 }
 
                 tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
@@ -12807,8 +12757,21 @@ namespace Tiled2Unity
 #if !TILED_2_UNITY_LITE
             if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
-                System.Drawing.Color transColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
-                tmxImage.ImageBitmap.MakeTransparent(transColor);
+                System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
+
+                // Set the transparent pixels if using color-keying
+                SKColor transColor = new SKColor((uint)systemTransColor.ToArgb()).WithAlpha(0);
+                for (int x = 0; x < tmxImage.ImageBitmap.Width; ++x)
+                {
+                    for (int y = 0; y < tmxImage.ImageBitmap.Height; ++y)
+                    {
+                        SKColor pixel = tmxImage.ImageBitmap.GetPixel(x, y);
+                        if (pixel.Red == transColor.Red && pixel.Green == transColor.Green && pixel.Blue == transColor.Blue)
+                        {
+                            tmxImage.ImageBitmap.SetPixel(x, y, transColor);
+                        }
+                    }
+                }
             }
 #endif
 
@@ -13319,7 +13282,7 @@ namespace Tiled2Unity
                 }
 
                 // If the layer is visible then add it to our list
-                if (layerNode != null && layerNode.Visible)
+                if (layerNode != null && layerNode.Visible && layerNode.Ignore != IgnoreSettings.True)
                 {
                     nodes.Add(layerNode);
                 }
@@ -13469,6 +13432,8 @@ namespace Tiled2Unity
         public Point GetMapPositionAt(int x, int y, TmxTile tile)
         {
             Point point = GetMapPositionAt(x, y);
+            point.X += (int)tile.Offset.X;
+            point.Y += (int)tile.Offset.Y;
 
             // The tile may have different dimensions than the cells of the map so correct for that
             // In this case, the y-position needs to be adjusted
@@ -13541,6 +13506,12 @@ namespace Tiled2Unity
         // Load an Object Type Xml file for this map's objects to reference
         public void LoadObjectTypeXml(string xmlPath)
         {
+            if (String.IsNullOrEmpty(xmlPath))
+            {
+                Logger.WriteLine("Object Type XML file is not being used.");
+                return;
+            }
+
             Logger.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
 
             try
@@ -13555,6 +13526,7 @@ namespace Tiled2Unity
             catch (Exception e)
             {
                 Logger.WriteError("Error parsing Object Type Xml file: {0}\n{1}", xmlPath, e.Message);
+                Logger.WriteError("Stack:\n{0}", e.StackTrace);
                 this.ObjectTypes = new TmxObjectTypes();
             }
 
@@ -13790,10 +13762,15 @@ namespace Tiled2Unity
 
             IList<TmxTile> tilesToAdd = new List<TmxTile>();
 
+            // Get proerties on tileset
+            TmxProperties properties = TmxProperties.FromXml(elemTileset);
+            string prefix = properties.GetPropertyValueAsString("unity:namePrefix", "");
+            string postfix = properties.GetPropertyValueAsString("unity:namePostfix", "");
+
             // Tilesets may have an image for all tiles within it, or it may have an image per tile
             if (elemTileset.Element("image") != null)
             {
-                TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"));
+                TmxImage tmxImage = TmxImage.FromXml(elemTileset.Element("image"), prefix, postfix);
 
                 // Create all the tiles
                 // This is a bit complicated because of spacing and margin
@@ -13817,7 +13794,7 @@ namespace Tiled2Unity
                 // Each tile will have it's own image
                 foreach (var t in elemTileset.Elements("tile"))
                 {
-                    TmxImage tmxImage = TmxImage.FromXml(t.Element("image"));
+                    TmxImage tmxImage = TmxImage.FromXml(t.Element("image"), prefix, postfix);
 
                     uint localId = (uint)tilesToAdd.Count();
 
@@ -13884,7 +13861,11 @@ namespace Tiled2Unity
                 return;
             }
 
-            TmxImage tmxImage = TmxImage.FromXml(xmlImage);
+            TmxProperties properties = TmxProperties.FromXml(elemImageLayer);
+            string prefix = properties.GetPropertyValueAsString("unity:namePrefix", "");
+            string postfix = properties.GetPropertyValueAsString("unity:namePostfix", "");
+
+            TmxImage tmxImage = TmxImage.FromXml(xmlImage, prefix, postfix);
 
             // The "firstId" is is always one more than all the tiles that we've already parsed (which may be zero)
             uint firstId = 1;
@@ -15070,7 +15051,7 @@ namespace Tiled2Unity
         public TmxObjectType()
         {
             this.Name = "";
-            this.Color = Color.Gray;
+            this.Color = Color.FromArgb(128, 128, 128);
             this.Properties = new Dictionary<string, TmxObjectTypeProperty>();
         }
 
@@ -15079,7 +15060,7 @@ namespace Tiled2Unity
             TmxObjectType tmxObjectType = new TmxObjectType();
 
             tmxObjectType.Name = TmxHelper.GetAttributeAsString(xml, "name", "");
-            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.Gray);
+            tmxObjectType.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
             tmxObjectType.Properties = TmxObjectTypeProperty.FromObjectTypeXml(xml);
 
             return tmxObjectType;

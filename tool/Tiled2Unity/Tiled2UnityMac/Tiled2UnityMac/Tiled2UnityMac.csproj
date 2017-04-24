@@ -12,8 +12,9 @@
     <ReleaseVersion>1.0.0.0</ReleaseVersion>
     <Description>Tiled2Unity Utility (Mac OSX version)</Description>
     <ApplicationIcon>..\..\src\t2u-icon-bw.ico</ApplicationIcon>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <UseXamMacFullFramework>true</UseXamMacFullFramework>
+    <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
+    <TargetFrameworkIdentifier>Xamarin.Mac</TargetFrameworkIdentifier>
+    <BaseDirectory>..</BaseDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -40,6 +41,7 @@
         <Variable name="TILED2UNITY_UNITYDIR" value="My unity dir goes here" />
       </EnvironmentVariables>
     </EnvironmentVariables>
+    <PackageSigningKey>3rd Party Mac Developer Installer</PackageSigningKey>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <Optimize>true</Optimize>
@@ -68,12 +70,10 @@
       <HintPath>..\packages\NDesk.Options.0.2.1\lib\NDesk.Options.dll</HintPath>
     </Reference>
     <Reference Include="Xamarin.Mac" />
-    <Reference Include="OpenTK">
-      <HintPath>..\..\..\..\..\..\..\..\Library\Frameworks\Xamarin.Mac.framework\Versions\2.8.1.4\lib\reference\net_4_5\OpenTK.dll</HintPath>
+    <Reference Include="SkiaSharp">
+      <HintPath>..\packages\SkiaSharp.1.57.0\lib\XamarinMac\SkiaSharp.dll</HintPath>
     </Reference>
-    <Reference Include="System.Drawing">
-      <HintPath>ThirdParty\System.Drawing.dll</HintPath>
-    </Reference>
+    <Reference Include="OpenTK" />
   </ItemGroup>
   <ItemGroup>
     <ImageAsset Include="Resources\Images.xcassets\AppIcons.appiconset\Contents.json" />
@@ -348,6 +348,7 @@
     <InterfaceDefinition Include="Main.storyboard" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\Xamarin\Mac\Xamarin.Mac.CSharp.targets" />
+  <Import Project="..\packages\SkiaSharp.1.57.0\build\XamarinMac\SkiaSharp.targets" Condition="Exists('..\packages\SkiaSharp.1.57.0\build\XamarinMac\SkiaSharp.targets')" />
   <ItemGroup>
     <BundleResource Include="Resources\Tiled2Unity.unitypackage">
       <DeployService-Deploy>True</DeployService-Deploy>

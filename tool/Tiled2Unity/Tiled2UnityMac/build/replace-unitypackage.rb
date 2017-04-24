@@ -23,7 +23,7 @@ Dir.chdir(dir) do
     # Look for the Unity package we want to embed in the build
     package = "Tiled2Unity.#{version}.unitypackage"
 
-    puts "Error: Could not find package: #{package}" if not File.exist?(package)
+    puts "Error: Could not find package: #{package}. Select 'Tiled2Unity -> Export Tiled2Unity Library...' from Unity and export to this directory and try again." if not File.exist?(package)
     exit(1) if not File.exist?(package)
 
     puts "Copying package #{package} to Tiled2UnityMac solution (resources)"

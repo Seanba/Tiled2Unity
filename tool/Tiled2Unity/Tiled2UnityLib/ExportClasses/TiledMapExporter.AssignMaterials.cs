@@ -25,7 +25,7 @@ namespace Tiled2Unity
                    XElement assignment =
                         new XElement("AssignMaterial",
                             new XAttribute("mesh", mesh.UniqueMeshName),
-                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
+                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.ImageName)));
 
                     elements.Add(assignment);
                 }

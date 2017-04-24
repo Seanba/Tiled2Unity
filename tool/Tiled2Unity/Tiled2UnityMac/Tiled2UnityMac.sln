@@ -33,5 +33,6 @@ Global
 		$1.ResourceNamePolicy = FileFormatDefault
 		description = Mac OSX Version of Tiled2Unity Utility
 		version = 1.0.0.0
+		BaseDirectory = Tiled2UnityMac
 	EndGlobalSection
 EndGlobal

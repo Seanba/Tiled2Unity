@@ -8,6 +8,7 @@ using System.Drawing.Imaging;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using SkiaSharp;
 
 namespace Tiled2Unity
 {
@@ -51,7 +52,11 @@ namespace Tiled2Unity
 
             this.Text = String.Format("Tiled2Unity Previewer (Scale = {0})", this.scale);
 
-            this.pictureBoxViewer.Image = Tiled2Unity.Viewer.PreviewImage.CreateBitmap(this.tmxMap, this.scale);
+            // Convert a Skia image to a bitmap for viewing
+            using (SKBitmap bitmap = Tiled2Unity.Viewer.PreviewImage.CreatePreviewBitmap(this.tmxMap, this.scale))
+            {
+                this.pictureBoxViewer.Image = SKImage.FromBitmap(bitmap).ToSystemDrawingBitmap();
+            }
             Refresh();
         }
 
@@ -128,4 +133,24 @@ namespace Tiled2Unity
         }
 
     } // end class
+
+    public static class SkiaImageExtensions
+    {
+        public static System.Drawing.Bitmap ToSystemDrawingBitmap(this SKImage skiaImage)
+        {
+            var bitmap = new System.Drawing.Bitmap(skiaImage.Width, skiaImage.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            var data = bitmap.LockBits(new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height), System.Drawing.Imaging.ImageLockMode.WriteOnly, bitmap.PixelFormat);
+
+            // copy
+            using (var pixmap = new SKPixmap(new SKImageInfo(data.Width, data.Height), data.Scan0, data.Stride))
+            {
+                skiaImage.ReadPixels(pixmap, 0, 0);
+            }
+
+            bitmap.UnlockBits(data);
+            return bitmap;
+        }
+    }
+
+
 } // end namespace

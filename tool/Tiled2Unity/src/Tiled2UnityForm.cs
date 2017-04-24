@@ -338,6 +338,8 @@ namespace Tiled2Unity
         {
             this.textBoxObjectTypesXml.Text = "";
             this.tmxSession.TmxMap.ClearObjectTypeXml();
+            Properties.Settings.Default.LastObjectTypeXmlFile = "";
+            Properties.Settings.Default.Save();
         }
     }
 }
