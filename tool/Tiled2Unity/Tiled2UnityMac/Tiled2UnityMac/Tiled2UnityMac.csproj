@@ -109,6 +109,7 @@
     <None Include="..\..\Tiled2UnityLib\ThirdParty\LibTessDotNet\LICENSE.txt">
       <Link>Tiled2UnityLib\ThirdParty\LibTessDotNet\LICENSE.txt</Link>
     </None>
+    <None Include="..\Info.plist" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Main.cs" />

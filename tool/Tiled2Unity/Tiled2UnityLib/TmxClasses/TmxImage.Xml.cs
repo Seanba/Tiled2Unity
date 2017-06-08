@@ -25,18 +25,42 @@ namespace Tiled2Unity
                 tmxImage.Size = new System.Drawing.Size(width, height);
             }
 
+            bool canMakeTransparentPixels = true;
+
             // Do not open the image in Tiled2UnityLite (no SkiaSharp in Tiled2UnityLite)
 #if !TILED_2_UNITY_LITE
             if (!Tiled2Unity.Settings.IsAutoExporting)
             {
                 try
                 {
-                    tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
+                    if (!tmxImage.Size.IsEmpty)
+                    {
+                        // We know our size and can decode the image into our prefered format
+                        var info = new SKImageInfo();
+                        info.ColorType = SKColorType.Rgba8888;
+                        info.AlphaType = SKAlphaType.Unpremul;
+                        info.Width = tmxImage.Size.Width;
+                        info.Height = tmxImage.Size.Height;
+                        tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath, info);
+                    }
+                    else
+                    {
+                        // Open the image without any helpful information
+                        // This stops us from being able to make pixels transparent
+                        tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
+                        canMakeTransparentPixels = false;
+                    }
                 }
                 catch (FileNotFoundException fnf)
                 {
                     string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
                     throw new TmxException(msg, fnf);
+                }
+                catch (Exception e)
+                {
+                    // Disable previewing. Some users are reporting problems. Perhaps due to older versions of windows.
+                    Logger.WriteError("Error creating image with Skia Library. Exception: {0}", e.Message);
+                    Tiled2Unity.Settings.DisablePreviewing();
                 }
 
                 tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
@@ -49,24 +73,31 @@ namespace Tiled2Unity
 #if !TILED_2_UNITY_LITE
             if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
-                System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
-
-                // Set the transparent pixels if using color-keying
-                SKColor transColor = new SKColor((uint)systemTransColor.ToArgb()).WithAlpha(0);
-                for (int x = 0; x < tmxImage.ImageBitmap.Width; ++x)
+                if (canMakeTransparentPixels)
                 {
-                    for (int y = 0; y < tmxImage.ImageBitmap.Height; ++y)
+                    Logger.WriteLine("Removing alpha from transparent pixels.");
+                    System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
+
+                    // Set the transparent pixels if using color-keying
+                    SKColor transColor = new SKColor((uint)systemTransColor.ToArgb()).WithAlpha(0);
+                    for (int x = 0; x < tmxImage.ImageBitmap.Width; ++x)
                     {
-                        SKColor pixel = tmxImage.ImageBitmap.GetPixel(x, y);
-                        if (pixel.Red == transColor.Red && pixel.Green == transColor.Green && pixel.Blue == transColor.Blue)
+                        for (int y = 0; y < tmxImage.ImageBitmap.Height; ++y)
                         {
-                            tmxImage.ImageBitmap.SetPixel(x, y, transColor);
+                            SKColor pixel = tmxImage.ImageBitmap.GetPixel(x, y);
+                            if (pixel.Red == transColor.Red && pixel.Green == transColor.Green && pixel.Blue == transColor.Blue)
+                            {
+                                tmxImage.ImageBitmap.SetPixel(x, y, transColor);
+                            }
                         }
                     }
                 }
+                else
+                {
+                    Logger.WriteWarning("Cannot make transparent pixels for viewing purposes. Save tileset with newer verion of Tiled.");
+                }
             }
 #endif
-
             return tmxImage;
         }
     }

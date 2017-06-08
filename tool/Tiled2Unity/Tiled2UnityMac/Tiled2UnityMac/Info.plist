@@ -25,7 +25,7 @@
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.11.0</string>
+	<string>1.0.11.2</string>
 	<key>XSAppIconAssets</key>
 	<string>Resources/Images.xcassets/AppIcons.appiconset</string>
 </dict>

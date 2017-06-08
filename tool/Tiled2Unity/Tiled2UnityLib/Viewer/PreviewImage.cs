@@ -62,14 +62,14 @@ namespace Tiled2Unity.Viewer
                 int height = (int)Math.Ceiling(bounds.Height * scale);
                 bitmap = new SKBitmap(width, height);
             }
-            catch (System.ArgumentException)
+            catch
             {
                 StringBuilder warning = new StringBuilder();
                 warning.AppendFormat("Map cannot be previewed at '{0}' scale. Try a smaller scale.\n", scale);
-                warning.AppendLine("Image will be constructed on a 1024x1024 canvas. Parts of your map may be cropped.");
+                warning.AppendLine("Image will be constructed on a 2048x2048 canvas. Parts of your map may be cropped.");
                 Logger.WriteWarning(warning.ToString());
 
-                bitmap = new SKBitmap(1024, 1024);
+                bitmap = new SKBitmap(2048, 2048);
             }
 
             using (SKCanvas canvas = new SKCanvas(bitmap))
@@ -170,15 +170,15 @@ namespace Tiled2Unity.Viewer
                 for (int y = 0; y < GetMaxTilesHigh(tmxMap); ++y)
                 {
                     // Add the "top-left" corner of a tile
-                    points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y));
+                    points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y));
 
                     // Add all other corners of the tile to our list of grid points
                     // This is complicated by different map types (espcially staggered isometric)
                     if (tmxMap.Orientation == TmxMap.MapOrientation.Orthogonal || tmxMap.Orientation == TmxMap.MapOrientation.Isometric)
                     {
-                        points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x + 1, y));
-                        points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x + 1, y + 1));
-                        points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 1));
+                        points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x + 1, y));
+                        points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x + 1, y + 1));
+                        points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 1));
                     }
                     else if (tmxMap.Orientation == TmxMap.MapOrientation.Staggered)
                     {
@@ -188,30 +188,30 @@ namespace Tiled2Unity.Viewer
                         if (sx)
                         {
                             // top-right, bottom-right, and bottom-left
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x + 1, y + 1));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 1));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x - 1, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x + 1, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x - 1, y + 1));
                         }
                         else if (sy)
                         {
                             // top-right, bottom-right, and bottom-left
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x + 1, y + 1));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 2));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x + 1, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 2));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 1));
                         }
                         else if (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.X)
                         {
                             // top-right, bottom-right, and bottom-left
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x + 1, y));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 1));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x - 1, y));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x + 1, y));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x - 1, y));
                         }
                         else if (tmxMap.StaggerAxis == TmxMap.MapStaggerAxis.Y)
                         {
                             // top-right, bottom-right, and bottom-left
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 1));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x, y + 2));
-                            points.Add(TmxMath.TileCornerInGridCoordinates(tmxMap, x - 1, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 1));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x, y + 2));
+                            points.Add(TmxMath.TileCornerFromGridCoordinates(tmxMap, x - 1, y + 1));
                         }
                     }
                 }
@@ -466,9 +466,6 @@ namespace Tiled2Unity.Viewer
                 foreach (var t in tiles)
                 {
                     PointF location = t.Position;
-
-                    // Individual tiles may be larger than the given tile size of the overall map
-                    location.Y = (t.Position.Y - t.Tile.TileSize.Height) + tmxMap.TileHeight;
 
                     using (new SKAutoCanvasRestore(canvas))
                     {

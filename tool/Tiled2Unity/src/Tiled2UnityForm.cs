@@ -28,6 +28,8 @@ namespace Tiled2Unity
             Logger.OnWriteWarning += new Logger.WriteWarningDelegate(Tiled2UnityForm_OnWriteWarning);
             Logger.OnWriteError += new Logger.WriteErrorDelegate(Tiled2UnityForm_OnWriteError);
             Logger.OnWriteSuccess += new Logger.WriteSuccessDelegate(Tiled2UnityForm_OnWriteSuccess);
+
+            Settings.PreviewingDisabled += Settings_PreviewingDisabled;
         }
 
         ~Tiled2UnityForm()
@@ -36,6 +38,14 @@ namespace Tiled2Unity
             Logger.OnWriteWarning -= new Logger.WriteWarningDelegate(Tiled2UnityForm_OnWriteWarning);
             Logger.OnWriteError -= new Logger.WriteErrorDelegate(Tiled2UnityForm_OnWriteError);
             Logger.OnWriteSuccess -= new Logger.WriteSuccessDelegate(Tiled2UnityForm_OnWriteSuccess);
+
+            Settings.PreviewingDisabled -= Settings_PreviewingDisabled;
+        }
+
+        private void Settings_PreviewingDisabled(object sender, EventArgs e)
+        {
+            Logger.WriteWarning("Disabling preview due to image library exceptions. You can still export.");
+            this.buttonViewer.Enabled = false;
         }
 
         protected override void OnLoad(EventArgs e)

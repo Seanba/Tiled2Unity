@@ -34,7 +34,7 @@ namespace Tiled2Unity
                 List<string> packageFiles = new List<string>();
 
                 // Export all C# files, shaders, text files, and some select materials
-                packageFiles.AddRange(EnumerateAssetFilesAt("Assets/Tiled2Unity",".cs", ".shader", ".txt", "t2uSprite-Depth.mat", "t2uSprite-DiffuseDepth.mat"));
+                packageFiles.AddRange(EnumerateAssetFilesAt("Assets/Tiled2Unity",".cs", ".shader", ".cginc", ".txt", "t2uSprite-Depth.mat", "t2uSprite-DiffuseDepth.mat"));
                 AssetDatabase.ExportPackage(packageFiles.ToArray(), path);
             }
         }

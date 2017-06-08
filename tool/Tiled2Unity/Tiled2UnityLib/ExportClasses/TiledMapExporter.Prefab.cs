@@ -98,9 +98,8 @@ namespace Tiled2Unity
             // Add the group layer data component
             {
                 XElement component = new XElement("GroupLayer",
-                                        new XAttribute("opacity", groupLayer.Opacity),
-                                        new XAttribute("offset-x", groupLayer.Offset.X),
-                                        new XAttribute("offset-y", groupLayer.Offset.Y));
+                                        new XAttribute("offsetX", groupLayer.Offset.X),
+                                        new XAttribute("offsetY", groupLayer.Offset.Y));
                 xmlGroup.Add(component);
             }
 
@@ -130,7 +129,6 @@ namespace Tiled2Unity
             // Add a TileLayer component
             {
                 XElement layerComponent = new XElement("TileLayer",
-                                            new XAttribute("opacity", tileLayer.Opacity),
                                             new XAttribute("offsetX", tileLayer.Offset.X),
                                             new XAttribute("offsetY", tileLayer.Offset.Y));
 
@@ -316,10 +314,10 @@ namespace Tiled2Unity
             {
                 XElement xmlMesh = new XElement("GameObject",
                     new XAttribute("name", mesh.ObjectName),
-                    new XAttribute("copy", mesh.UniqueMeshName),
+                    new XAttribute("mesh", mesh.UniqueMeshName),
                     new XAttribute("sortingLayerName", layer.GetSortingLayerName()),
                     new XAttribute("sortingOrder", layer.GetSortingOrder()),
-                    new XAttribute("opacity", layer.Opacity));
+                    new XAttribute("opacity", layer.GetRecursiveOpacity()));
                 xmlMeshes.Add(xmlMesh);
 
                 if (mesh.FullAnimationDurationMs > 0)
@@ -667,10 +665,11 @@ namespace Tiled2Unity
                     XElement xmlMeshObject = new XElement("GameObject");
 
                     xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
-                    xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
+                    xmlMeshObject.SetAttributeValue("mesh", mesh.UniqueMeshName);
 
                     xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.GetSortingLayerName());
                     xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.GetSortingOrder());
+                    xmlMeshObject.SetAttributeValue("opacity", tmxObjectTile.ParentObjectGroup.GetRecursiveOpacity());
 
                     // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
                     // Put another way: This translation moves away from center to local origin

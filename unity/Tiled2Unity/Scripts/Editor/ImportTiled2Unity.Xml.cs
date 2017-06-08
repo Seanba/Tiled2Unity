@@ -109,6 +109,11 @@ namespace Tiled2Unity
                 shaderName += " Color Key";
             }
 
+            // Are we using instanced shaders?
+#if UNITY_5_6_OR_NEWER
+            shaderName += " (Instanced)";
+#endif
+
             // Try creating the material with the right shader. Fall back to the built-in Sprites/Default shader if there's a problem.
             UnityEngine.Material material = null;
             try
@@ -130,6 +135,10 @@ namespace Tiled2Unity
             {
                 material.SetColor("_AlphaColorKey", keyColor);
             }
+
+#if UNITY_5_6_OR_NEWER
+            material.enableInstancing = true;
+#endif
 
             return material;
         }

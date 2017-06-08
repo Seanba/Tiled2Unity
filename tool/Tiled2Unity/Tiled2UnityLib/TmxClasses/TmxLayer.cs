@@ -41,6 +41,11 @@ namespace Tiled2Unity
             return y * this.Width + x;
         }
 
+        public Point CoordinatesFromIndex(int index)
+        {
+            return new Point(index % this.Width, index / this.Width);
+        }
+
         public bool IsExportingConvexPolygons()
         {
             // Always obey layer first

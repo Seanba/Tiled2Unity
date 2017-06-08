@@ -49,23 +49,10 @@ namespace Tiled2Unity
             }
         }
 
-        // Creates the text for a Wavefront OBJ file for the TmxMap
-        private StringWriter BuildObjString()
+        // Enumerate all our meshes and bake them into OBJ Wavefront format
+        private IEnumerable<Tuple<string, StringWriter>> EnumerateWavefrontData()
         {
-            IGenericDatabase<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
-            HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
-
-            // Are we allowing vertices to be written too (advanced option)
-            if (Tiled2Unity.Settings.WriteableVertices)
-            {
-                // Replace vertex database with class that ensure each vertex (even ones with similar values) are unique
-                Logger.WriteLine("Using writeable-vertices. This will increase the size of the mesh but will allow you mutate vertices through scripting. This is an advanced feature.");
-                vertexDatabase = new GenericListDatabase<Vertex3>();
-            }
-
-            // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
-            int groupCount = 0;
-            StringBuilder faceBuilder = new StringBuilder();
+            Logger.WriteLine("Enumerate map layers for mesh-build.");
             foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible != true)
@@ -74,126 +61,144 @@ namespace Tiled2Unity
                 if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
                     continue;
 
-                // We're going to use this layer
-                ++groupCount;
-
                 // Enumerate over the tiles in the direction given by the draw order of the map
                 var verticalRange = (this.tmxMap.DrawOrderVertical == 1) ? Enumerable.Range(0, layer.Height) : Enumerable.Range(0, layer.Height).Reverse();
                 var horizontalRange = (this.tmxMap.DrawOrderHorizontal == 1) ? Enumerable.Range(0, layer.Width) : Enumerable.Range(0, layer.Width).Reverse();
 
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
-                    Logger.WriteLine("Writing '{0}' mesh group", mesh.UniqueMeshName);
-                    faceBuilder.AppendFormat("\ng {0}\n", mesh.UniqueMeshName);
+                    yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForLayerMesh(layer, mesh, horizontalRange, verticalRange));
+                }
+            }
+            Logger.WriteLine("Finished enumeration.");
 
-                    foreach (int y in verticalRange)
+            Logger.WriteLine("Enumerate tile objects for mesh-build.");
+            foreach (var mesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
+            {
+                yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForTileObjectMesh(mesh));
+            }
+            Logger.WriteLine("Finished enumeration.");
+        }
+
+        private StringWriter BuildWavefrontStringForLayerMesh(TmxLayer layer, TmxMesh mesh, IEnumerable<int> horizontalRange, IEnumerable<int> verticalRange)
+        {
+            Logger.WriteLine("Building mesh obj file for '{0}'", mesh.UniqueMeshName);
+            GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
+            HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+            StringBuilder faces = new StringBuilder();
+
+            foreach (int y in verticalRange)
+            {
+                foreach (int x in horizontalRange)
+                {
+                    int tileIndex = layer.GetTileIndex(x, y);
+                    uint tileId = mesh.GetTileIdAt(tileIndex);
+
+                    // Skip blank tiles
+                    if (tileId == 0)
+                        continue;
+
+                    TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
+
+                    // What are the vertex and texture coorindates of this face on the mesh?
+                    var position = this.tmxMap.GetMapPositionAt(x, y, tile);
+                    var vertices = CalculateFaceVertices(position, tile.TileSize);
+
+                    // If we're using depth shaders then we'll need to set a depth value of this face
+                    float depth_z = 0.0f;
+                    if (Tiled2Unity.Settings.DepthBufferEnabled)
                     {
-                        foreach (int x in horizontalRange)
-                        {
-                            int tileIndex = layer.GetTileIndex(x, y);
-                            uint tileId = mesh.GetTileIdAt(tileIndex);
-
-                            // Skip blank tiles
-                            if (tileId == 0)
-                                continue;
-
-                            TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
-                            
-                            // What are the vertex and texture coorindates of this face on the mesh?
-                            var position = this.tmxMap.GetMapPositionAt(x, y, tile);
-                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight);
-
-                            // If we're using depth shaders then we'll need to set a depth value of this face
-                            float depth_z = 0.0f;
-                            if (Tiled2Unity.Settings.DepthBufferEnabled)
-                            {
-                                depth_z = CalculateFaceDepth(position.Y + tmxMap.TileHeight, tmxMap.MapSizeInPixels.Height);
-                            }
-
-                            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
-
-                            // Is the tile being flipped or rotated (needed for texture cooridinates)
-                            bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
-                            bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
-                            bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
-                            var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
-
-                            // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
-                            faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
-                        }
+                        depth_z = CalculateFaceDepth(position.Y + tmxMap.TileHeight, tmxMap.MapSizeInPixels.Height);
                     }
+
+                    FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
+
+                    // Is the tile being flipped or rotated (needed for texture cooridinates)
+                    bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
+                    bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
+                    bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
+                    var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
+
+                    // Adds vertices and uvs to the database as we build the face strings
+                    string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                    string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                    string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                    string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+                    faces.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                 }
             }
 
-            // Now go through any tile objects we may have and write them out as face groups as well
-            foreach (var tmxMesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
-            {
-                // We're going to use this tile object
-                groupCount++;
-
-                Logger.WriteLine("Writing '{0}' tile group", tmxMesh.UniqueMeshName);
-                faceBuilder.AppendFormat("\ng {0}\n", tmxMesh.UniqueMeshName);
-
-                // Get the single tile associated with this mesh
-                TmxTile tmxTile = this.tmxMap.Tiles[tmxMesh.TileIds[0]];
-
-                var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
-                var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
-
-                // TileObjects have zero depth on their vertices. Their GameObject parent will set depth.
-                FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
-
-                // Adds vertices and uvs to the database as we build the face strings
-                string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
-                faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
-            }
-
-            // All of our faces have been built and vertex and uv databases have been filled.
-            // Start building out the obj file
-            StringWriter objWriter = new StringWriter();
-            objWriter.WriteLine("# Wavefront OBJ file automatically generated by Tiled2Unity");
-            objWriter.WriteLine();
-
-            Logger.WriteLine("Writing face vertices");
-            objWriter.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
-            foreach (var v in vertexDatabase.List)
-            {
-                objWriter.WriteLine("v {0} {1} {2}", v.X, v.Y, v.Z);
-            }
-            objWriter.WriteLine();
-
-            Logger.WriteLine("Writing face uv coordinates");
-            objWriter.WriteLine("# Texture cooridinates (Count = {0})", uvDatabase.List.Count());
-            foreach (var uv in uvDatabase.List)
-            {
-                objWriter.WriteLine("vt {0} {1}", uv.X, uv.Y);
-            }
-            objWriter.WriteLine();
-
-            // Write the one indexed normal
-            objWriter.WriteLine("# Normal");
-            objWriter.WriteLine("vn 0 0 -1");
-            objWriter.WriteLine();
-
-            // Now we can copy over the string used to build the databases
-            objWriter.WriteLine("# Groups (Count = {0})", groupCount);
-            objWriter.WriteLine(faceBuilder.ToString());
-
-            return objWriter;
+            // We have all the data we need to build the wavefront file format
+            return CreateWavefrontWriter(mesh, vertexDatabase, uvDatabase, faces);
         }
 
-        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight)
+        private StringWriter BuildWavefrontStringForTileObjectMesh(TmxMesh mesh)
         {
-            // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
-            mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
+            Logger.WriteLine("Building mesh obj file for tile: '{0}.obj'", mesh.UniqueMeshName);
+            GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
+            HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+            StringBuilder faces = new StringBuilder();
 
+
+            // Get the single tile associated with this mesh
+            TmxTile tmxTile = this.tmxMap.Tiles[mesh.TileIds[0]];
+
+            var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
+            var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
+
+            // TileObjects have zero depth on their vertices. Their GameObject parent will set depth.
+            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
+
+            // Adds vertices and uvs to the database as we build the face strings
+            string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+            string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+            string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+            string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+            faces.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
+
+            // We have all the data we need to build the wavefront file format
+            return CreateWavefrontWriter(mesh, vertexDatabase, uvDatabase, faces);
+        }
+
+
+        private StringWriter CreateWavefrontWriter(TmxMesh mesh, GenericListDatabase<Vertex3> vertexDatabase, HashIndexOf<PointF> uvDatabase, StringBuilder faces)
+        {
+            StringWriter wavefront = new StringWriter();
+            wavefront.WriteLine("# Tiled2Unity generated file. Do not modify by hand.");
+            wavefront.WriteLine("# Wavefront file for '{0}.obj'", mesh.UniqueMeshName);
+            wavefront.WriteLine();
+
+            wavefront.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
+            foreach (var v in vertexDatabase.List)
+            {
+                wavefront.WriteLine("v {0} {1} {2}", v.X, v.Y, v.Z);
+            }
+            wavefront.WriteLine();
+
+            wavefront.WriteLine("# Texture cooridinates (Count = {0})", uvDatabase.List.Count());
+            foreach (var uv in uvDatabase.List)
+            {
+                wavefront.WriteLine("vt {0} {1}", uv.X, uv.Y);
+            }
+            wavefront.WriteLine();
+
+            // Write the one indexed normal
+            wavefront.WriteLine("# Normal");
+            wavefront.WriteLine("vn 0 0 -1");
+            wavefront.WriteLine();
+
+            // Now we can copy over the string used to build the databases
+            wavefront.WriteLine("# Mesh description");
+            wavefront.WriteLine("g {0}", mesh.UniqueMeshName);
+            wavefront.WriteLine();
+            wavefront.WriteLine("# Faces");
+            wavefront.WriteLine(faces.ToString());
+
+            return wavefront;
+        }
+
+        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize)
+        {
             PointF pt0 = mapLocation;
             PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
             PointF pt2 = PointF.Add(mapLocation, tileSize);

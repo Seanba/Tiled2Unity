@@ -22,10 +22,10 @@ namespace Tiled2Unity
 
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
-                   XElement assignment =
+                    XElement assignment =
                         new XElement("AssignMaterial",
                             new XAttribute("mesh", mesh.UniqueMeshName),
-                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.ImageName)));
+                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
 
                     elements.Add(assignment);
                 }

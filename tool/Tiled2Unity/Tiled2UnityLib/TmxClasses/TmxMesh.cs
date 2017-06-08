@@ -10,11 +10,21 @@ namespace Tiled2Unity
     public class TmxMesh
     {
         // Unity meshes have a limit on the number of vertices they can contain (65534)
-        // Each face of a mesh has 4 vertices so we are limited to 65534 / 4 = 16383 faces
-        // Note: In some cases, Unity still splits up a mesh (incorrectly) into "1 parts" with 16383 faces so we go with 16382 faces to be extra safe.
-        private static readonly int MaxNumberOfTiles = 16382;
+        // (Some reports say 65000 so play it safe.)
+        private static readonly int MaxNumberOfTiles = 65000 / 4;
 
-        public string UniqueMeshName { get; private set; }
+        private string uniqueMeshName;
+
+        public string UniqueMeshName
+        {
+            get { return this.uniqueMeshName; }
+            private set
+            {
+                // Mesh names must not have whitespace in them
+                this.uniqueMeshName = value.Replace(" ", "-");
+            }
+        }
+
         public string ObjectName { get; private set; }
         public TmxImage TmxImage { get; private set; }
         public uint[] TileIds { get; private set; }
@@ -26,6 +36,10 @@ namespace Tiled2Unity
         public int StartTimeMs { get; private set; }
         public int DurationMs { get; private set; }
         public int FullAnimationDurationMs { get; private set; }
+
+        private TmxMesh()
+        {
+        }
 
         public bool IsMeshFull()
         {
@@ -110,7 +124,7 @@ namespace Tiled2Unity
                         // Create a new mesh and add it to our list
                         mesh = new TmxMesh();
                         mesh.TileIds = new uint[layer.TileIds.Count()];
-                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
+                        mesh.UniqueMeshName = String.Format("{0}_mesh_{1}", layer.TmxMap.Name, layer.TmxMap.GetUniqueId().ToString("D4"));
                         mesh.TmxImage = frameTile.TmxImage;
 
                         // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
@@ -154,7 +168,7 @@ namespace Tiled2Unity
                 mesh.TileIds = new uint[1];
                 mesh.TileIds[0] = frameTileId;
 
-                mesh.UniqueMeshName = String.Format("mesh_tile_{0}", TmxMath.GetTileIdWithoutFlags(frameTileId).ToString("D4"));
+                mesh.UniqueMeshName = String.Format("{0}_mesh_tile_{1}", tmxMap.Name, TmxMath.GetTileIdWithoutFlags(frameTileId).ToString("D4"));
                 mesh.TmxImage = frameTile.TmxImage;
                 mesh.ObjectName = "tile_obj";
 

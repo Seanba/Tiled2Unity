@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.11.0
+// version 1.0.12.1
 
 //css_reference System;
 //css_reference System.Core;
@@ -59,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.11.0";
+            return "1.0.12.1";
         }
 
         public static string GetPlatform()
@@ -655,7 +655,6 @@ namespace Tiled2Unity
                 { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
                 { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => Tiled2Unity.Settings.IsAutoExporting = true },
-                { "w|writeable-vertices", "Exported meshes will have writable vertices. This increases the memory used by meshes significantly. Only use if you will mutate the vertices through scripting.", w => Tiled2Unity.Settings.WriteableVertices = true },
                 { "v|version", "Display version information.", v => displayVersion = true },
                 { "h|help", "Display this help message.", h => displayHelp = true },
             };
@@ -968,13 +967,24 @@ namespace Tiled2Unity
         public static float Scale = 1.0f;
         public static bool PreferConvexPolygons = false;
         public static bool DepthBufferEnabled = false;
-        public static bool WriteableVertices = false;
 
         public static readonly float DefaultTexelBias = 8192.0f;
         public static float TexelBias = DefaultTexelBias;
 
         // If we're automatically opening, exporting, and closing then there are some code paths we don't want to take
         public static bool IsAutoExporting = false;
+
+        // Some old operating systems (like Windows 7) are incompatible with the Skia library and throw exceptions
+        // We want to try to handle those execptions and disable previewing when that happens
+        public static event EventHandler PreviewingDisabled;
+
+        public static void DisablePreviewing()
+        {
+            if (PreviewingDisabled != null)
+            {
+                PreviewingDisabled.Invoke(null, EventArgs.Empty);
+            }
+        }
     }
 }
 
@@ -1164,10 +1174,10 @@ namespace Tiled2Unity
 
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
-                   XElement assignment =
+                    XElement assignment =
                         new XElement("AssignMaterial",
                             new XAttribute("mesh", mesh.UniqueMeshName),
-                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.ImageName)));
+                            new XAttribute("material", Path.GetFileNameWithoutExtension(mesh.TmxImage.AbsolutePath)));
 
                     elements.Add(assignment);
                 }
@@ -1609,139 +1619,151 @@ namespace Tiled2Unity
         {
             List<XElement> elements = new List<XElement>();
 
-            // Add the mesh file as raw text
+            foreach (var importMesh in EnumerateImportMeshElements())
             {
-                StringWriter objBuilder = BuildObjString();
-
-                XElement mesh =
-                    new XElement("ImportMesh",
-                        new XAttribute("filename", this.tmxMap.Name + ".obj"),
-                        StringToBase64String(objBuilder.ToString()));
-
-                elements.Add(mesh);
+                elements.Add(importMesh);
             }
 
+            foreach (var texture in EnumerateTextureElements(exportToUnityProjectPath))
             {
-                // Add all image files as compressed base64 strings
-                var layerImages = from layer in this.tmxMap.EnumerateTileLayers()
-                                  where layer.Visible == true
-                                  from rawTileId in layer.TileIds
-                                  where rawTileId != 0
-                                  let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                                  let tile = this.tmxMap.Tiles[tileId]
-                                  select tile.TmxImage;
-
-                // Find the images from the frames as well
-                var frameImages = from layer in this.tmxMap.EnumerateTileLayers()
-                                  where layer.Visible == true
-                                  from rawTileId in layer.TileIds
-                                  where rawTileId != 0
-                                  let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
-                                  let tile = this.tmxMap.Tiles[tileId]
-                                  from rawFrame in tile.Animation.Frames
-                                  let frameId = TmxMath.GetTileIdWithoutFlags(rawFrame.GlobalTileId)
-                                  let frame = this.tmxMap.Tiles[frameId]
-                                  select frame.TmxImage;
-
-
-                // Tile Objects may have images not yet references by a layer
-                var objectImages = from objectGroup in this.tmxMap.EnumerateObjectLayers()
-                                   where objectGroup.Visible == true
-                                   from tmxObject in objectGroup.Objects
-                                   where tmxObject.Visible == true
-                                   where tmxObject is TmxObjectTile
-                                   let tmxTileObject = tmxObject as TmxObjectTile
-                                   from mesh in tmxTileObject.Tile.Meshes
-                                   select mesh.TmxImage;
-
-                // Combine image paths from tile layers and object layers
-                List<TmxImage> images = new List<TmxImage>();
-                images.AddRange(layerImages);
-                images.AddRange(frameImages);
-                images.AddRange(objectImages);
-
-                // Get rid of duplicate images
-                TmxImageComparer imageComparer = new TmxImageComparer();
-                images = images.Distinct(imageComparer).ToList();
-
-                foreach (TmxImage image in images)
-                {
-                    // The source texture is internal if it has a sibling *.meta file
-                    // We don't want to copy internal textures into Unity because they are already there.
-                    bool isInternal = File.Exists(image.AbsolutePath + ".meta");
-                    if (isInternal)
-                    {
-                        // The texture is already in the Unity project so don't import
-                        XElement xmlInternalTexture = new XElement("InternalTexture");
-
-                        // The path to the texture will be WRT to the Unity project root
-                        string assetsFolder = GetUnityAssetsPath(image.AbsolutePath);
-                        string assetPath = image.AbsolutePath.Remove(0, assetsFolder.Length);
-                        assetPath = "Assets" + assetPath;
-                        assetPath = assetPath.Replace("\\", "/");
-
-                        Logger.WriteLine("InternalTexture : {0}", assetPath);
-
-                        // Path to texture in the asset directory
-                        xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
-                        xmlInternalTexture.SetAttributeValue("materialName", image.ImageName);
-
-                        // Transparent color key?
-                        if (!String.IsNullOrEmpty(image.TransparentColor))
-                        {
-                            xmlInternalTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
-                        }
-
-                        // Are we using depth shaders on our materials?
-                        if (Tiled2Unity.Settings.DepthBufferEnabled)
-                        {
-                            xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
-                        }
-
-                        // Will the material be loaded as a resource?
-                        if (this.tmxMap.IsResource)
-                        {
-                            xmlInternalTexture.SetAttributeValue("isResource", true);
-                        }
-
-                        elements.Add(xmlInternalTexture);
-                    }
-                    else
-                    {
-                        // The texture needs to be imported into the Unity project (under Tiled2Unity's care)
-                        XElement xmlImportTexture = new XElement("ImportTexture");
-
-                        // Note that compression is not available in Unity. Go with Base64 string. Blerg.
-                        Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
-
-                        // Is there a color key for transparency?
-                        if (!String.IsNullOrEmpty(image.TransparentColor))
-                        {
-                            xmlImportTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
-                        }
-
-                        // Are we using depth shaders on our materials?
-                        if (Tiled2Unity.Settings.DepthBufferEnabled)
-                        {
-                            xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
-                        }
-
-                        // Will the material be loaded as a resource?
-                        if (this.tmxMap.IsResource)
-                        {
-                            xmlImportTexture.SetAttributeValue("isResource", true);
-                        }
-
-                        // Bake the image file into the xml
-                        string filename = image.ImageName + Path.GetExtension(image.AbsolutePath);
-                        xmlImportTexture.Add(new XAttribute("filename", filename), FileToBase64String(image.AbsolutePath));
-
-                        elements.Add(xmlImportTexture);
-                    }
-                }
+                elements.Add(texture);
             }
 
             return elements;
+        }
+
+        private IEnumerable<XElement> EnumerateImportMeshElements()
+        {
+            foreach (var tuple in EnumerateWavefrontData())
+            {
+                var meshName = tuple.Item1;
+                var wavefront = tuple.Item2;
+                string path = String.Format("{0}.obj", meshName);
+                yield return new XElement("ImportMesh",
+                                            new XAttribute("filename", path),
+                                            StringToBase64String(wavefront.ToString()));
+            }
+        }
+
+        private IEnumerable<XElement> EnumerateTextureElements(string exportToUnityProjectPath)
+        {
+            // Add all image files as compressed base64 strings
+            var layerImages = from layer in this.tmxMap.EnumerateTileLayers()
+                              where layer.Visible == true
+                              from rawTileId in layer.TileIds
+                              where rawTileId != 0
+                              let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
+                              let tile = this.tmxMap.Tiles[tileId]
+                              select tile.TmxImage;
+
+            // Find the images from the frames as well
+            var frameImages = from layer in this.tmxMap.EnumerateTileLayers()
+                              where layer.Visible == true
+                              from rawTileId in layer.TileIds
+                              where rawTileId != 0
+                              let tileId = TmxMath.GetTileIdWithoutFlags(rawTileId)
+                              let tile = this.tmxMap.Tiles[tileId]
+                              from rawFrame in tile.Animation.Frames
+                              let frameId = TmxMath.GetTileIdWithoutFlags(rawFrame.GlobalTileId)
+                              let frame = this.tmxMap.Tiles[frameId]
+                              select frame.TmxImage;
+
+
+            // Tile Objects may have images not yet references by a layer
+            var objectImages = from objectGroup in this.tmxMap.EnumerateObjectLayers()
+                               where objectGroup.Visible == true
+                               from tmxObject in objectGroup.Objects
+                               where tmxObject.Visible == true
+                               where tmxObject is TmxObjectTile
+                               let tmxTileObject = tmxObject as TmxObjectTile
+                               from mesh in tmxTileObject.Tile.Meshes
+                               select mesh.TmxImage;
+
+            // Combine image paths from tile layers and object layers
+            List<TmxImage> images = new List<TmxImage>();
+            images.AddRange(layerImages);
+            images.AddRange(frameImages);
+            images.AddRange(objectImages);
+
+            // Get rid of duplicate images
+            TmxImageComparer imageComparer = new TmxImageComparer();
+            images = images.Distinct(imageComparer).ToList();
+
+            foreach (TmxImage image in images)
+            {
+                // The source texture is internal if it has a sibling *.meta file
+                // We don't want to copy internal textures into Unity because they are already there.
+                bool isInternal = File.Exists(image.AbsolutePath + ".meta");
+                if (isInternal)
+                {
+                    // The texture is already in the Unity project so don't import
+                    XElement xmlInternalTexture = new XElement("InternalTexture");
+
+                    // The path to the texture will be WRT to the Unity project root
+                    string assetsFolder = GetUnityAssetsPath(image.AbsolutePath);
+                    string assetPath = image.AbsolutePath.Remove(0, assetsFolder.Length);
+                    assetPath = "Assets" + assetPath;
+                    assetPath = assetPath.Replace("\\", "/");
+
+                    Logger.WriteLine("InternalTexture : {0}", assetPath);
+
+                    // Path to texture in the asset directory
+                    xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
+                    xmlInternalTexture.SetAttributeValue("materialName", image.ImageName);
+
+                    // Transparent color key?
+                    if (!String.IsNullOrEmpty(image.TransparentColor))
+                    {
+                        xmlInternalTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
+                    }
+
+                    // Are we using depth shaders on our materials?
+                    if (Tiled2Unity.Settings.DepthBufferEnabled)
+                    {
+                        xmlInternalTexture.SetAttributeValue("usesDepthShaders", true);
+                    }
+
+                    // Will the material be loaded as a resource?
+                    if (this.tmxMap.IsResource)
+                    {
+                        xmlInternalTexture.SetAttributeValue("isResource", true);
+                    }
+
+                    yield return xmlInternalTexture;
+                }
+                else
+                {
+                    // The texture needs to be imported into the Unity project (under Tiled2Unity's care)
+                    XElement xmlImportTexture = new XElement("ImportTexture");
+
+                    // Note that compression is not available in Unity. Go with Base64 string. Blerg.
+                    Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
+
+                    // Is there a color key for transparency?
+                    if (!String.IsNullOrEmpty(image.TransparentColor))
+                    {
+                        xmlImportTexture.SetAttributeValue("alphaColorKey", image.TransparentColor);
+                    }
+
+                    // Are we using depth shaders on our materials?
+                    if (Tiled2Unity.Settings.DepthBufferEnabled)
+                    {
+                        xmlImportTexture.SetAttributeValue("usesDepthShaders", true);
+                    }
+
+                    // Will the material be loaded as a resource?
+                    if (this.tmxMap.IsResource)
+                    {
+                        xmlImportTexture.SetAttributeValue("isResource", true);
+                    }
+
+                    // Bake the image file into the xml
+                    string filename = image.ImageName + Path.GetExtension(image.AbsolutePath);
+                    xmlImportTexture.Add(new XAttribute("filename", filename), FileToBase64String(image.AbsolutePath));
+
+                    yield return xmlImportTexture;
+                }
+            }
         }
 
         // Assumes the path passed in is within the "Assets" directory of a Unity project
@@ -1818,23 +1840,10 @@ namespace Tiled2Unity
             }
         }
 
-        // Creates the text for a Wavefront OBJ file for the TmxMap
-        private StringWriter BuildObjString()
+        // Enumerate all our meshes and bake them into OBJ Wavefront format
+        private IEnumerable<Tuple<string, StringWriter>> EnumerateWavefrontData()
         {
-            IGenericDatabase<Vertex3> vertexDatabase = new HashIndexOf<Vertex3>();
-            HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
-
-            // Are we allowing vertices to be written too (advanced option)
-            if (Tiled2Unity.Settings.WriteableVertices)
-            {
-                // Replace vertex database with class that ensure each vertex (even ones with similar values) are unique
-                Logger.WriteLine("Using writeable-vertices. This will increase the size of the mesh but will allow you mutate vertices through scripting. This is an advanced feature.");
-                vertexDatabase = new GenericListDatabase<Vertex3>();
-            }
-
-            // Go through every face of every mesh of every visible layer and collect vertex and texture coordinate indices as you go
-            int groupCount = 0;
-            StringBuilder faceBuilder = new StringBuilder();
+            Logger.WriteLine("Enumerate map layers for mesh-build.");
             foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible != true)
@@ -1843,126 +1852,144 @@ namespace Tiled2Unity
                 if (layer.Ignore == TmxLayer.IgnoreSettings.Visual)
                     continue;
 
-                // We're going to use this layer
-                ++groupCount;
-
                 // Enumerate over the tiles in the direction given by the draw order of the map
                 var verticalRange = (this.tmxMap.DrawOrderVertical == 1) ? Enumerable.Range(0, layer.Height) : Enumerable.Range(0, layer.Height).Reverse();
                 var horizontalRange = (this.tmxMap.DrawOrderHorizontal == 1) ? Enumerable.Range(0, layer.Width) : Enumerable.Range(0, layer.Width).Reverse();
 
                 foreach (TmxMesh mesh in layer.Meshes)
                 {
-                    Logger.WriteLine("Writing '{0}' mesh group", mesh.UniqueMeshName);
-                    faceBuilder.AppendFormat("\ng {0}\n", mesh.UniqueMeshName);
+                    yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForLayerMesh(layer, mesh, horizontalRange, verticalRange));
+                }
+            }
+            Logger.WriteLine("Finished enumeration.");
 
-                    foreach (int y in verticalRange)
+            Logger.WriteLine("Enumerate tile objects for mesh-build.");
+            foreach (var mesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
+            {
+                yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForTileObjectMesh(mesh));
+            }
+            Logger.WriteLine("Finished enumeration.");
+        }
+
+        private StringWriter BuildWavefrontStringForLayerMesh(TmxLayer layer, TmxMesh mesh, IEnumerable<int> horizontalRange, IEnumerable<int> verticalRange)
+        {
+            Logger.WriteLine("Building mesh obj file for '{0}'", mesh.UniqueMeshName);
+            GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
+            HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+            StringBuilder faces = new StringBuilder();
+
+            foreach (int y in verticalRange)
+            {
+                foreach (int x in horizontalRange)
+                {
+                    int tileIndex = layer.GetTileIndex(x, y);
+                    uint tileId = mesh.GetTileIdAt(tileIndex);
+
+                    // Skip blank tiles
+                    if (tileId == 0)
+                        continue;
+
+                    TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
+
+                    // What are the vertex and texture coorindates of this face on the mesh?
+                    var position = this.tmxMap.GetMapPositionAt(x, y, tile);
+                    var vertices = CalculateFaceVertices(position, tile.TileSize);
+
+                    // If we're using depth shaders then we'll need to set a depth value of this face
+                    float depth_z = 0.0f;
+                    if (Tiled2Unity.Settings.DepthBufferEnabled)
                     {
-                        foreach (int x in horizontalRange)
-                        {
-                            int tileIndex = layer.GetTileIndex(x, y);
-                            uint tileId = mesh.GetTileIdAt(tileIndex);
-
-                            // Skip blank tiles
-                            if (tileId == 0)
-                                continue;
-
-                            TmxTile tile = this.tmxMap.Tiles[TmxMath.GetTileIdWithoutFlags(tileId)];
-                            
-                            // What are the vertex and texture coorindates of this face on the mesh?
-                            var position = this.tmxMap.GetMapPositionAt(x, y, tile);
-                            var vertices = CalculateFaceVertices(position, tile.TileSize, this.tmxMap.TileHeight);
-
-                            // If we're using depth shaders then we'll need to set a depth value of this face
-                            float depth_z = 0.0f;
-                            if (Tiled2Unity.Settings.DepthBufferEnabled)
-                            {
-                                depth_z = CalculateFaceDepth(position.Y + tmxMap.TileHeight, tmxMap.MapSizeInPixels.Height);
-                            }
-
-                            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
-
-                            // Is the tile being flipped or rotated (needed for texture cooridinates)
-                            bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
-                            bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
-                            bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
-                            var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
-
-                            // Adds vertices and uvs to the database as we build the face strings
-                            string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                            string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                            string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                            string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
-                            faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
-                        }
+                        depth_z = CalculateFaceDepth(position.Y + tmxMap.TileHeight, tmxMap.MapSizeInPixels.Height);
                     }
+
+                    FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = depth_z };
+
+                    // Is the tile being flipped or rotated (needed for texture cooridinates)
+                    bool flipDiagonal = TmxMath.IsTileFlippedDiagonally(tileId);
+                    bool flipHorizontal = TmxMath.IsTileFlippedHorizontally(tileId);
+                    bool flipVertical = TmxMath.IsTileFlippedVertically(tileId);
+                    var uvs = CalculateFaceTextureCoordinates(tile, flipDiagonal, flipHorizontal, flipVertical);
+
+                    // Adds vertices and uvs to the database as we build the face strings
+                    string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+                    string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+                    string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+                    string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+                    faces.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
                 }
             }
 
-            // Now go through any tile objects we may have and write them out as face groups as well
-            foreach (var tmxMesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
-            {
-                // We're going to use this tile object
-                groupCount++;
-
-                Logger.WriteLine("Writing '{0}' tile group", tmxMesh.UniqueMeshName);
-                faceBuilder.AppendFormat("\ng {0}\n", tmxMesh.UniqueMeshName);
-
-                // Get the single tile associated with this mesh
-                TmxTile tmxTile = this.tmxMap.Tiles[tmxMesh.TileIds[0]];
-
-                var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
-                var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
-
-                // TileObjects have zero depth on their vertices. Their GameObject parent will set depth.
-                FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
-
-                // Adds vertices and uvs to the database as we build the face strings
-                string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
-                string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
-                string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
-                string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
-                faceBuilder.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
-            }
-
-            // All of our faces have been built and vertex and uv databases have been filled.
-            // Start building out the obj file
-            StringWriter objWriter = new StringWriter();
-            objWriter.WriteLine("# Wavefront OBJ file automatically generated by Tiled2Unity");
-            objWriter.WriteLine();
-
-            Logger.WriteLine("Writing face vertices");
-            objWriter.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
-            foreach (var v in vertexDatabase.List)
-            {
-                objWriter.WriteLine("v {0} {1} {2}", v.X, v.Y, v.Z);
-            }
-            objWriter.WriteLine();
-
-            Logger.WriteLine("Writing face uv coordinates");
-            objWriter.WriteLine("# Texture cooridinates (Count = {0})", uvDatabase.List.Count());
-            foreach (var uv in uvDatabase.List)
-            {
-                objWriter.WriteLine("vt {0} {1}", uv.X, uv.Y);
-            }
-            objWriter.WriteLine();
-
-            // Write the one indexed normal
-            objWriter.WriteLine("# Normal");
-            objWriter.WriteLine("vn 0 0 -1");
-            objWriter.WriteLine();
-
-            // Now we can copy over the string used to build the databases
-            objWriter.WriteLine("# Groups (Count = {0})", groupCount);
-            objWriter.WriteLine(faceBuilder.ToString());
-
-            return objWriter;
+            // We have all the data we need to build the wavefront file format
+            return CreateWavefrontWriter(mesh, vertexDatabase, uvDatabase, faces);
         }
 
-        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize, int mapTileHeight)
+        private StringWriter BuildWavefrontStringForTileObjectMesh(TmxMesh mesh)
         {
-            // Location on map is complicated by tiles that are 'higher' than the tile size given for the overall map
-            mapLocation.Offset(0, -tileSize.Height + mapTileHeight);
+            Logger.WriteLine("Building mesh obj file for tile: '{0}.obj'", mesh.UniqueMeshName);
+            GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
+            HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
+            StringBuilder faces = new StringBuilder();
 
+
+            // Get the single tile associated with this mesh
+            TmxTile tmxTile = this.tmxMap.Tiles[mesh.TileIds[0]];
+
+            var vertices = CalculateFaceVertices_TileObject(tmxTile.TileSize, tmxTile.Offset);
+            var uvs = CalculateFaceTextureCoordinates(tmxTile, false, false, false);
+
+            // TileObjects have zero depth on their vertices. Their GameObject parent will set depth.
+            FaceVertices faceVertices = new FaceVertices { Vertices = vertices, Depth_z = 0.0f };
+
+            // Adds vertices and uvs to the database as we build the face strings
+            string v0 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V0) + 1, uvDatabase.Add(uvs[0]) + 1);
+            string v1 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V1) + 1, uvDatabase.Add(uvs[1]) + 1);
+            string v2 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V2) + 1, uvDatabase.Add(uvs[2]) + 1);
+            string v3 = String.Format("{0}/{1}/1", vertexDatabase.AddToDatabase(faceVertices.V3) + 1, uvDatabase.Add(uvs[3]) + 1);
+            faces.AppendFormat("f {0} {1} {2} {3}\n", v0, v1, v2, v3);
+
+            // We have all the data we need to build the wavefront file format
+            return CreateWavefrontWriter(mesh, vertexDatabase, uvDatabase, faces);
+        }
+
+
+        private StringWriter CreateWavefrontWriter(TmxMesh mesh, GenericListDatabase<Vertex3> vertexDatabase, HashIndexOf<PointF> uvDatabase, StringBuilder faces)
+        {
+            StringWriter wavefront = new StringWriter();
+            wavefront.WriteLine("# Tiled2Unity generated file. Do not modify by hand.");
+            wavefront.WriteLine("# Wavefront file for '{0}.obj'", mesh.UniqueMeshName);
+            wavefront.WriteLine();
+
+            wavefront.WriteLine("# Vertices (Count = {0})", vertexDatabase.List.Count());
+            foreach (var v in vertexDatabase.List)
+            {
+                wavefront.WriteLine("v {0} {1} {2}", v.X, v.Y, v.Z);
+            }
+            wavefront.WriteLine();
+
+            wavefront.WriteLine("# Texture cooridinates (Count = {0})", uvDatabase.List.Count());
+            foreach (var uv in uvDatabase.List)
+            {
+                wavefront.WriteLine("vt {0} {1}", uv.X, uv.Y);
+            }
+            wavefront.WriteLine();
+
+            // Write the one indexed normal
+            wavefront.WriteLine("# Normal");
+            wavefront.WriteLine("vn 0 0 -1");
+            wavefront.WriteLine();
+
+            // Now we can copy over the string used to build the databases
+            wavefront.WriteLine("# Mesh description");
+            wavefront.WriteLine("g {0}", mesh.UniqueMeshName);
+            wavefront.WriteLine();
+            wavefront.WriteLine("# Faces");
+            wavefront.WriteLine(faces.ToString());
+
+            return wavefront;
+        }
+
+        private PointF[] CalculateFaceVertices(Point mapLocation, Size tileSize)
+        {
             PointF pt0 = mapLocation;
             PointF pt1 = PointF.Add(mapLocation, new Size(tileSize.Width, 0));
             PointF pt2 = PointF.Add(mapLocation, tileSize);
@@ -2157,9 +2184,8 @@ namespace Tiled2Unity
             // Add the group layer data component
             {
                 XElement component = new XElement("GroupLayer",
-                                        new XAttribute("opacity", groupLayer.Opacity),
-                                        new XAttribute("offset-x", groupLayer.Offset.X),
-                                        new XAttribute("offset-y", groupLayer.Offset.Y));
+                                        new XAttribute("offsetX", groupLayer.Offset.X),
+                                        new XAttribute("offsetY", groupLayer.Offset.Y));
                 xmlGroup.Add(component);
             }
 
@@ -2189,7 +2215,6 @@ namespace Tiled2Unity
             // Add a TileLayer component
             {
                 XElement layerComponent = new XElement("TileLayer",
-                                            new XAttribute("opacity", tileLayer.Opacity),
                                             new XAttribute("offsetX", tileLayer.Offset.X),
                                             new XAttribute("offsetY", tileLayer.Offset.Y));
 
@@ -2375,10 +2400,10 @@ namespace Tiled2Unity
             {
                 XElement xmlMesh = new XElement("GameObject",
                     new XAttribute("name", mesh.ObjectName),
-                    new XAttribute("copy", mesh.UniqueMeshName),
+                    new XAttribute("mesh", mesh.UniqueMeshName),
                     new XAttribute("sortingLayerName", layer.GetSortingLayerName()),
                     new XAttribute("sortingOrder", layer.GetSortingOrder()),
-                    new XAttribute("opacity", layer.Opacity));
+                    new XAttribute("opacity", layer.GetRecursiveOpacity()));
                 xmlMeshes.Add(xmlMesh);
 
                 if (mesh.FullAnimationDurationMs > 0)
@@ -2726,10 +2751,11 @@ namespace Tiled2Unity
                     XElement xmlMeshObject = new XElement("GameObject");
 
                     xmlMeshObject.SetAttributeValue("name", mesh.ObjectName);
-                    xmlMeshObject.SetAttributeValue("copy", mesh.UniqueMeshName);
+                    xmlMeshObject.SetAttributeValue("mesh", mesh.UniqueMeshName);
 
                     xmlMeshObject.SetAttributeValue("sortingLayerName", tmxObjectTile.GetSortingLayerName());
                     xmlMeshObject.SetAttributeValue("sortingOrder", tmxObjectTile.GetSortingOrder());
+                    xmlMeshObject.SetAttributeValue("opacity", tmxObjectTile.ParentObjectGroup.GetRecursiveOpacity());
 
                     // Game object that contains mesh moves position to that local origin of Tile Object (from Tiled's point of view) matches the root position of the Tile game object
                     // Put another way: This translation moves away from center to local origin
@@ -12733,18 +12759,42 @@ namespace Tiled2Unity
                 tmxImage.Size = new System.Drawing.Size(width, height);
             }
 
+            bool canMakeTransparentPixels = true;
+
             // Do not open the image in Tiled2UnityLite (no SkiaSharp in Tiled2UnityLite)
 #if !TILED_2_UNITY_LITE
             if (!Tiled2Unity.Settings.IsAutoExporting)
             {
                 try
                 {
-                    tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
+                    if (!tmxImage.Size.IsEmpty)
+                    {
+                        // We know our size and can decode the image into our prefered format
+                        var info = new SKImageInfo();
+                        info.ColorType = SKColorType.Rgba8888;
+                        info.AlphaType = SKAlphaType.Unpremul;
+                        info.Width = tmxImage.Size.Width;
+                        info.Height = tmxImage.Size.Height;
+                        tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath, info);
+                    }
+                    else
+                    {
+                        // Open the image without any helpful information
+                        // This stops us from being able to make pixels transparent
+                        tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
+                        canMakeTransparentPixels = false;
+                    }
                 }
                 catch (FileNotFoundException fnf)
                 {
                     string msg = String.Format("Image file not found: {0}", tmxImage.AbsolutePath);
                     throw new TmxException(msg, fnf);
+                }
+                catch (Exception e)
+                {
+                    // Disable previewing. Some users are reporting problems. Perhaps due to older versions of windows.
+                    Logger.WriteError("Error creating image with Skia Library. Exception: {0}", e.Message);
+                    Tiled2Unity.Settings.DisablePreviewing();
                 }
 
                 tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
@@ -12757,24 +12807,31 @@ namespace Tiled2Unity
 #if !TILED_2_UNITY_LITE
             if (!String.IsNullOrEmpty(tmxImage.TransparentColor) && tmxImage.ImageBitmap != null)
             {
-                System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
-
-                // Set the transparent pixels if using color-keying
-                SKColor transColor = new SKColor((uint)systemTransColor.ToArgb()).WithAlpha(0);
-                for (int x = 0; x < tmxImage.ImageBitmap.Width; ++x)
+                if (canMakeTransparentPixels)
                 {
-                    for (int y = 0; y < tmxImage.ImageBitmap.Height; ++y)
+                    Logger.WriteLine("Removing alpha from transparent pixels.");
+                    System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
+
+                    // Set the transparent pixels if using color-keying
+                    SKColor transColor = new SKColor((uint)systemTransColor.ToArgb()).WithAlpha(0);
+                    for (int x = 0; x < tmxImage.ImageBitmap.Width; ++x)
                     {
-                        SKColor pixel = tmxImage.ImageBitmap.GetPixel(x, y);
-                        if (pixel.Red == transColor.Red && pixel.Green == transColor.Green && pixel.Blue == transColor.Blue)
+                        for (int y = 0; y < tmxImage.ImageBitmap.Height; ++y)
                         {
-                            tmxImage.ImageBitmap.SetPixel(x, y, transColor);
+                            SKColor pixel = tmxImage.ImageBitmap.GetPixel(x, y);
+                            if (pixel.Red == transColor.Red && pixel.Green == transColor.Green && pixel.Blue == transColor.Blue)
+                            {
+                                tmxImage.ImageBitmap.SetPixel(x, y, transColor);
+                            }
                         }
                     }
                 }
+                else
+                {
+                    Logger.WriteWarning("Cannot make transparent pixels for viewing purposes. Save tileset with newer verion of Tiled.");
+                }
             }
 #endif
-
             return tmxImage;
         }
     }
@@ -12824,6 +12881,11 @@ namespace Tiled2Unity
         public int GetTileIndex(int x, int y)
         {
             return y * this.Width + x;
+        }
+
+        public Point CoordinatesFromIndex(int index)
+        {
+            return new Point(index % this.Width, index / this.Width);
         }
 
         public bool IsExportingConvexPolygons()
@@ -13238,6 +13300,12 @@ namespace Tiled2Unity
 
             // Use our draw order index
             return this.DrawOrderIndex;
+        }
+
+        public float GetRecursiveOpacity()
+        {
+            float parentOpacity = (this.ParentNode != null) ? this.ParentNode.GetRecursiveOpacity() : 1.0f;
+            return this.Opacity * parentOpacity;
         }
 
         // The child class must implement Visit abstraction
@@ -14026,7 +14094,7 @@ namespace Tiled2Unity
             return staggerX == 0 && ((y & 1) ^ staggerEven) != 0;
         }
 
-        static public Point TileCornerInGridCoordinates(TmxMap tmxMap, int x, int y)
+        static public Point TileCornerFromGridCoordinates(TmxMap tmxMap, int x, int y)
         {
             // Support different map display types (orthographic, isometric, etc..)
             // Note: simulates "tileToScreenCoords" function from Tiled source
@@ -14087,7 +14155,7 @@ namespace Tiled2Unity
 
         static public Point TileCornerInScreenCoordinates(TmxMap tmxMap, int x, int y)
         {
-            Point point = TileCornerInGridCoordinates(tmxMap, x, y);
+            Point point = TileCornerFromGridCoordinates(tmxMap, x, y);
 
             if (tmxMap.Orientation != TmxMap.MapOrientation.Orthogonal)
             {
@@ -14193,11 +14261,21 @@ namespace Tiled2Unity
     public class TmxMesh
     {
         // Unity meshes have a limit on the number of vertices they can contain (65534)
-        // Each face of a mesh has 4 vertices so we are limited to 65534 / 4 = 16383 faces
-        // Note: In some cases, Unity still splits up a mesh (incorrectly) into "1 parts" with 16383 faces so we go with 16382 faces to be extra safe.
-        private static readonly int MaxNumberOfTiles = 16382;
+        // (Some reports say 65000 so play it safe.)
+        private static readonly int MaxNumberOfTiles = 65000 / 4;
 
-        public string UniqueMeshName { get; private set; }
+        private string uniqueMeshName;
+
+        public string UniqueMeshName
+        {
+            get { return this.uniqueMeshName; }
+            private set
+            {
+                // Mesh names must not have whitespace in them
+                this.uniqueMeshName = value.Replace(" ", "-");
+            }
+        }
+
         public string ObjectName { get; private set; }
         public TmxImage TmxImage { get; private set; }
         public uint[] TileIds { get; private set; }
@@ -14209,6 +14287,10 @@ namespace Tiled2Unity
         public int StartTimeMs { get; private set; }
         public int DurationMs { get; private set; }
         public int FullAnimationDurationMs { get; private set; }
+
+        private TmxMesh()
+        {
+        }
 
         public bool IsMeshFull()
         {
@@ -14293,7 +14375,7 @@ namespace Tiled2Unity
                         // Create a new mesh and add it to our list
                         mesh = new TmxMesh();
                         mesh.TileIds = new uint[layer.TileIds.Count()];
-                        mesh.UniqueMeshName = String.Format("mesh_{0}", layer.TmxMap.GetUniqueId().ToString("D4"));
+                        mesh.UniqueMeshName = String.Format("{0}_mesh_{1}", layer.TmxMap.Name, layer.TmxMap.GetUniqueId().ToString("D4"));
                         mesh.TmxImage = frameTile.TmxImage;
 
                         // Keep track of the timing for this mesh (non-animating meshes will have a start time and duration of 0)
@@ -14337,7 +14419,7 @@ namespace Tiled2Unity
                 mesh.TileIds = new uint[1];
                 mesh.TileIds[0] = frameTileId;
 
-                mesh.UniqueMeshName = String.Format("mesh_tile_{0}", TmxMath.GetTileIdWithoutFlags(frameTileId).ToString("D4"));
+                mesh.UniqueMeshName = String.Format("{0}_mesh_tile_{1}", tmxMap.Name, TmxMath.GetTileIdWithoutFlags(frameTileId).ToString("D4"));
                 mesh.TmxImage = frameTile.TmxImage;
                 mesh.ObjectName = "tile_obj";
 

@@ -91,6 +91,12 @@ namespace Tiled2Unity
             return this.DrawOrderIndex;
         }
 
+        public float GetRecursiveOpacity()
+        {
+            float parentOpacity = (this.ParentNode != null) ? this.ParentNode.GetRecursiveOpacity() : 1.0f;
+            return this.Opacity * parentOpacity;
+        }
+
         // The child class must implement Visit abstraction
         public abstract void Visit(ITmxVisitor visitor);
     }

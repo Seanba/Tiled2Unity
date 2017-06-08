@@ -33,7 +33,7 @@ namespace Tiled2Unity
         {
 #if UNITY_WEBPLAYER
             String warning = String.Format("Can not import through Tiled2Unity using the WebPlayer platform. This is depecrated by Unity Technologies and is no longer supported. Go to File -> Build Settings... and switch to another platform. (You can switch back to Web Player after importing.). File: {0}", assetPath);
-            Debug.LogWarning(warning);
+            Debug.LogError(warning);
             return false;
 #else
             // Certain file types are ignored by this asset post processor (i.e. scripts)
@@ -149,8 +149,6 @@ namespace Tiled2Unity
             // Each mesh renderer has the ability to set the a sort layer but it takes some work with Unity to expose it.
             foreach (MeshRenderer mr in gameObject.GetComponentsInChildren<MeshRenderer>())
             {
-                mr.gameObject.AddComponent<SortingLayerExposed>();
-
                 // No shadows
                 mr.receiveShadows = false;
 #if T2U_USE_LEGACY_IMPORTER
@@ -167,7 +165,7 @@ namespace Tiled2Unity
                 // No probes
                 mr.useLightProbes = false;
 #else
-                //mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+                mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
 #endif
             }
         }

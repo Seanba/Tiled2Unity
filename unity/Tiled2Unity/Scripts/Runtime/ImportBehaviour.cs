@@ -26,6 +26,19 @@ namespace Tiled2Unity
 
 #if UNITY_EDITOR
 
+        public readonly string ImportExtension = ".tiled2unity.xml";
+
+        public string MapName
+        {
+            get
+            {
+                // tiled2unity.xml is two extensions
+                string name = Path.GetFileNameWithoutExtension(this.Tiled2UnityXmlPath);
+                name = Path.GetFileNameWithoutExtension(name);
+                return name;
+            }
+        }
+
         // List of asset names we are waiting on to be imported. This helps us keep import process in order, especially if user re-imports their whole project.
         public List<string> ImportWait_Textures = new List<string>();
         public List<string> ImportWait_Materials = new List<string>();

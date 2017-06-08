@@ -73,10 +73,9 @@ namespace Tiled2Unity
             return startsWith && endsWith;
         }
 
-        public string GetMeshAssetPath(string file)
+        public string GetMeshAssetPath(string mapName, string meshName)
         {
-            string name = System.IO.Path.GetFileNameWithoutExtension(file);
-            string meshAsset = String.Format("{0}/Meshes/{1}.obj", this.assetPathToTiled2UnityRoot, name);
+            string meshAsset = String.Format("{0}/Meshes/{1}/{2}.obj", this.assetPathToTiled2UnityRoot, mapName, meshName);
             return meshAsset;
         }
 

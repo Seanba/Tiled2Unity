@@ -136,7 +136,7 @@ namespace Tiled2Unity
             return staggerX == 0 && ((y & 1) ^ staggerEven) != 0;
         }
 
-        static public Point TileCornerInGridCoordinates(TmxMap tmxMap, int x, int y)
+        static public Point TileCornerFromGridCoordinates(TmxMap tmxMap, int x, int y)
         {
             // Support different map display types (orthographic, isometric, etc..)
             // Note: simulates "tileToScreenCoords" function from Tiled source
@@ -197,7 +197,7 @@ namespace Tiled2Unity
 
         static public Point TileCornerInScreenCoordinates(TmxMap tmxMap, int x, int y)
         {
-            Point point = TileCornerInGridCoordinates(tmxMap, x, y);
+            Point point = TileCornerFromGridCoordinates(tmxMap, x, y);
 
             if (tmxMap.Orientation != TmxMap.MapOrientation.Orthogonal)
             {
