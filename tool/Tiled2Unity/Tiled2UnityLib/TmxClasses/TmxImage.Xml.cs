@@ -35,7 +35,7 @@ namespace Tiled2Unity
                 {
                     if (!tmxImage.Size.IsEmpty)
                     {
-                        // We know our size and can decode the image into our prefered format
+                        // We know our size and can decode the image into our preferred format
                         var info = new SKImageInfo();
                         info.ColorType = SKColorType.Rgba8888;
                         info.AlphaType = SKAlphaType.Unpremul;
@@ -50,6 +50,8 @@ namespace Tiled2Unity
                         tmxImage.ImageBitmap = SKBitmap.Decode(tmxImage.AbsolutePath);
                         canMakeTransparentPixels = false;
                     }
+
+                    tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
                 }
                 catch (FileNotFoundException fnf)
                 {
@@ -59,11 +61,9 @@ namespace Tiled2Unity
                 catch (Exception e)
                 {
                     // Disable previewing. Some users are reporting problems. Perhaps due to older versions of windows.
-                    Logger.WriteError("Error creating image with Skia Library. Exception: {0}", e.Message);
+                    Logger.WriteError("Error creating image with Skia Library.\n\tException: {0}\n\tStack:\n{1}", e.Message, e.StackTrace);
                     Tiled2Unity.Settings.DisablePreviewing();
                 }
-
-                tmxImage.Size = new System.Drawing.Size(tmxImage.ImageBitmap.Width, tmxImage.ImageBitmap.Height);
             }
 #endif
 

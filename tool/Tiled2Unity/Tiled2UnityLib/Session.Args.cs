@@ -39,7 +39,7 @@ namespace Tiled2Unity
                 { "o|object-type-xml=", "Supply an Object Type XML file for types and their properties", o => Tiled2Unity.Settings.ObjectTypeXml = !String.IsNullOrEmpty(o) ? Path.GetFullPath(o) : "" },
                 { "s|scale=", "Scale the output vertices by a value.\nA value of 0.01 is popular for many Unity projects that use 'Pixels Per Unit' of 100 for sprites.\nDefault is 1 (no scaling).", s => Tiled2Unity.Settings.Scale = ParseFloatDefault(s, 1.0f) },
                 { "c|convex", "Limit polygon colliders to be convex with no holes. Increases the number of polygon colliders in export. Can be overriden on map or layer basis with unity:convex property.", c => Tiled2Unity.Settings.PreferConvexPolygons = true },
-                { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nDefault value is 8192.\n A value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
+                { "t|texel-bias=", "Bias for texel sampling.\nTexels are offset by 1 / value.\nA value of 0 means no bias.", t => Tiled2Unity.Settings.TexelBias = ParseFloatDefault(t, Tiled2Unity.Settings.DefaultTexelBias) },
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
                 { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => Tiled2Unity.Settings.IsAutoExporting = true },
                 { "v|version", "Display version information.", v => displayVersion = true },

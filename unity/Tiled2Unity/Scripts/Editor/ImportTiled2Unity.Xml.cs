@@ -34,6 +34,7 @@ namespace Tiled2Unity
             if (LoadTiled2UnityXml(importComponent, xmlPath))
             {
                 CheckVersion(importComponent, importTiled2Unity);
+                CheckSettings(importComponent);
 
                 // Start the import process by importing all our textures
                 ImportAllTextures(importComponent);
@@ -79,6 +80,15 @@ namespace Tiled2Unity
             catch (Exception e)
             {
                 importComponent.RecordError("Failed to read Tiled2Unity import version from '{0}': {1}", importComponent.Tiled2UnityXmlPath, e.Message);
+            }
+        }
+
+        private void CheckSettings(Tiled2Unity.ImportBehaviour importComponent)
+        {
+            // Check anti-aliasing
+            if (QualitySettings.antiAliasing != 0)
+            {
+                importComponent.RecordWarning("Anti-aliasing is enabled and may cause seams. See Edit->Project Settings->Quality to disable.");
             }
         }
 

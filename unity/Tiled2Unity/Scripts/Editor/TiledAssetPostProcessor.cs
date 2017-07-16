@@ -74,6 +74,7 @@ namespace Tiled2Unity
                 }
 
 #if !UNITY_WEBPLAYER
+                using (var logger = new Tiled2Unity.Logger("Importing '{0}'", imported))
                 using (ImportTiled2Unity t2uImporter = new ImportTiled2Unity(imported))
                 {
                     if (t2uImporter.IsTiled2UnityFile())

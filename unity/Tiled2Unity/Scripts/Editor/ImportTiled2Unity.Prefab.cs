@@ -434,10 +434,37 @@ namespace Tiled2Unity
             }
         }
 
+#if T2U_IS_UNITY_4
+        // Special verion for Unity 4.x needed :/
         private GameObject CreateGameObjectWithMesh(string meshName, ImportBehaviour importComponent)
         {
             string meshAssetPath = GetMeshAssetPath(importComponent.MapName, Path.GetFileNameWithoutExtension(meshName));
-            GameObject meshGameObject = AssetDatabase.LoadAssetAtPath<GameObject>(meshAssetPath);
+            UnityEngine.Object[] objects = AssetDatabase.LoadAllAssetsAtPath(meshAssetPath);
+            foreach (var obj in objects)
+            {
+                // Do we have a game object?
+                GameObject gameObj = obj as GameObject;
+                if (gameObj == null)
+                    continue;
+
+                // Does the game object have a MeshRenderer component?
+                if (gameObj.GetComponent<MeshRenderer>() != null)
+                {
+                    GameObject instancedGameObj = GameObject.Instantiate(gameObj) as GameObject;
+                    instancedGameObj.AddComponent<SortingLayerExposed>();
+                    return instancedGameObj;
+                }
+            }
+
+            // If we're here then there's an error
+            importComponent.RecordError("No mesh named '{0}' to create game object from.\nXml File: {1}\nObject: {2}", meshName, importComponent.Tiled2UnityXmlPath, meshAssetPath);
+            return null;
+        }
+#else
+        private GameObject CreateGameObjectWithMesh(string meshName, ImportBehaviour importComponent)
+        {
+            string meshAssetPath = GetMeshAssetPath(importComponent.MapName, Path.GetFileNameWithoutExtension(meshName));
+            GameObject meshGameObject = AssetDatabase.LoadAssetAtPath(meshAssetPath, typeof(GameObject)) as GameObject;
             if (meshGameObject == null)
             {
                 importComponent.RecordError("Mesh object not imported: {0}", meshAssetPath);
@@ -453,8 +480,10 @@ namespace Tiled2Unity
 
             // Create an instance of our mesh game object
             GameObject instancedGameObj = GameObject.Instantiate(meshRenderer.gameObject) as GameObject;
+            instancedGameObj.AddComponent<SortingLayerExposed>();
             return instancedGameObj;
         }
+#endif
 
         private GameObject CreateCopyFromMeshObj(string copyFromName, ImportBehaviour importComponent)
         {

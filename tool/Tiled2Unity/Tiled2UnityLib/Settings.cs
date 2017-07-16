@@ -14,7 +14,7 @@ namespace Tiled2Unity
         public static bool PreferConvexPolygons = false;
         public static bool DepthBufferEnabled = false;
 
-        public static readonly float DefaultTexelBias = 8192.0f;
+        public static readonly float DefaultTexelBias = 0.0f;
         public static float TexelBias = DefaultTexelBias;
 
         // If we're automatically opening, exporting, and closing then there are some code paths we don't want to take

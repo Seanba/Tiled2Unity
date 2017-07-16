@@ -86,11 +86,13 @@ namespace Tiled2Unity
             {
                 this.TmxMap = new TmxMap();
                 Logger.WriteError(tmx.Message);
+                Logger.WriteError("TMX Exception Stack: {0}", tmx.StackTrace);
             }
             catch (Exception e)
             {
                 this.TmxMap = new TmxMap();
                 Logger.WriteError(e.Message);
+                Logger.WriteError("Exception Stack: {0}", e.StackTrace);
             }
 
             this.summaryReport.Report();
