@@ -5,6 +5,7 @@
 #if !UNITY_WEBPLAYER
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -375,8 +376,8 @@ namespace Tiled2Unity
                 // The data looks like this:
                 //  x0,y0 x1,y1 x2,y2 ...
                 var points = from pt in data.Split(' ')
-                             let x = Convert.ToSingle(pt.Split(',')[0])
-                             let y = Convert.ToSingle(pt.Split(',')[1])
+                             let x = Convert.ToSingle(pt.Split(',')[0], CultureInfo.InvariantCulture)
+                             let y = Convert.ToSingle(pt.Split(',')[1], CultureInfo.InvariantCulture)
                              select new Vector2(x, y);
 
                 collider.points = points.ToArray();
@@ -416,8 +417,8 @@ namespace Tiled2Unity
                     // The data looks like this:
                     //  x0,y0 x1,y1 x2,y2 ...
                     var points = from pt in data.Split(' ')
-                                 let x = Convert.ToSingle(pt.Split(',')[0])
-                                 let y = Convert.ToSingle(pt.Split(',')[1])
+                                 let x = Convert.ToSingle(pt.Split(',')[0], CultureInfo.InvariantCulture)
+                                 let y = Convert.ToSingle(pt.Split(',')[1], CultureInfo.InvariantCulture)
 #if T2U_IS_UNITY_4
                                  // Hack for Unity 4.x
                                  select new Vector2(x + offset_x, y + offset_y);
