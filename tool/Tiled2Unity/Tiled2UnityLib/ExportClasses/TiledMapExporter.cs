@@ -32,18 +32,18 @@ namespace Tiled2Unity
             // Create an Xml file to be imported by a Unity project
             // The unity project will have code that turns the Xml into Unity objects and prefabs
             string fileToSave = this.tmxMap.GetExportedFilename();
-            Logger.WriteLine("Compiling tiled2unity file: {0}", fileToSave);
+            Logger.WriteInfo("Compiling tiled2unity file: {0}", fileToSave);
 
             // Need an element for embedded file data that will be imported into Unity
             // These are models and textures
             List<XElement> importFiles = CreateImportFilesElements(exportToTiled2UnityPath);
             List<XElement> assignMaterials = CreateAssignMaterialsElements();
 
-            Logger.WriteLine("Gathering prefab data ...");
+            Logger.WriteVerbose("Gathering prefab data ...");
             XElement prefab = CreatePrefabElement();
 
             // Create the Xml root and populate it
-            Logger.WriteLine("Writing as Xml ...");
+            Logger.WriteVerbose("Writing as Xml ...");
 
             string version = Tiled2Unity.Info.GetVersion();
             XElement root = new XElement("Tiled2Unity", new XAttribute("version", version));
@@ -100,7 +100,7 @@ namespace Tiled2Unity
 
             // Save the file (which is importing it into Unity)
             string pathToSave = Path.Combine(exportDir, fileToSave);
-            Logger.WriteLine("Exporting to: {0}", pathToSave);
+            Logger.WriteInfo("Exporting to: {0}", pathToSave);
             doc.Save(pathToSave);
             Logger.WriteSuccess("Succesfully exported: {0}\n  Vertex Scale = {1}\n  Object Type Xml = {2}",
                 pathToSave,

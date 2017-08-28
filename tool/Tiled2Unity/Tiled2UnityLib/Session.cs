@@ -27,7 +27,7 @@ namespace Tiled2Unity
 
         public bool InitializeWithArgs(string[] args, bool summary)
         {
-            Logger.WriteLine("Command: {0}", String.Join(" ", args));
+            Logger.WriteInfo("Command: {0}", String.Join(" ", args));
 
             // Create our map instance (which is empty/unloaded at first)
             this.TmxMap = new TmxMap();
@@ -39,7 +39,17 @@ namespace Tiled2Unity
             }
 
             ParseEnvironmentVariables();
-            bool success = ParseOptions(args);
+            bool success = false;
+
+            try
+            {
+                success = ParseOptions(args);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteError("Error parsing arguments. Exception: {0}", e.Message);
+                success = false;
+            }
 
             if (summary)
             {
@@ -110,7 +120,7 @@ namespace Tiled2Unity
                 {
                     try
                     {
-                        Logger.WriteLine("Exporting '{0}' to '{1}'", this.TmxFilePath, this.UnityExportFolderPath);
+                        Logger.WriteInfo("Exporting '{0}' to '{1}'", this.TmxFilePath, this.UnityExportFolderPath);
                         TiledMapExporter exporter = new TiledMapExporter(this.TmxMap);
                         exporter.Export(this.UnityExportFolderPath);
                     }

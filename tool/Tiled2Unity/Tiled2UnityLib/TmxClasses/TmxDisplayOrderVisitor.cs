@@ -41,8 +41,8 @@ namespace Tiled2Unity
             // Object layer does not advance draw index
             objectLayer.DrawOrderIndex = this.drawOrderIndex;
 
-            // Either inherit depth buffer index of parent or advance
-            objectLayer.DepthBufferIndex = (objectLayer.ParentNode != null) ? objectLayer.ParentNode.DepthBufferIndex : this.depthBufferIndex++;
+            // Children don't have a depth buffer index. Their parent sets the depth.
+            objectLayer.DepthBufferIndex = (objectLayer.ParentNode != null) ? 0 : this.depthBufferIndex++;
         }
 
         public void VisitTileLayer(TmxLayer tileLayer)
@@ -50,8 +50,8 @@ namespace Tiled2Unity
             // Tile layer does render something and therefore increases draw order index
             tileLayer.DrawOrderIndex = this.drawOrderIndex++;
 
-            // Either inherit depth buffer index of parent or advance
-            tileLayer.DepthBufferIndex = (tileLayer.ParentNode != null) ? tileLayer.ParentNode.DepthBufferIndex : this.depthBufferIndex++;
+            // Children don't have a depth buffer index. Their parent sets the depth.
+            tileLayer.DepthBufferIndex = (tileLayer.ParentNode != null) ? 0 : this.depthBufferIndex++;
         }
 
     }

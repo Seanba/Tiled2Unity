@@ -13,7 +13,7 @@ namespace Tiled2Unity
     {
         public void ParseTileXml(XElement elem, TmxMap tmxMap, uint firstId)
         {
-            Logger.WriteLine("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
+            Logger.WriteVerbose("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
 
             this.Properties = TmxProperties.FromXml(elem);
 

@@ -26,7 +26,7 @@ namespace Tiled2Unity
 
             if (props.Count() > 0)
             {
-                Logger.WriteLine("Parse properites ...");
+                Logger.WriteVerbose("Parse properites ...");
             }
 
             foreach (var p in props)

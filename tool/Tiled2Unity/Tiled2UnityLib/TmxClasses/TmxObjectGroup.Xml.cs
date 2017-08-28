@@ -22,7 +22,7 @@ namespace Tiled2Unity
             tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
 
             // Get all the objects
-            Logger.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
+            Logger.WriteVerbose("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
             var objects = from obj in xml.Elements("object")
                           select TmxObject.FromXml(obj, tmxObjectGroup, tmxMap);
 

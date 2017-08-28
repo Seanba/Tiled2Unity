@@ -291,7 +291,7 @@ namespace Tiled2Unity
                 }
                 else
                 {
-                    Logger.WriteLine("Object '{0}' has been added for use with custom importers", tmxObject);
+                    Logger.WriteInfo("Object '{0}' has been added for use with custom importers", tmxObject);
                 }
 
                 if (objElement != null)

@@ -42,31 +42,31 @@ namespace Tiled2Unity
 
             // Write out the summary report
             string separator = new string('-', 80);
-            Logger.WriteLine(separator);
+            Logger.WriteInfo(separator);
             func("{0} summary", this.name);
 
             // Add successes
-            Logger.WriteLine("Succeeded: {0}", this.successes.Count);
+            Logger.WriteInfo("Succeeded: {0}", this.successes.Count);
             foreach (var success in this.successes)
             {
                 Logger.WriteSuccess("  {0}", success);
             }
 
             // Add warnings
-            Logger.WriteLine("Warnings: {0}", this.warnings.Count);
+            Logger.WriteInfo("Warnings: {0}", this.warnings.Count);
             foreach (var warn in this.warnings)
             {
                 Logger.WriteWarning("  {0}", warn);
             }
 
             // Add errors
-            Logger.WriteLine("Errors: {0}", this.errors.Count);
+            Logger.WriteInfo("Errors: {0}", this.errors.Count);
             foreach (var error in this.errors)
             {
                 Logger.WriteError("  {0}", error);
             }
 
-            Logger.WriteLine(separator);
+            Logger.WriteInfo(separator);
         }
 
         private void Listen()

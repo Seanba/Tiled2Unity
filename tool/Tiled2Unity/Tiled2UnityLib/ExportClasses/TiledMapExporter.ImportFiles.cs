@@ -113,7 +113,7 @@ namespace Tiled2Unity
                     assetPath = "Assets" + assetPath;
                     assetPath = assetPath.Replace("\\", "/");
 
-                    Logger.WriteLine("InternalTexture : {0}", assetPath);
+                    Logger.WriteInfo("InternalTexture : {0}", assetPath);
 
                     // Path to texture in the asset directory
                     xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
@@ -145,7 +145,7 @@ namespace Tiled2Unity
                     XElement xmlImportTexture = new XElement("ImportTexture");
 
                     // Note that compression is not available in Unity. Go with Base64 string. Blerg.
-                    Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
+                    Logger.WriteInfo("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
 
                     // Is there a color key for transparency?
                     if (!String.IsNullOrEmpty(image.TransparentColor))

@@ -5,9 +5,8 @@
 #if !UNITY_WEBPLAYER
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Globalization;
 using System.Linq;
-using System.Text;
 using System.Xml.Linq;
 
 using UnityEngine;
@@ -97,7 +96,7 @@ namespace Tiled2Unity
             // Replace the prefab, keeping connections based on name. This imports the prefab asset as a side-effect.
             PrefabUtility.ReplacePrefab(tempPrefab, finalPrefab, ReplacePrefabOptions.ReplaceNameBased);
 
-            // Destroy the instance from the current scene hiearchy.
+            // Destroy the instance from the current scene hierarchy.
             UnityEngine.Object.DestroyImmediate(tempPrefab);
         }
 
@@ -126,7 +125,7 @@ namespace Tiled2Unity
 
                 if (child == null)
                 {
-                    importComponent.RecordError("Error createing child object '{0}'", name);
+                    importComponent.RecordError("Error creating child object '{0}'", name);
                     return;
                 }
 
@@ -162,7 +161,7 @@ namespace Tiled2Unity
                 AddTileAnimatorsTo(child, goXml);
 
                 // Do we have any collision data?
-                // Check if we are setting 'isTrigger' for ourselves or for our childen
+                // Check if we are setting 'isTrigger' for ourselves or for our children
                 bool isTrigger = ImportUtils.GetAttributeAsBoolean(goXml, "isTrigger", isParentTrigger);
                 AddCollidersTo(child, isTrigger, goXml);
 
@@ -291,7 +290,7 @@ namespace Tiled2Unity
             if (String.IsNullOrEmpty(tag))
                 return;
 
-            // Let the user know if the tag doesn't exist in our project sttings
+            // Let the user know if the tag doesn't exist in our project settings
             try
             {
                 gameObject.tag = tag;
@@ -375,8 +374,8 @@ namespace Tiled2Unity
                 // The data looks like this:
                 //  x0,y0 x1,y1 x2,y2 ...
                 var points = from pt in data.Split(' ')
-                             let x = Convert.ToSingle(pt.Split(',')[0])
-                             let y = Convert.ToSingle(pt.Split(',')[1])
+                             let x = Convert.ToSingle(pt.Split(',')[0], CultureInfo.InvariantCulture)
+                             let y = Convert.ToSingle(pt.Split(',')[1], CultureInfo.InvariantCulture)
                              select new Vector2(x, y);
 
                 collider.points = points.ToArray();
@@ -416,8 +415,8 @@ namespace Tiled2Unity
                     // The data looks like this:
                     //  x0,y0 x1,y1 x2,y2 ...
                     var points = from pt in data.Split(' ')
-                                 let x = Convert.ToSingle(pt.Split(',')[0])
-                                 let y = Convert.ToSingle(pt.Split(',')[1])
+                                 let x = Convert.ToSingle(pt.Split(',')[0], CultureInfo.InvariantCulture)
+                                 let y = Convert.ToSingle(pt.Split(',')[1], CultureInfo.InvariantCulture)
 #if T2U_IS_UNITY_4
                                  // Hack for Unity 4.x
                                  select new Vector2(x + offset_x, y + offset_y);
@@ -434,11 +433,9 @@ namespace Tiled2Unity
             }
         }
 
-#if T2U_IS_UNITY_4
-        // Special verion for Unity 4.x needed :/
         private GameObject CreateGameObjectWithMesh(string meshName, ImportBehaviour importComponent)
         {
-            string meshAssetPath = GetMeshAssetPath(importComponent.MapName, Path.GetFileNameWithoutExtension(meshName));
+            string meshAssetPath = GetMeshAssetPath(importComponent.MapName, meshName);
             UnityEngine.Object[] objects = AssetDatabase.LoadAllAssetsAtPath(meshAssetPath);
             foreach (var obj in objects)
             {
@@ -460,34 +457,10 @@ namespace Tiled2Unity
             importComponent.RecordError("No mesh named '{0}' to create game object from.\nXml File: {1}\nObject: {2}", meshName, importComponent.Tiled2UnityXmlPath, meshAssetPath);
             return null;
         }
-#else
-        private GameObject CreateGameObjectWithMesh(string meshName, ImportBehaviour importComponent)
-        {
-            string meshAssetPath = GetMeshAssetPath(importComponent.MapName, Path.GetFileNameWithoutExtension(meshName));
-            GameObject meshGameObject = AssetDatabase.LoadAssetAtPath(meshAssetPath, typeof(GameObject)) as GameObject;
-            if (meshGameObject == null)
-            {
-                importComponent.RecordError("Mesh object not imported: {0}", meshAssetPath);
-                return null;
-            }
-
-            MeshRenderer meshRenderer = meshGameObject.GetComponentInChildren<MeshRenderer>();
-            if (meshRenderer == null)
-            {
-                importComponent.RecordError("Imported mesh object missing renderer: {0}", meshAssetPath);
-                return null;
-            }
-
-            // Create an instance of our mesh game object
-            GameObject instancedGameObj = GameObject.Instantiate(meshRenderer.gameObject) as GameObject;
-            instancedGameObj.AddComponent<SortingLayerExposed>();
-            return instancedGameObj;
-        }
-#endif
 
         private GameObject CreateCopyFromMeshObj(string copyFromName, ImportBehaviour importComponent)
         {
-            importComponent.RecordWarning("Derepcated import action. Re-export map '{0}' with newer version of Tiled2Unity.", importComponent.MapName);
+            importComponent.RecordWarning("Deprecated import action. Re-export map '{0}' with newer version of Tiled2Unity.", importComponent.MapName);
 
             // Find a matching game object within the mesh object and "copy" it
             // (In Unity terms, the Instantiated object is a copy)

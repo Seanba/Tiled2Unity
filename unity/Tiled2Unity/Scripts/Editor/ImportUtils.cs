@@ -2,9 +2,9 @@
 // Note: This parital class is not compiled in for WebPlayer builds.
 // The Unity Webplayer is deprecated. If you *must* use it then make sure Tiled2Unity assets are imported via another build target first.
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -49,7 +49,7 @@ namespace Tiled2Unity
 
         public static float GetAttributeAsFloat(XElement elem, string attrName)
         {
-            return Convert.ToSingle(elem.Attribute(attrName).Value);
+            return Convert.ToSingle(elem.Attribute(attrName).Value, CultureInfo.InvariantCulture);
         }
 
         public static float GetAttributeAsFloat(XElement elem, string attrName, float defaultValue)
@@ -162,9 +162,12 @@ namespace Tiled2Unity
             info.Directory.Create();
 
             // Make sure file is not readonly
-            if ((info.Attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+            if (info.Exists)
             {
-                throw new UnityException(String.Format("{0} is read-only", path));
+                if ((info.Attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                {
+                    throw new UnityException(String.Format("{0} is read-only", path));
+                }
             }
         }
 

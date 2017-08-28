@@ -75,7 +75,7 @@ namespace Tiled2Unity
             {
                 if (canMakeTransparentPixels)
                 {
-                    Logger.WriteLine("Removing alpha from transparent pixels.");
+                    Logger.WriteInfo("Removing alpha from transparent pixels.");
                     System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
 
                     // Set the transparent pixels if using color-keying

@@ -24,7 +24,7 @@ namespace Tiled2Unity
                 tmxMap.ParseMapXml(doc);
 
                 // We're done reading and parsing the tmx file
-                Logger.WriteLine("Map details: {0}", tmxMap.ToString());
+                Logger.WriteInfo("Map details: {0}", tmxMap.ToString());
                 Logger.WriteSuccess("Parsed: {0} ", fullTmxPath);
 
                 tmxMap.IsLoaded = true;
@@ -35,7 +35,7 @@ namespace Tiled2Unity
         private XDocument LoadDocument(string xmlPath)
         {
             XDocument doc = null;
-            Logger.WriteLine("Opening {0} ...", xmlPath);
+            Logger.WriteInfo("Opening {0} ...", xmlPath);
             try
             {
                 doc = XDocument.Load(xmlPath);
@@ -55,7 +55,7 @@ namespace Tiled2Unity
 
         private void ParseMapXml(XDocument doc)
         {
-            Logger.WriteLine("Parsing map root ...");
+            Logger.WriteVerbose("Parsing map root ...");
 
             XElement map = doc.Element("map");
             try
@@ -99,7 +99,7 @@ namespace Tiled2Unity
 
         private void ParseAllTilesets(XDocument doc)
         {
-            Logger.WriteLine("Parsing tileset elements ...");
+            Logger.WriteVerbose("Parsing tileset elements ...");
             var tilesets = from item in doc.Descendants("tileset")
                            select item;
 
@@ -141,7 +141,7 @@ namespace Tiled2Unity
         {
             string tilesetName = TmxHelper.GetAttributeAsString(elemTileset, "name");
 
-            Logger.WriteLine("Parse internal tileset '{0}' (gid = {1}) ...", tilesetName, firstId);
+            Logger.WriteVerbose("Parse internal tileset '{0}' (gid = {1}) ...", tilesetName, firstId);
 
             int tileWidth = TmxHelper.GetAttributeAsInt(elemTileset, "tilewidth");
             int tileHeight = TmxHelper.GetAttributeAsInt(elemTileset, "tileheight");
@@ -214,7 +214,7 @@ namespace Tiled2Unity
                 if (tile != tilesToAdd.Last()) builder.Append("\n");
                 this.Tiles[tile.GlobalId] = tile;
             }
-            Logger.WriteLine("Added {0} tiles", tilesToAdd.Count);
+            Logger.WriteVerbose("Added {0} tiles", tilesToAdd.Count);
 
             // Add any extra data to tiles
             foreach (var elemTile in elemTileset.Elements("tile"))
@@ -239,10 +239,17 @@ namespace Tiled2Unity
         private void ParseExternalTileset(string tsxPath, uint firstId)
         {
             string fullTsxPath = Path.GetFullPath(tsxPath);
-            using (ChDir chdir = new ChDir(fullTsxPath))
+            if (File.Exists(fullTsxPath))
             {
-                XDocument tsx = LoadDocument(fullTsxPath);
-                ParseInternalTileset(tsx.Root, firstId);
+                using (ChDir chdir = new ChDir(fullTsxPath))
+                {
+                    XDocument tsx = LoadDocument(fullTsxPath);
+                    ParseInternalTileset(tsx.Root, firstId);
+                }
+            }
+            else
+            {
+                Logger.WriteError("Tileset file does not exist: {0}", fullTsxPath);
             }
         }
 

@@ -177,11 +177,11 @@ namespace Tiled2Unity
         {
             if (String.IsNullOrEmpty(xmlPath))
             {
-                Logger.WriteLine("Object Type XML file is not being used.");
+                Logger.WriteInfo("Object Type XML file is not being used.");
                 return;
             }
 
-            Logger.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
+            Logger.WriteInfo("Loading Object Type Xml file: '{0}'", xmlPath);
 
             try
             {
@@ -199,12 +199,12 @@ namespace Tiled2Unity
                 this.ObjectTypes = new TmxObjectTypes();
             }
 
-            Logger.WriteLine("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
+            Logger.WriteInfo("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
         }
 
         public void ClearObjectTypeXml()
         {
-            Logger.WriteLine("Removing Object Types from map.");
+            Logger.WriteInfo("Removing Object Types from map.");
             this.ObjectTypes = new TmxObjectTypes();
         }
 

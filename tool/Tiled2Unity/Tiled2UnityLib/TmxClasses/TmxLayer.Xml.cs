@@ -88,7 +88,7 @@ namespace Tiled2Unity
 
         private void ParseData(XElement elem)
         {
-            Logger.WriteLine("Parse {0} layer data ...", this.Name);
+            Logger.WriteVerbose("Parse {0} layer data ...", this.Name);
 
             string encoding = TmxHelper.GetAttributeAsString(elem, "encoding", "");
             string compression = TmxHelper.GetAttributeAsString(elem, "compression", "");
@@ -120,7 +120,7 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsXml(XElement elemData)
         {
-            Logger.WriteLine("Parsing layer data as Xml elements ...");
+            Logger.WriteVerbose("Parsing layer data as Xml elements ...");
             var tiles = from t in elemData.Elements("tile")
                         select TmxHelper.GetAttributeAsUInt(t, "gid");
             this.TileIds = tiles.ToArray();
@@ -128,7 +128,7 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsCsv(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as CSV ...");
+            Logger.WriteVerbose("Parsing layer data as CSV ...");
             List<uint> tileIds = new List<uint>();
 
             // Splitting line-by-line reducues out-of-memory exceptions in x86 builds
@@ -153,14 +153,14 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsBase64(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as base64 string ...");
+            Logger.WriteVerbose("Parsing layer data as base64 string ...");
             byte[] bytes = Convert.FromBase64String(elem.Value);
             BytesToTiles(bytes);
         }
 
         private void ParseTileDataAsBase64GZip(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as base64 gzip-compressed string ...");
+            Logger.WriteVerbose("Parsing layer data as base64 gzip-compressed string ...");
             byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
 
             MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
@@ -177,7 +177,7 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsBase64Zlib(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as base64 zlib-compressed string ...");
+            Logger.WriteVerbose("Parsing layer data as base64 zlib-compressed string ...");
             byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
 
             MemoryStream streamCompressed = new MemoryStream(bytesCompressed);

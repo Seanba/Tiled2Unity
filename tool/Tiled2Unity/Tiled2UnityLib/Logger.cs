@@ -7,8 +7,13 @@ namespace Tiled2Unity
 {
     public class Logger
     {
-        public delegate void WriteLineDelegate(string line);
-        public static event WriteLineDelegate OnWriteLine;
+        // Only to be printed in verbose mode. Useful for debugging.
+        public delegate void WriteVerboseDelegate(string line);
+        public static event WriteVerboseDelegate OnWriteVerbose;
+
+        // These are always printed out whether verbose is enabled or not
+        public delegate void WriteInfoDelegate(string line);
+        public static event WriteInfoDelegate OnWriteInfo;
 
         public delegate void WriteSuccessDelegate(string line);
         public static event WriteSuccessDelegate OnWriteSuccess;
@@ -19,22 +24,45 @@ namespace Tiled2Unity
         public delegate void WriteErrorDelegate(string line);
         public static event WriteErrorDelegate OnWriteError;
 
-        public static void WriteLine()
+        public static void WriteVerbose()
         {
-            WriteLine("");
+            WriteVerbose("");
         }
 
-        public static void WriteLine(string line)
+        public static void WriteVerbose(string line)
+        {
+            if (Tiled2Unity.Settings.Verbose)
+            {
+                line += "\n";
+                if (OnWriteVerbose != null)
+                    OnWriteVerbose(line);
+            }
+        }
+
+        public static void WriteVerbose(string fmt, params object[] args)
+        {
+            if (Tiled2Unity.Settings.Verbose)
+            {
+                WriteVerbose(String.Format(fmt, args));
+            }
+        }
+
+        public static void WriteInfo()
+        {
+            WriteInfo("");
+        }
+
+        public static void WriteInfo(string line)
         {
             line += "\n";
-            if (OnWriteLine != null)
-                OnWriteLine(line);
+            if (OnWriteInfo != null)
+                OnWriteInfo(line);
             Console.Write(line);
         }
 
-        public static void WriteLine(string fmt, params object[] args)
+        public static void WriteInfo(string fmt, params object[] args)
         {
-            WriteLine(String.Format(fmt, args));
+            WriteInfo(String.Format(fmt, args));
         }
 
         public static void WriteSuccess(string success)

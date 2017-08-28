@@ -14,14 +14,14 @@ namespace Tiled2Unity
             string tmxPath = Environment.GetEnvironmentVariable("TILED2UNITY_TMXPATH");
             if (!String.IsNullOrEmpty(tmxPath))
             {
-                Logger.WriteLine("Found TILED2UNITY_TMXPATH environment variable: {0}", tmxPath);
+                Logger.WriteInfo("Found TILED2UNITY_TMXPATH environment variable: {0}", tmxPath);
                 this.TmxFilePath = tmxPath;
             }
 
             string unityDir = Environment.GetEnvironmentVariable("TILED2UNITY_UNITYDIR");
             if (!String.IsNullOrEmpty(unityDir))
             {
-                Logger.WriteLine("Found TILED2UNITY_UNITYDIR environment variable: {0}", unityDir);
+                Logger.WriteInfo("Found TILED2UNITY_UNITYDIR environment variable: {0}", unityDir);
                 this.TmxFilePath = tmxPath;
             }
         }
@@ -43,6 +43,7 @@ namespace Tiled2Unity
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
                 { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => Tiled2Unity.Settings.IsAutoExporting = true },
                 { "v|version", "Display version information.", v => displayVersion = true },
+                { "V|verbose", "Display verbose logging for debugging.", b => Tiled2Unity.Settings.Verbose = true },
                 { "h|help", "Display this help message.", h => displayHelp = true },
             };
 
@@ -52,7 +53,7 @@ namespace Tiled2Unity
             // Are we displaying the version?
             if (displayVersion)
             {
-                Logger.WriteLine("{0} ({1}) version {2}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetPlatform(), Tiled2Unity.Info.GetVersion());
+                Logger.WriteInfo("{0} ({1}) version {2}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetPlatform(), Tiled2Unity.Info.GetVersion());
                 return false;
             }
 
@@ -65,7 +66,7 @@ namespace Tiled2Unity
 
             if (Tiled2Unity.Settings.IsAutoExporting)
             {
-                Logger.WriteLine("Running automatic export.");
+                Logger.WriteInfo("Running automatic export.");
             }
 
             bool success = true;
@@ -74,10 +75,10 @@ namespace Tiled2Unity
             // First left over option is the TMX file we are exporting
             if (extra.Count() == 0)
             {
-                Logger.WriteLine("Missing TMXPATH argument.");
-                Logger.WriteLine("  If using the GUI, try opening a TMX file now");
-                Logger.WriteLine("  If using the command line, provide a path to a TMX file");
-                Logger.WriteLine("  If using from Tiled Map Editor, try adding %mapfile to the command");
+                Logger.WriteInfo("Missing TMXPATH argument.");
+                Logger.WriteInfo("  If using the GUI, try opening a TMX file now");
+                Logger.WriteInfo("  If using the command line, provide a path to a TMX file");
+                Logger.WriteInfo("  If using from Tiled Map Editor, try adding %mapfile to the command");
             }
             else
             {
@@ -139,32 +140,32 @@ namespace Tiled2Unity
 
         private static void PrintHelp(NDesk.Options.OptionSet options)
         {
-            Logger.WriteLine("{0} Utility, Version: {1}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetVersion());
-            Logger.WriteLine("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", Tiled2Unity.Info.GetLibraryName());
-            Logger.WriteLine("Example: {0} -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", Tiled2Unity.Info.GetLibraryName());
-            Logger.WriteLine("");
-            Logger.WriteLine("Options:");
+            Logger.WriteInfo("{0} Utility, Version: {1}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetVersion());
+            Logger.WriteInfo("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", Tiled2Unity.Info.GetLibraryName());
+            Logger.WriteInfo("Example: {0} -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", Tiled2Unity.Info.GetLibraryName());
+            Logger.WriteInfo("");
+            Logger.WriteInfo("Options:");
 
             TextWriter writer = new StringWriter();
             options.WriteOptionDescriptions(writer);
-            Logger.WriteLine(writer.ToString());
+            Logger.WriteInfo(writer.ToString());
 
-            Logger.WriteLine("Prefab object properties (set in TMX file for map or Tile/Object layer properties)");
-            Logger.WriteLine("  unity:sortingLayerName");
-            Logger.WriteLine("  unity:sortingOrder");
-            Logger.WriteLine("  unity:layer");
-            Logger.WriteLine("  unity:tag");
-            Logger.WriteLine("  unity:scale");
-            Logger.WriteLine("  unity:isTrigger");
-            Logger.WriteLine("  unity:convex");
-            Logger.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
-            Logger.WriteLine("  unity:resource (value = [false|true])");
-            Logger.WriteLine("  unity:resourcePath");
-            Logger.WriteLine("  unity:namePrefix (Add to tileset properties to prefix material names with this string.");
-            Logger.WriteLine("  unity:namePostfix (Add to tileset properties to postfix material names with this string.");
-            Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
-            Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
-            Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
+            Logger.WriteInfo("Prefab object properties (set in TMX file for map or Tile/Object layer properties)");
+            Logger.WriteInfo("  unity:sortingLayerName");
+            Logger.WriteInfo("  unity:sortingOrder");
+            Logger.WriteInfo("  unity:layer");
+            Logger.WriteInfo("  unity:tag");
+            Logger.WriteInfo("  unity:scale");
+            Logger.WriteInfo("  unity:isTrigger");
+            Logger.WriteInfo("  unity:convex");
+            Logger.WriteInfo("  unity:ignore (value = [false|true|collision|visual])");
+            Logger.WriteInfo("  unity:resource (value = [false|true])");
+            Logger.WriteInfo("  unity:resourcePath");
+            Logger.WriteInfo("  unity:namePrefix (Add to tileset properties to prefix material names with this string.");
+            Logger.WriteInfo("  unity:namePostfix (Add to tileset properties to postfix material names with this string.");
+            Logger.WriteInfo("  (Other properties are exported for custom scripting in your Unity project)");
+            Logger.WriteInfo("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
+            Logger.WriteInfo("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
         }
 
         // Removes unwanted cruft from arguments

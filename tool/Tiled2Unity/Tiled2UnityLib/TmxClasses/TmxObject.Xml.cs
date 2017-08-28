@@ -12,7 +12,7 @@ namespace Tiled2Unity
     {
         public static TmxObject FromXml(XElement xml, TmxObjectGroup tmxObjectGroup, TmxMap tmxMap)
         {
-            Logger.WriteLine("Parsing object ...");
+            Logger.WriteVerbose("Parsing object ...");
 
             // What kind of TmxObject are we creating?
             TmxObject tmxObject = null;

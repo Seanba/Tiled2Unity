@@ -4,6 +4,6 @@
 <Tiled2UnityImporter>
 	<Header
 		author="Sean Barton"
-		version="1.0.12.3"
+		version="1.0.12.4"
 	/>
 </Tiled2UnityImporter>

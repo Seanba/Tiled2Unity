@@ -52,7 +52,7 @@ namespace Tiled2Unity
         // Enumerate all our meshes and bake them into OBJ Wavefront format
         private IEnumerable<Tuple<string, StringWriter>> EnumerateWavefrontData()
         {
-            Logger.WriteLine("Enumerate map layers for mesh-build.");
+            Logger.WriteVerbose("Enumerate map layers for mesh-build.");
             foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible != true)
@@ -70,19 +70,19 @@ namespace Tiled2Unity
                     yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForLayerMesh(layer, mesh, horizontalRange, verticalRange));
                 }
             }
-            Logger.WriteLine("Finished enumeration.");
+            Logger.WriteVerbose("Finished enumeration.");
 
-            Logger.WriteLine("Enumerate tile objects for mesh-build.");
+            Logger.WriteVerbose("Enumerate tile objects for mesh-build.");
             foreach (var mesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
             {
                 yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForTileObjectMesh(mesh));
             }
-            Logger.WriteLine("Finished enumeration.");
+            Logger.WriteVerbose("Finished enumeration.");
         }
 
         private StringWriter BuildWavefrontStringForLayerMesh(TmxLayer layer, TmxMesh mesh, IEnumerable<int> horizontalRange, IEnumerable<int> verticalRange)
         {
-            Logger.WriteLine("Building mesh obj file for '{0}'", mesh.UniqueMeshName);
+            Logger.WriteVerbose("Building mesh obj file for '{0}'", mesh.UniqueMeshName);
             GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
             StringBuilder faces = new StringBuilder();
@@ -134,7 +134,7 @@ namespace Tiled2Unity
 
         private StringWriter BuildWavefrontStringForTileObjectMesh(TmxMesh mesh)
         {
-            Logger.WriteLine("Building mesh obj file for tile: '{0}.obj'", mesh.UniqueMeshName);
+            Logger.WriteVerbose("Building mesh obj file for tile: '{0}.obj'", mesh.UniqueMeshName);
             GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
             StringBuilder faces = new StringBuilder();

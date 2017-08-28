@@ -24,7 +24,8 @@ namespace Tiled2Unity
             InitializeComponent();
             this.Text = String.Format("Tiled2Unity, {0} ({1})", Tiled2Unity.Info.GetVersion(), Tiled2Unity.Info.GetPlatform());
 
-            Logger.OnWriteLine += new Logger.WriteLineDelegate(Tiled2UnityForm_OnWriteLine);
+            Logger.OnWriteVerbose += new Logger.WriteVerboseDelegate(Tiled2UnityForm_OnWriteVerbose);
+            Logger.OnWriteInfo += new Logger.WriteInfoDelegate(Tiled2UnityForm_OnWriteInfo);
             Logger.OnWriteWarning += new Logger.WriteWarningDelegate(Tiled2UnityForm_OnWriteWarning);
             Logger.OnWriteError += new Logger.WriteErrorDelegate(Tiled2UnityForm_OnWriteError);
             Logger.OnWriteSuccess += new Logger.WriteSuccessDelegate(Tiled2UnityForm_OnWriteSuccess);
@@ -34,7 +35,8 @@ namespace Tiled2Unity
 
         ~Tiled2UnityForm()
         {
-            Logger.OnWriteLine -= new Logger.WriteLineDelegate(Tiled2UnityForm_OnWriteLine);
+            Logger.OnWriteVerbose -= new Logger.WriteVerboseDelegate(Tiled2UnityForm_OnWriteVerbose);
+            Logger.OnWriteInfo -= new Logger.WriteInfoDelegate(Tiled2UnityForm_OnWriteInfo);
             Logger.OnWriteWarning -= new Logger.WriteWarningDelegate(Tiled2UnityForm_OnWriteWarning);
             Logger.OnWriteError -= new Logger.WriteErrorDelegate(Tiled2UnityForm_OnWriteError);
             Logger.OnWriteSuccess -= new Logger.WriteSuccessDelegate(Tiled2UnityForm_OnWriteSuccess);
@@ -99,7 +101,12 @@ namespace Tiled2Unity
             textBoxScale_Validating(null, null);
         }
 
-        private void Tiled2UnityForm_OnWriteLine(string line)
+        private void Tiled2UnityForm_OnWriteVerbose(string line)
+        {
+            WriteText(line);
+        }
+
+        private void Tiled2UnityForm_OnWriteInfo(string line)
         {
             WriteText(line);
         }

@@ -1,5 +1,5 @@
 // Tiled2UnityLite is automatically generated. Do not modify by hand.
-// version 1.0.12.3
+// version 1.0.12.4
 
 //css_reference System;
 //css_reference System.Core;
@@ -59,7 +59,7 @@ namespace Tiled2Unity
 
         public static string GetVersion()
         {
-            return "1.0.12.3";
+            return "1.0.12.4";
         }
 
         public static string GetPlatform()
@@ -386,8 +386,13 @@ namespace Tiled2Unity
 {
     public class Logger
     {
-        public delegate void WriteLineDelegate(string line);
-        public static event WriteLineDelegate OnWriteLine;
+        // Only to be printed in verbose mode. Useful for debugging.
+        public delegate void WriteVerboseDelegate(string line);
+        public static event WriteVerboseDelegate OnWriteVerbose;
+
+        // These are always printed out whether verbose is enabled or not
+        public delegate void WriteInfoDelegate(string line);
+        public static event WriteInfoDelegate OnWriteInfo;
 
         public delegate void WriteSuccessDelegate(string line);
         public static event WriteSuccessDelegate OnWriteSuccess;
@@ -398,22 +403,45 @@ namespace Tiled2Unity
         public delegate void WriteErrorDelegate(string line);
         public static event WriteErrorDelegate OnWriteError;
 
-        public static void WriteLine()
+        public static void WriteVerbose()
         {
-            WriteLine("");
+            WriteVerbose("");
         }
 
-        public static void WriteLine(string line)
+        public static void WriteVerbose(string line)
+        {
+            if (Tiled2Unity.Settings.Verbose)
+            {
+                line += "\n";
+                if (OnWriteVerbose != null)
+                    OnWriteVerbose(line);
+            }
+        }
+
+        public static void WriteVerbose(string fmt, params object[] args)
+        {
+            if (Tiled2Unity.Settings.Verbose)
+            {
+                WriteVerbose(String.Format(fmt, args));
+            }
+        }
+
+        public static void WriteInfo()
+        {
+            WriteInfo("");
+        }
+
+        public static void WriteInfo(string line)
         {
             line += "\n";
-            if (OnWriteLine != null)
-                OnWriteLine(line);
+            if (OnWriteInfo != null)
+                OnWriteInfo(line);
             Console.Write(line);
         }
 
-        public static void WriteLine(string fmt, params object[] args)
+        public static void WriteInfo(string fmt, params object[] args)
         {
-            WriteLine(String.Format(fmt, args));
+            WriteInfo(String.Format(fmt, args));
         }
 
         public static void WriteSuccess(string success)
@@ -627,14 +655,14 @@ namespace Tiled2Unity
             string tmxPath = Environment.GetEnvironmentVariable("TILED2UNITY_TMXPATH");
             if (!String.IsNullOrEmpty(tmxPath))
             {
-                Logger.WriteLine("Found TILED2UNITY_TMXPATH environment variable: {0}", tmxPath);
+                Logger.WriteInfo("Found TILED2UNITY_TMXPATH environment variable: {0}", tmxPath);
                 this.TmxFilePath = tmxPath;
             }
 
             string unityDir = Environment.GetEnvironmentVariable("TILED2UNITY_UNITYDIR");
             if (!String.IsNullOrEmpty(unityDir))
             {
-                Logger.WriteLine("Found TILED2UNITY_UNITYDIR environment variable: {0}", unityDir);
+                Logger.WriteInfo("Found TILED2UNITY_UNITYDIR environment variable: {0}", unityDir);
                 this.TmxFilePath = tmxPath;
             }
         }
@@ -656,6 +684,7 @@ namespace Tiled2Unity
                 { "d|depth-buffer", "Uses a depth buffer to render the layers of the map in order. Useful for sprites that may be drawn below or above map layers depending on location.", d => Tiled2Unity.Settings.DepthBufferEnabled = true },
                 { "a|auto-export", "Automatically run exporter and exit. TMXPATH and UNITYDIR are not optional in this case.", a => Tiled2Unity.Settings.IsAutoExporting = true },
                 { "v|version", "Display version information.", v => displayVersion = true },
+                { "V|verbose", "Display verbose logging for debugging.", b => Tiled2Unity.Settings.Verbose = true },
                 { "h|help", "Display this help message.", h => displayHelp = true },
             };
 
@@ -665,7 +694,7 @@ namespace Tiled2Unity
             // Are we displaying the version?
             if (displayVersion)
             {
-                Logger.WriteLine("{0} ({1}) version {2}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetPlatform(), Tiled2Unity.Info.GetVersion());
+                Logger.WriteInfo("{0} ({1}) version {2}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetPlatform(), Tiled2Unity.Info.GetVersion());
                 return false;
             }
 
@@ -678,7 +707,7 @@ namespace Tiled2Unity
 
             if (Tiled2Unity.Settings.IsAutoExporting)
             {
-                Logger.WriteLine("Running automatic export.");
+                Logger.WriteInfo("Running automatic export.");
             }
 
             bool success = true;
@@ -687,10 +716,10 @@ namespace Tiled2Unity
             // First left over option is the TMX file we are exporting
             if (extra.Count() == 0)
             {
-                Logger.WriteLine("Missing TMXPATH argument.");
-                Logger.WriteLine("  If using the GUI, try opening a TMX file now");
-                Logger.WriteLine("  If using the command line, provide a path to a TMX file");
-                Logger.WriteLine("  If using from Tiled Map Editor, try adding %mapfile to the command");
+                Logger.WriteInfo("Missing TMXPATH argument.");
+                Logger.WriteInfo("  If using the GUI, try opening a TMX file now");
+                Logger.WriteInfo("  If using the command line, provide a path to a TMX file");
+                Logger.WriteInfo("  If using from Tiled Map Editor, try adding %mapfile to the command");
             }
             else
             {
@@ -752,32 +781,32 @@ namespace Tiled2Unity
 
         private static void PrintHelp(NDesk.Options.OptionSet options)
         {
-            Logger.WriteLine("{0} Utility, Version: {1}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetVersion());
-            Logger.WriteLine("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", Tiled2Unity.Info.GetLibraryName());
-            Logger.WriteLine("Example: {0} -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", Tiled2Unity.Info.GetLibraryName());
-            Logger.WriteLine("");
-            Logger.WriteLine("Options:");
+            Logger.WriteInfo("{0} Utility, Version: {1}", Tiled2Unity.Info.GetLibraryName(), Tiled2Unity.Info.GetVersion());
+            Logger.WriteInfo("Usage: {0} [OPTIONS]+ TMXPATH [UNITYDIR]", Tiled2Unity.Info.GetLibraryName());
+            Logger.WriteInfo("Example: {0} -s=0.01 MyTiledMap.tmx ../../MyUnityProjectFolder/Assets/Tiled2Unity", Tiled2Unity.Info.GetLibraryName());
+            Logger.WriteInfo("");
+            Logger.WriteInfo("Options:");
 
             TextWriter writer = new StringWriter();
             options.WriteOptionDescriptions(writer);
-            Logger.WriteLine(writer.ToString());
+            Logger.WriteInfo(writer.ToString());
 
-            Logger.WriteLine("Prefab object properties (set in TMX file for map or Tile/Object layer properties)");
-            Logger.WriteLine("  unity:sortingLayerName");
-            Logger.WriteLine("  unity:sortingOrder");
-            Logger.WriteLine("  unity:layer");
-            Logger.WriteLine("  unity:tag");
-            Logger.WriteLine("  unity:scale");
-            Logger.WriteLine("  unity:isTrigger");
-            Logger.WriteLine("  unity:convex");
-            Logger.WriteLine("  unity:ignore (value = [false|true|collision|visual])");
-            Logger.WriteLine("  unity:resource (value = [false|true])");
-            Logger.WriteLine("  unity:resourcePath");
-            Logger.WriteLine("  unity:namePrefix (Add to tileset properties to prefix material names with this string.");
-            Logger.WriteLine("  unity:namePostfix (Add to tileset properties to postfix material names with this string.");
-            Logger.WriteLine("  (Other properties are exported for custom scripting in your Unity project)");
-            Logger.WriteLine("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
-            Logger.WriteLine("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
+            Logger.WriteInfo("Prefab object properties (set in TMX file for map or Tile/Object layer properties)");
+            Logger.WriteInfo("  unity:sortingLayerName");
+            Logger.WriteInfo("  unity:sortingOrder");
+            Logger.WriteInfo("  unity:layer");
+            Logger.WriteInfo("  unity:tag");
+            Logger.WriteInfo("  unity:scale");
+            Logger.WriteInfo("  unity:isTrigger");
+            Logger.WriteInfo("  unity:convex");
+            Logger.WriteInfo("  unity:ignore (value = [false|true|collision|visual])");
+            Logger.WriteInfo("  unity:resource (value = [false|true])");
+            Logger.WriteInfo("  unity:resourcePath");
+            Logger.WriteInfo("  unity:namePrefix (Add to tileset properties to prefix material names with this string.");
+            Logger.WriteInfo("  unity:namePostfix (Add to tileset properties to postfix material names with this string.");
+            Logger.WriteInfo("  (Other properties are exported for custom scripting in your Unity project)");
+            Logger.WriteInfo("Support Tiled Map Editor on Patreon: https://www.patreon.com/bjorn");
+            Logger.WriteInfo("Make a donation for Tiled2Unity: http://www.seanba.com/donate");
         }
 
         // Removes unwanted cruft from arguments
@@ -842,7 +871,7 @@ namespace Tiled2Unity
 
         public bool InitializeWithArgs(string[] args, bool summary)
         {
-            Logger.WriteLine("Command: {0}", String.Join(" ", args));
+            Logger.WriteInfo("Command: {0}", String.Join(" ", args));
 
             // Create our map instance (which is empty/unloaded at first)
             this.TmxMap = new TmxMap();
@@ -854,7 +883,17 @@ namespace Tiled2Unity
             }
 
             ParseEnvironmentVariables();
-            bool success = ParseOptions(args);
+            bool success = false;
+
+            try
+            {
+                success = ParseOptions(args);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteError("Error parsing arguments. Exception: {0}", e.Message);
+                success = false;
+            }
 
             if (summary)
             {
@@ -925,7 +964,7 @@ namespace Tiled2Unity
                 {
                     try
                     {
-                        Logger.WriteLine("Exporting '{0}' to '{1}'", this.TmxFilePath, this.UnityExportFolderPath);
+                        Logger.WriteInfo("Exporting '{0}' to '{1}'", this.TmxFilePath, this.UnityExportFolderPath);
                         TiledMapExporter exporter = new TiledMapExporter(this.TmxMap);
                         exporter.Export(this.UnityExportFolderPath);
                     }
@@ -975,6 +1014,8 @@ namespace Tiled2Unity
 
         // If we're automatically opening, exporting, and closing then there are some code paths we don't want to take
         public static bool IsAutoExporting = false;
+
+        public static bool Verbose = false;
 
         // Some old operating systems (like Windows 7) are incompatible with the Skia library and throw exceptions
         // We want to try to handle those execptions and disable previewing when that happens
@@ -1037,31 +1078,31 @@ namespace Tiled2Unity
 
             // Write out the summary report
             string separator = new string('-', 80);
-            Logger.WriteLine(separator);
+            Logger.WriteInfo(separator);
             func("{0} summary", this.name);
 
             // Add successes
-            Logger.WriteLine("Succeeded: {0}", this.successes.Count);
+            Logger.WriteInfo("Succeeded: {0}", this.successes.Count);
             foreach (var success in this.successes)
             {
                 Logger.WriteSuccess("  {0}", success);
             }
 
             // Add warnings
-            Logger.WriteLine("Warnings: {0}", this.warnings.Count);
+            Logger.WriteInfo("Warnings: {0}", this.warnings.Count);
             foreach (var warn in this.warnings)
             {
                 Logger.WriteWarning("  {0}", warn);
             }
 
             // Add errors
-            Logger.WriteLine("Errors: {0}", this.errors.Count);
+            Logger.WriteInfo("Errors: {0}", this.errors.Count);
             foreach (var error in this.errors)
             {
                 Logger.WriteError("  {0}", error);
             }
 
-            Logger.WriteLine(separator);
+            Logger.WriteInfo(separator);
         }
 
         private void Listen()
@@ -1244,7 +1285,7 @@ namespace Tiled2Unity
             LayerClipper.ProgressFunc progFunc =
                 delegate(string prog)
                 {
-                    Logger.WriteLine(prog);
+                    Logger.WriteInfo(prog);
                 };
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
@@ -1406,18 +1447,18 @@ namespace Tiled2Unity
             // Create an Xml file to be imported by a Unity project
             // The unity project will have code that turns the Xml into Unity objects and prefabs
             string fileToSave = this.tmxMap.GetExportedFilename();
-            Logger.WriteLine("Compiling tiled2unity file: {0}", fileToSave);
+            Logger.WriteInfo("Compiling tiled2unity file: {0}", fileToSave);
 
             // Need an element for embedded file data that will be imported into Unity
             // These are models and textures
             List<XElement> importFiles = CreateImportFilesElements(exportToTiled2UnityPath);
             List<XElement> assignMaterials = CreateAssignMaterialsElements();
 
-            Logger.WriteLine("Gathering prefab data ...");
+            Logger.WriteVerbose("Gathering prefab data ...");
             XElement prefab = CreatePrefabElement();
 
             // Create the Xml root and populate it
-            Logger.WriteLine("Writing as Xml ...");
+            Logger.WriteVerbose("Writing as Xml ...");
 
             string version = Tiled2Unity.Info.GetVersion();
             XElement root = new XElement("Tiled2Unity", new XAttribute("version", version));
@@ -1474,7 +1515,7 @@ namespace Tiled2Unity
 
             // Save the file (which is importing it into Unity)
             string pathToSave = Path.Combine(exportDir, fileToSave);
-            Logger.WriteLine("Exporting to: {0}", pathToSave);
+            Logger.WriteInfo("Exporting to: {0}", pathToSave);
             doc.Save(pathToSave);
             Logger.WriteSuccess("Succesfully exported: {0}\n  Vertex Scale = {1}\n  Object Type Xml = {2}",
                 pathToSave,
@@ -1707,7 +1748,7 @@ namespace Tiled2Unity
                     assetPath = "Assets" + assetPath;
                     assetPath = assetPath.Replace("\\", "/");
 
-                    Logger.WriteLine("InternalTexture : {0}", assetPath);
+                    Logger.WriteInfo("InternalTexture : {0}", assetPath);
 
                     // Path to texture in the asset directory
                     xmlInternalTexture.SetAttributeValue("assetPath", assetPath);
@@ -1739,7 +1780,7 @@ namespace Tiled2Unity
                     XElement xmlImportTexture = new XElement("ImportTexture");
 
                     // Note that compression is not available in Unity. Go with Base64 string. Blerg.
-                    Logger.WriteLine("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
+                    Logger.WriteInfo("ImportTexture : will import '{0}' to {1}", image.AbsolutePath, Path.Combine(exportToUnityProjectPath, "Textures"));
 
                     // Is there a color key for transparency?
                     if (!String.IsNullOrEmpty(image.TransparentColor))
@@ -1845,7 +1886,7 @@ namespace Tiled2Unity
         // Enumerate all our meshes and bake them into OBJ Wavefront format
         private IEnumerable<Tuple<string, StringWriter>> EnumerateWavefrontData()
         {
-            Logger.WriteLine("Enumerate map layers for mesh-build.");
+            Logger.WriteVerbose("Enumerate map layers for mesh-build.");
             foreach (var layer in this.tmxMap.EnumerateTileLayers())
             {
                 if (layer.Visible != true)
@@ -1863,19 +1904,19 @@ namespace Tiled2Unity
                     yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForLayerMesh(layer, mesh, horizontalRange, verticalRange));
                 }
             }
-            Logger.WriteLine("Finished enumeration.");
+            Logger.WriteVerbose("Finished enumeration.");
 
-            Logger.WriteLine("Enumerate tile objects for mesh-build.");
+            Logger.WriteVerbose("Enumerate tile objects for mesh-build.");
             foreach (var mesh in this.tmxMap.GetUniqueListOfVisibleObjectTileMeshes())
             {
                 yield return Tuple.Create(mesh.UniqueMeshName, BuildWavefrontStringForTileObjectMesh(mesh));
             }
-            Logger.WriteLine("Finished enumeration.");
+            Logger.WriteVerbose("Finished enumeration.");
         }
 
         private StringWriter BuildWavefrontStringForLayerMesh(TmxLayer layer, TmxMesh mesh, IEnumerable<int> horizontalRange, IEnumerable<int> verticalRange)
         {
-            Logger.WriteLine("Building mesh obj file for '{0}'", mesh.UniqueMeshName);
+            Logger.WriteVerbose("Building mesh obj file for '{0}'", mesh.UniqueMeshName);
             GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
             StringBuilder faces = new StringBuilder();
@@ -1927,7 +1968,7 @@ namespace Tiled2Unity
 
         private StringWriter BuildWavefrontStringForTileObjectMesh(TmxMesh mesh)
         {
-            Logger.WriteLine("Building mesh obj file for tile: '{0}.obj'", mesh.UniqueMeshName);
+            Logger.WriteVerbose("Building mesh obj file for tile: '{0}.obj'", mesh.UniqueMeshName);
             GenericListDatabase<Vertex3> vertexDatabase = new GenericListDatabase<Vertex3>();
             HashIndexOf<PointF> uvDatabase = new HashIndexOf<PointF>();
             StringBuilder faces = new StringBuilder();
@@ -2379,7 +2420,7 @@ namespace Tiled2Unity
                 }
                 else
                 {
-                    Logger.WriteLine("Object '{0}' has been added for use with custom importers", tmxObject);
+                    Logger.WriteInfo("Object '{0}' has been added for use with custom importers", tmxObject);
                 }
 
                 if (objElement != null)
@@ -12336,8 +12377,8 @@ namespace Tiled2Unity
             // Object layer does not advance draw index
             objectLayer.DrawOrderIndex = this.drawOrderIndex;
 
-            // Either inherit depth buffer index of parent or advance
-            objectLayer.DepthBufferIndex = (objectLayer.ParentNode != null) ? objectLayer.ParentNode.DepthBufferIndex : this.depthBufferIndex++;
+            // Children don't have a depth buffer index. Their parent sets the depth.
+            objectLayer.DepthBufferIndex = (objectLayer.ParentNode != null) ? 0 : this.depthBufferIndex++;
         }
 
         public void VisitTileLayer(TmxLayer tileLayer)
@@ -12345,8 +12386,8 @@ namespace Tiled2Unity
             // Tile layer does render something and therefore increases draw order index
             tileLayer.DrawOrderIndex = this.drawOrderIndex++;
 
-            // Either inherit depth buffer index of parent or advance
-            tileLayer.DepthBufferIndex = (tileLayer.ParentNode != null) ? tileLayer.ParentNode.DepthBufferIndex : this.depthBufferIndex++;
+            // Children don't have a depth buffer index. Their parent sets the depth.
+            tileLayer.DepthBufferIndex = (tileLayer.ParentNode != null) ? 0 : this.depthBufferIndex++;
         }
 
     }
@@ -12811,7 +12852,7 @@ namespace Tiled2Unity
             {
                 if (canMakeTransparentPixels)
                 {
-                    Logger.WriteLine("Removing alpha from transparent pixels.");
+                    Logger.WriteInfo("Removing alpha from transparent pixels.");
                     System.Drawing.Color systemTransColor = TmxHelper.ColorFromHtml(tmxImage.TransparentColor);
 
                     // Set the transparent pixels if using color-keying
@@ -13009,7 +13050,7 @@ namespace Tiled2Unity
 
         private void ParseData(XElement elem)
         {
-            Logger.WriteLine("Parse {0} layer data ...", this.Name);
+            Logger.WriteVerbose("Parse {0} layer data ...", this.Name);
 
             string encoding = TmxHelper.GetAttributeAsString(elem, "encoding", "");
             string compression = TmxHelper.GetAttributeAsString(elem, "compression", "");
@@ -13041,7 +13082,7 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsXml(XElement elemData)
         {
-            Logger.WriteLine("Parsing layer data as Xml elements ...");
+            Logger.WriteVerbose("Parsing layer data as Xml elements ...");
             var tiles = from t in elemData.Elements("tile")
                         select TmxHelper.GetAttributeAsUInt(t, "gid");
             this.TileIds = tiles.ToArray();
@@ -13049,7 +13090,7 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsCsv(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as CSV ...");
+            Logger.WriteVerbose("Parsing layer data as CSV ...");
             List<uint> tileIds = new List<uint>();
 
             // Splitting line-by-line reducues out-of-memory exceptions in x86 builds
@@ -13074,14 +13115,14 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsBase64(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as base64 string ...");
+            Logger.WriteVerbose("Parsing layer data as base64 string ...");
             byte[] bytes = Convert.FromBase64String(elem.Value);
             BytesToTiles(bytes);
         }
 
         private void ParseTileDataAsBase64GZip(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as base64 gzip-compressed string ...");
+            Logger.WriteVerbose("Parsing layer data as base64 gzip-compressed string ...");
             byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
 
             MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
@@ -13098,7 +13139,7 @@ namespace Tiled2Unity
 
         private void ParseTileDataAsBase64Zlib(XElement elem)
         {
-            Logger.WriteLine("Parsing layer data as base64 zlib-compressed string ...");
+            Logger.WriteVerbose("Parsing layer data as base64 zlib-compressed string ...");
             byte[] bytesCompressed = Convert.FromBase64String(elem.Value);
 
             MemoryStream streamCompressed = new MemoryStream(bytesCompressed);
@@ -13578,11 +13619,11 @@ namespace Tiled2Unity
         {
             if (String.IsNullOrEmpty(xmlPath))
             {
-                Logger.WriteLine("Object Type XML file is not being used.");
+                Logger.WriteInfo("Object Type XML file is not being used.");
                 return;
             }
 
-            Logger.WriteLine("Loading Object Type Xml file: '{0}'", xmlPath);
+            Logger.WriteInfo("Loading Object Type Xml file: '{0}'", xmlPath);
 
             try
             {
@@ -13600,12 +13641,12 @@ namespace Tiled2Unity
                 this.ObjectTypes = new TmxObjectTypes();
             }
 
-            Logger.WriteLine("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
+            Logger.WriteInfo("Tiled Object Type count = {0}", this.ObjectTypes.TmxObjectTypeMapping.Count());
         }
 
         public void ClearObjectTypeXml()
         {
-            Logger.WriteLine("Removing Object Types from map.");
+            Logger.WriteInfo("Removing Object Types from map.");
             this.ObjectTypes = new TmxObjectTypes();
         }
 
@@ -13698,7 +13739,7 @@ namespace Tiled2Unity
                 tmxMap.ParseMapXml(doc);
 
                 // We're done reading and parsing the tmx file
-                Logger.WriteLine("Map details: {0}", tmxMap.ToString());
+                Logger.WriteInfo("Map details: {0}", tmxMap.ToString());
                 Logger.WriteSuccess("Parsed: {0} ", fullTmxPath);
 
                 tmxMap.IsLoaded = true;
@@ -13709,7 +13750,7 @@ namespace Tiled2Unity
         private XDocument LoadDocument(string xmlPath)
         {
             XDocument doc = null;
-            Logger.WriteLine("Opening {0} ...", xmlPath);
+            Logger.WriteInfo("Opening {0} ...", xmlPath);
             try
             {
                 doc = XDocument.Load(xmlPath);
@@ -13729,7 +13770,7 @@ namespace Tiled2Unity
 
         private void ParseMapXml(XDocument doc)
         {
-            Logger.WriteLine("Parsing map root ...");
+            Logger.WriteVerbose("Parsing map root ...");
 
             XElement map = doc.Element("map");
             try
@@ -13773,7 +13814,7 @@ namespace Tiled2Unity
 
         private void ParseAllTilesets(XDocument doc)
         {
-            Logger.WriteLine("Parsing tileset elements ...");
+            Logger.WriteVerbose("Parsing tileset elements ...");
             var tilesets = from item in doc.Descendants("tileset")
                            select item;
 
@@ -13815,7 +13856,7 @@ namespace Tiled2Unity
         {
             string tilesetName = TmxHelper.GetAttributeAsString(elemTileset, "name");
 
-            Logger.WriteLine("Parse internal tileset '{0}' (gid = {1}) ...", tilesetName, firstId);
+            Logger.WriteVerbose("Parse internal tileset '{0}' (gid = {1}) ...", tilesetName, firstId);
 
             int tileWidth = TmxHelper.GetAttributeAsInt(elemTileset, "tilewidth");
             int tileHeight = TmxHelper.GetAttributeAsInt(elemTileset, "tileheight");
@@ -13888,7 +13929,7 @@ namespace Tiled2Unity
                 if (tile != tilesToAdd.Last()) builder.Append("\n");
                 this.Tiles[tile.GlobalId] = tile;
             }
-            Logger.WriteLine("Added {0} tiles", tilesToAdd.Count);
+            Logger.WriteVerbose("Added {0} tiles", tilesToAdd.Count);
 
             // Add any extra data to tiles
             foreach (var elemTile in elemTileset.Elements("tile"))
@@ -13913,10 +13954,17 @@ namespace Tiled2Unity
         private void ParseExternalTileset(string tsxPath, uint firstId)
         {
             string fullTsxPath = Path.GetFullPath(tsxPath);
-            using (ChDir chdir = new ChDir(fullTsxPath))
+            if (File.Exists(fullTsxPath))
             {
-                XDocument tsx = LoadDocument(fullTsxPath);
-                ParseInternalTileset(tsx.Root, firstId);
+                using (ChDir chdir = new ChDir(fullTsxPath))
+                {
+                    XDocument tsx = LoadDocument(fullTsxPath);
+                    ParseInternalTileset(tsx.Root, firstId);
+                }
+            }
+            else
+            {
+                Logger.WriteError("Tileset file does not exist: {0}", fullTsxPath);
             }
         }
 
@@ -14566,7 +14614,7 @@ namespace Tiled2Unity
     {
         public static TmxObject FromXml(XElement xml, TmxObjectGroup tmxObjectGroup, TmxMap tmxMap)
         {
-            Logger.WriteLine("Parsing object ...");
+            Logger.WriteVerbose("Parsing object ...");
 
             // What kind of TmxObject are we creating?
             TmxObject tmxObject = null;
@@ -14762,7 +14810,7 @@ namespace Tiled2Unity
             tmxObjectGroup.Color = TmxHelper.GetAttributeAsColor(xml, "color", Color.FromArgb(128, 128, 128));
 
             // Get all the objects
-            Logger.WriteLine("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
+            Logger.WriteVerbose("Parsing objects in object group '{0}'", tmxObjectGroup.Name);
             var objects = from obj in xml.Elements("object")
                           select TmxObject.FromXml(obj, tmxObjectGroup, tmxMap);
 
@@ -15369,7 +15417,7 @@ namespace Tiled2Unity
 
             if (props.Count() > 0)
             {
-                Logger.WriteLine("Parse properites ...");
+                Logger.WriteVerbose("Parse properites ...");
             }
 
             foreach (var p in props)
@@ -15582,7 +15630,7 @@ namespace Tiled2Unity
     {
         public void ParseTileXml(XElement elem, TmxMap tmxMap, uint firstId)
         {
-            Logger.WriteLine("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
+            Logger.WriteVerbose("Parse tile data (gid = {0}, id {1}) ...", this.GlobalId, this.LocalId);
 
             this.Properties = TmxProperties.FromXml(elem);
 

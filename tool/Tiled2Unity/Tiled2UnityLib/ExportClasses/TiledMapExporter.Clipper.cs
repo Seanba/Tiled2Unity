@@ -38,7 +38,7 @@ namespace Tiled2Unity
             LayerClipper.ProgressFunc progFunc =
                 delegate(string prog)
                 {
-                    Logger.WriteLine(prog);
+                    Logger.WriteInfo(prog);
                 };
 
             ClipperLib.PolyTree solution = LayerClipper.ExecuteClipper(this.tmxMap, layer, xfFunc, progFunc);
