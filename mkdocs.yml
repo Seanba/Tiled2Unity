@@ -3,5 +3,6 @@ docs_dir: doc
 pages:
 - 'index.md'
 - 'Getting Started' : 'getting-started.md'
+- 'Fixing Seams' : 'fixing-seams.md'
 - 'Dealing With Texture Name Collisions' : 'prepostfix.md'
 theme: readthedocs
