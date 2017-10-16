@@ -4,7 +4,7 @@ The most common complaint (and a valid one) with using Tiled2Unity is something 
 
 > After exporting my map I'm seeing these strange lines between some tiles. Am I doing something wrong?
 
-Unfortuantely, this a common problem with texture atlasing in 3D game engines. A tilesets is, by nature, a texture atlas
+Unfortunately, this a common problem with texture atlasing in 3D game engines. A tilesets is, by nature, a texture atlas
 (i.e. an image containing a group of smaller images) and without special care you may end up with an exported map that looks something like this in the Unity editor ...
 
 ![Batman Stage 1 with seams](img/batman-seams.png)
