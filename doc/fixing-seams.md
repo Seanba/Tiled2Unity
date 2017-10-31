@@ -4,13 +4,13 @@ The most common complaint (and a valid one) with using Tiled2Unity is something 
 
 > After exporting my map I'm seeing these strange lines between some tiles. Am I doing something wrong?
 
-Unfortunately, this a common problem with texture atlasing in 3D game engines. A tilesets is, by nature, a texture atlas
+Unfortunately, this a common problem with texture atlases in 3D game engines. A tilesets is, by nature, a texture atlas
 (i.e. an image containing a group of smaller images) and without special care you may end up with an exported map that looks something like this in the Unity editor ...
 
 ![Batman Stage 1 with seams](img/batman-seams.png)
 
 These lines are called **seams** and they are caused at the shader level.
-(What is happening is that the texture sampler is choosing a texel that is just *barely* out of bounds due to mathemtical 
+(What is happening is that the texture sampler is choosing a texel that is just *barely* out of bounds due to mathematical 
 precision issues that is common in software development.)
 
 # Disable Anti-Aliasing
@@ -61,7 +61,7 @@ Keep in mind that in Tiled you'll need to have your tileset settings reflect the
 
 ##Quick Hack: Tucking in Tile Texture Coordinates
 
-In cases where you don't have time to manipulate your tilesets to make up for seams, Tiled2Unity does offer a feature that will allow you 'tuck in' your texture coofinates
+In cases where you don't have time to manipulate your tilesets to make up for seams, Tiled2Unity does offer a feature that will allow you 'tuck in' your texture coordinates
 to hopefully make up for any texture sampling errors: Simply add the `-t` or `--texel-bias` command when launching Tiled2Unity.
 
 ###Windows
@@ -74,7 +74,7 @@ to hopefully make up for any texture sampling errors: Simply add the `-t` or `--
 open -a /Applications/Tiled2UnityMac.app --args %mapfile --texel-bias=8192
 ```
 
-If seams still appear then use a smaller power-of-two value for texel-bias (4096, 2048, 1024, etc.). You must use a value that is larger than your texture dimenions, however.
+If seams still appear then use a smaller power-of-two value for texel-bias (4096, 2048, 1024, etc.). You must use a value that is larger than your texture dimensions, however.
 
 
 **Be Warned**: This should be thought of as a **temporary solution only**. It will lead to small, albeit less obvious, artifacts under some conditions.
