@@ -51,6 +51,7 @@ namespace Tiled2Unity
         private void CreatePrefab(XElement xmlPrefab, Tiled2Unity.ImportBehaviour importComponent)
         {
             var customImporters = GetCustomImporterInstances(importComponent);
+            var customPrefabSaveHandlers = GetCustomAfterSaveInstances(importComponent);
 
             // Part 1: Create the prefab
             string prefabName = xmlPrefab.Attribute("name").Value;
@@ -98,6 +99,9 @@ namespace Tiled2Unity
 
             // Destroy the instance from the current scene hierarchy.
             UnityEngine.Object.DestroyImmediate(tempPrefab);
+
+            // Part 5: Give importers a chance to handle the saved prefab.
+            HandlePrefabSaved(finalPrefab, prefabName, customPrefabSaveHandlers);
         }
 
         private void AddGameObjectsTo(GameObject parent, XElement xml, bool isParentTrigger, ImportBehaviour importComponent, IList<ICustomTiledImporter> customImporters)
@@ -653,6 +657,14 @@ namespace Tiled2Unity
             }
         }
 
+        private void HandlePrefabSaved(UnityEngine.Object finalPrefab, string prefabName, IList<ICustomAfterSave> importers) 
+        {
+            foreach (ICustomAfterSave importer in importers) 
+            {
+                importer.HandlePrefabSaved(finalPrefab, prefabName);
+            }
+        }
+
         private void CustomizePrefab(GameObject prefab, IList<ICustomTiledImporter> importers)
         {
             foreach (ICustomTiledImporter importer in importers)
@@ -686,6 +698,34 @@ namespace Tiled2Unity
                         select t;
 
             var instances = types.Select(t => (ICustomTiledImporter)Activator.CreateInstance(t));
+            return instances.ToList();
+        }
+
+        private IList<ICustomAfterSave> GetCustomAfterSaveInstances(ImportBehaviour importComponent)
+        {
+            // Report an error for ICustomAfterSave classes that don't have the CustomTiledImporterAttribute
+            var errorTypes = from a in AppDomain.CurrentDomain.GetAssemblies()
+                             from t in a.GetTypes()
+                             where typeof(ICustomAfterSave).IsAssignableFrom(t)
+                             where !t.IsAbstract
+                             where System.Attribute.GetCustomAttribute(t, typeof(CustomTiledImporterAttribute)) == null
+                             select t;
+            foreach (var t in errorTypes)
+            {
+                importComponent.RecordError("ICustomAfterSave type '{0}' is missing CustomTiledImporterAttribute", t);
+            }
+
+            // Find all the types with the CustomTiledImporterAttribute, instantiate them, and give them a chance to customize our prefab
+            var types = from a in AppDomain.CurrentDomain.GetAssemblies()
+                        from t in a.GetTypes()
+                        where typeof(ICustomAfterSave).IsAssignableFrom(t)
+                        where !t.IsAbstract
+                        from attr in System.Attribute.GetCustomAttributes(t, typeof(CustomTiledImporterAttribute))
+                        let custom = attr as CustomTiledImporterAttribute
+                        orderby custom.Order
+                        select t;
+
+            var instances = types.Select(t => (ICustomAfterSave)Activator.CreateInstance(t));
             return instances.ToList();
         }
     }
