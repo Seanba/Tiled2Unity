@@ -59,12 +59,12 @@ Keep in mind that in Tiled you'll need to have your tileset settings reflect the
 
 ![Tileset Settings](img/tiled-tileset-spacing.png)
 
-##Quick Hack: Tucking in Tile Texture Coordinates
+## Quick Hack: Tucking in Tile Texture Coordinates
 
 In cases where you don't have time to manipulate your tilesets to make up for seams, Tiled2Unity does offer a feature that will allow you 'tuck in' your texture coordinates
 to hopefully make up for any texture sampling errors: Simply add the `-t` or `--texel-bias` command when launching Tiled2Unity.
 
-###Windows
+### Windows
 ```bat
 "C:\Program Files\Tiled2Unity\Tiled2Unity.exe" %mapfile --texel-bias=8192
 ```
